@@ -1,0 +1,20 @@
+import Database from "@tauri-apps/plugin-sql";
+
+export const DB_NAME = "sqlite:invisibleai.db";
+
+let dbInstance: Database | null = null;
+
+export async function getDatabase(): Promise<Database> {
+  if (!dbInstance) {
+    try {
+      dbInstance = await Database.load(DB_NAME);
+    } catch (error) {
+      throw new Error(
+        `Failed to initialize database: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+  return dbInstance;
+}

@@ -1,0 +1,104 @@
+import {
+  Settings,
+  Code,
+  MessagesSquare,
+  WandSparkles,
+  AudioLinesIcon,
+  SquareSlashIcon,
+  MonitorIcon,
+  HomeIcon,
+  PowerIcon,
+  MailIcon,
+  BugIcon,
+  MessageSquareTextIcon,
+} from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { useApp } from "@/contexts";
+import { useTranslation } from "./useTranslation";
+
+export const useMenuItems = () => {
+  const { hasActiveLicense } = useApp();
+  const { t } = useTranslation();
+
+  const menu: {
+    icon: React.ElementType;
+    label: string;
+    href: string;
+    count?: number;
+  }[] = [
+    {
+      icon: HomeIcon,
+      label: t("sidebar_dashboard"),
+      href: "/dashboard",
+    },
+    {
+      icon: MessagesSquare,
+      label: t("sidebar_chats"),
+      href: "/chats",
+    },
+    {
+      icon: WandSparkles,
+      label: t("sidebar_system_prompts"),
+      href: "/system-prompts",
+    },
+    {
+      icon: Settings,
+      label: t("sidebar_app_settings"),
+      href: "/settings",
+    },
+    {
+      icon: MessageSquareTextIcon,
+      label: t("sidebar_responses"),
+      href: "/responses",
+    },
+    {
+      icon: MonitorIcon,
+      label: t("sidebar_screenshot"),
+      href: "/screenshot",
+    },
+    {
+      icon: AudioLinesIcon,
+      label: t("sidebar_audio"),
+      href: "/audio",
+    },
+    {
+      icon: SquareSlashIcon,
+      label: t("sidebar_shortcuts"),
+      href: "/shortcuts",
+    },
+
+    {
+      icon: Code,
+      label: t("sidebar_dev_space"),
+      href: "/dev-space",
+    },
+  ];
+
+  const footerItems = [
+    ...(hasActiveLicense
+      ? [
+          {
+            icon: MailIcon,
+            label: t("sidebar_support"),
+            href: "mailto:support@invisibleai.com",
+          },
+        ]
+      : []),
+    {
+      icon: BugIcon,
+      label: t("sidebar_bug"),
+      href: "https://github.com/EDY28-M/invisibleai/issues/new?template=bug-report.yml",
+    },
+    {
+      icon: PowerIcon,
+      label: t("sidebar_quit"),
+      action: async () => {
+        await invoke("exit_app");
+      },
+    },
+  ];
+  return {
+    menu,
+    footerItems,
+  };
+};
