@@ -12,11 +12,36 @@
 [![Tauri](https://img.shields.io/badge/Built%20with-Tauri-orange)](https://tauri.app/)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.3.0-green)](https://github.com/EDY28-M/InvisibleAI)
 
 > ⚠️ **PROYECTO EN CONSTRUCCIÓN**
 
 ## 📖 Descripción General
 InvisibleAI es una aplicación de escritorio multiplataforma rápida y privada para la interacción con modelos de IA. Esta herramienta te permite experimentar una asistencia en tiempo real con privacidad y control total.
+
+## ✨ Novedades en v1.3.0
+
+### 🎨 Diseño y UI
+- **Nuevo logotipo personalizado** en la barra lateral y en el ícono de la aplicación (dock de macOS).
+- **Tipografía premium** con Google Fonts (Inter) aplicada globalmente: `letter-spacing` ajustado, renderizado `antialiased` y `line-height` refinado.
+- **Tema oscuro mejorado** con paleta de colores profundos (fondos casi negros, alto contraste).
+- **Logotipo con fondo transparente** para una apariencia profesional en el dock de macOS.
+
+### 🛡️ Modo Sigilo (Stealth Mode)
+- **Nueva función premium**: Controla dinámicamente si la app es invisible en capturas de pantalla y grabaciones.
+- Toggle integrado en **Ajustes → Comportamiento de Ventana**.
+- Activado por defecto (la app es invisible en capturas).
+- Los usuarios con licencia activa pueden desactivarlo para permitir capturas de pantalla.
+- Funciona en tiempo real sin necesidad de reiniciar la app.
+
+### 🌐 Internacionalización
+- Soporte completo bilingüe (Español / English) para todas las nuevas funciones.
+- Traducciones del Modo Sigilo en ambos idiomas.
+
+### 🔧 Mejoras Técnicas
+- Ajustes de ventana reorganizados: interfaz más limpia con toggles alineados al lado derecho.
+- Identificador de paquete actualizado a `com.edy28.invisibleai`.
+- Configuraciones de ventana optimizadas para macOS.
 
 ## 🏗️ Arquitectura del Sistema
 
@@ -58,7 +83,7 @@ InvisibleAI está diseñado para escucharte y hablarte sin necesidad de tocar el
 ## 💳 Suscripción y Limitaciones
 Ten en cuenta que el acceso está estructurado mediante suscripción:
 *   **Cuenta Gratuita:** Funcionalidades básicas y uso limitado a modelos estándar.
-*   **Cuenta Premium:** Acceso total, máxima velocidad y modelos avanzados sin límite de cuota.
+*   **Cuenta Premium:** Acceso total, máxima velocidad, modelos avanzados sin límite de cuota, y funciones exclusivas como el Modo Sigilo y personalización de tema.
 
 ## 🚀 Comandos para Levantar el Proyecto
 
@@ -73,4 +98,30 @@ npm run tauri dev
 
 # Compilar los ejecutables de producción
 npm run tauri build
+
+# Regenerar íconos de la app (requiere imagen PNG 1024x1024)
+npm run tauri icon logo/stich_logo_transparent.png
 ```
+
+## 📂 Estructura del Proyecto
+
+```
+InvisibleAI/
+├── src/                    # Frontend (React + TypeScript)
+│   ├── components/         # Componentes reutilizables (Header, Sidebar, Switch...)
+│   ├── contexts/           # Contextos globales (App, Theme, Language)
+│   ├── hooks/              # Custom hooks
+│   ├── pages/              # Páginas de la app (Dashboard, Settings, Chats...)
+│   ├── lib/                # Utilidades, storage, funciones de IA
+│   └── types/              # Definiciones TypeScript
+├── src-tauri/              # Backend (Rust + Tauri)
+│   ├── src/                # Comandos Rust (window, capture, shortcuts...)
+│   ├── icons/              # Íconos generados para todas las plataformas
+│   └── tauri.conf.json     # Configuración de Tauri
+├── logo/                   # Logotipos fuente
+└── images/                 # Imágenes para el README
+```
+
+## 📝 Licencia
+
+Este proyecto está licenciado bajo la [GNU General Public License v3.0](LICENSE).
