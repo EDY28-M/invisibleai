@@ -192,7 +192,7 @@ pub async fn activate_license_api(
     license_key: String,
 ) -> Result<ActivationResponse, String> {
 
-    if license_key == "cluely-admin-local" {
+    if license_key == "invisibleai-admin-local" {
         let instance_name = Uuid::new_v4().to_string();
         return Ok(ActivationResponse {
             activated: true,
@@ -325,7 +325,7 @@ pub async fn validate_license_api(app: AppHandle) -> Result<ValidateResponse, St
     let is_active = credentials.is_ok();
 
     let is_dev_license = match credentials {
-        Ok((license_key, _, _)) => license_key == "cluely-admin-local",
+        Ok((license_key, _, _)) => license_key == "invisibleai-admin-local",
         Err(_) => false,
     };
 

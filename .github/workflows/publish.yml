@@ -67,8 +67,18 @@ jobs:
         with:
           tagName: app-v__VERSION__
           releaseName: "InvisibleAI v__VERSION__"
-          releaseBody: "Download binaries for your OS. macOS users: If blocked, go to System Settings > Privacy & Security > Security section, find 'invisibleai was blocked' message, click 'Allow Anyway', then reopen the app."
-          releaseDraft: true
+          releaseBody: |
+            ### 🚀 Novedades en InvisibleAI v1.3.0
+            
+            * **🛡️ Modo Sigilo (Stealth Mode):** Oculta la app de grabaciones de pantalla y capturas (requiere licencia activa).
+            * **🎨 Diseño Premium:** Nuevo logo con fondo transparente, tipografía Inter y un tema oscuro más elegante.
+            * **🌐 Soporte Bilingüe:** Textos completamente traducidos y consistentes en español e inglés.
+            * **🔧 Mejoras Técnicas:** Panel de ajustes reorganizado y workflows de GitHub Actions mejorados.
+            
+            ---
+            
+            **🍏 macOS users:** If the app is blocked from opening, go to `System Settings` > `Privacy & Security` > `Security` section, find the message saying *'invisibleai was blocked'*, click **'Allow Anyway'**, and then reopen the app.
+          releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
