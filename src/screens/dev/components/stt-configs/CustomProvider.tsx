@@ -55,7 +55,7 @@ export const CustomProviders = ({ allSttProviders }: UseSettingsReturn) => {
   const baseProviders = allSttProviders.filter((provider) => !provider.isCustom);
 
   return (
-    <section className="mt-6 rounded-xl border border-border/70 bg-muted/30 p-4">
+    <section className="mt-6 rounded-2xl border border-border/40 bg-card/25 backdrop-blur-md p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-3">
         <Header
           title={t("dev_advanced_title")}
@@ -63,7 +63,7 @@ export const CustomProviders = ({ allSttProviders }: UseSettingsReturn) => {
         />
         <Button
           variant="outline"
-          className="h-9 shrink-0"
+          className="h-9 rounded-xl border border-border/40 bg-card/30 backdrop-blur-sm hover:bg-card/50 transition-all shrink-0"
           onClick={() => {
             resetForm();
             setShowForm(true);
@@ -76,21 +76,21 @@ export const CustomProviders = ({ allSttProviders }: UseSettingsReturn) => {
 
       <div className="space-y-2">
         {customProviders.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
+          <p className="rounded-xl border border-dashed border-border/30 px-3 py-4 text-xs text-muted-foreground/60 italic">
             {t("dev_custom_empty")}
           </p>
         ) : (
           customProviders.map((provider) => (
             <Card
               key={provider.id}
-              className="gap-0 rounded-lg border-border/70 bg-background p-3 shadow-none"
+              className="gap-0 rounded-xl border border-border/45 bg-card/10 backdrop-blur-sm p-3 shadow-sm hover:bg-card/20 transition-all"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <p className="line-clamp-1 text-sm font-medium">
                     {getProviderLabel(provider.curl)}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground/75">
                     {provider.responseContentPath || t("dev_custom_no_path")}
                   </p>
                 </div>
@@ -98,7 +98,7 @@ export const CustomProviders = ({ allSttProviders }: UseSettingsReturn) => {
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="size-8"
+                    className="size-8 rounded-lg"
                     onClick={() => provider.id && handleEdit(provider.id)}
                     title={t("prompts_edit")}
                   >
@@ -107,7 +107,7 @@ export const CustomProviders = ({ allSttProviders }: UseSettingsReturn) => {
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="size-8 text-destructive hover:text-destructive"
+                    className="size-8 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => provider.id && handleDelete(provider.id)}
                     title={t("prompts_delete")}
                   >
@@ -175,10 +175,10 @@ export const CustomProviders = ({ allSttProviders }: UseSettingsReturn) => {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForm(false)}>
+            <Button variant="outline" onClick={() => setShowForm(false)} className="h-9 rounded-xl border border-border/40 bg-card/30 backdrop-blur-sm hover:bg-card/50 transition-all">
               {t("cancel")}
             </Button>
-            <Button onClick={handleSave} disabled={!formData.curl.trim()}>
+            <Button onClick={handleSave} disabled={!formData.curl.trim()} className="h-9 rounded-xl gap-1.5 transition-all">
               <SaveIcon className="size-4" />
               {editingProvider ? t("prompts_edit") : t("save")}
             </Button>

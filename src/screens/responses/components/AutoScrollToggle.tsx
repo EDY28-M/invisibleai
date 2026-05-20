@@ -1,4 +1,4 @@
-import { Switch, Label, Header } from "@/components";
+import { Switch } from "@/components";
 import { useApp } from "@/contexts";
 import { useState, useEffect } from "react";
 import { getResponseSettings, updateAutoScroll } from "@/lib";
@@ -15,43 +15,30 @@ export const AutoScrollToggle = () => {
   }, []);
 
   const handleSwitchChange = (checked: boolean) => {
-    if (!hasActiveLicense) {
-      return;
-    }
+    if (!hasActiveLicense) return;
     setAutoScroll(checked);
     updateAutoScroll(checked);
   };
 
   return (
-    <div className="space-y-4">
-      <Header
-        title={t("responses_scroll_title")}
-        description={t("responses_scroll_desc")}
-      />
-
-      <div className="flex items-center justify-between p-4 border rounded-xl">
-        <div className="flex items-center space-x-3">
-          <div>
-            <Label className="text-sm font-medium">
-              {autoScroll ? t("responses_scroll_enabled") : t("responses_scroll_disabled")}
-            </Label>
-            <p className="text-xs text-muted-foreground mt-1">
-              {autoScroll
-                ? t("responses_scroll_enabled_desc")
-                : t("responses_scroll_disabled_desc")}
-            </p>
-          </div>
-        </div>
-        <Switch
-          checked={autoScroll}
-          onCheckedChange={handleSwitchChange}
-          disabled={!hasActiveLicense}
-          title={`Toggle to ${!autoScroll ? "enable" : "disable"} auto-scroll`}
-          aria-label={`Toggle to ${
-            autoScroll ? "disable" : "enable"
-          } auto-scroll`}
-        />
+    <div className="flex items-center justify-between gap-6 h-full">
+      <div>
+        <h3 className="text-[15px] font-bold text-foreground/95 tracking-wide">
+          {t("responses_scroll_title")}
+        </h3>
+        <p className="text-xs text-muted-foreground/60 mt-1.5 leading-relaxed">
+          {autoScroll
+            ? t("responses_scroll_enabled_desc")
+            : t("responses_scroll_disabled_desc")}
+        </p>
       </div>
+      <Switch
+        checked={autoScroll}
+        onCheckedChange={handleSwitchChange}
+        disabled={!hasActiveLicense}
+        className="shrink-0"
+        aria-label="Toggle auto-scroll"
+      />
     </div>
   );
 };

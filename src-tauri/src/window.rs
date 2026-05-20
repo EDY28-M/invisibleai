@@ -145,8 +145,8 @@ pub fn create_dashboard_window<R: Runtime>(
         .title("InvisibleAI - Dashboard")
         .center()
         .decorations(true)
-        .inner_size(1200.0, 800.0)
-        .min_inner_size(800.0, 600.0)
+        .inner_size(1280.0, 850.0)
+        .resizable(false)
         .hidden_title(true)
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .content_protected(true)
@@ -158,8 +158,8 @@ pub fn create_dashboard_window<R: Runtime>(
         .title("InvisibleAI - Dashboard")
         .center()
         .decorations(true)
-        .inner_size(800.0, 600.0)
-        .min_inner_size(800.0, 600.0)
+        .inner_size(1280.0, 850.0)
+        .resizable(false)
         .content_protected(true)
         .visible(false);
 

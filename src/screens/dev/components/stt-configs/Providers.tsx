@@ -82,7 +82,7 @@ export const Providers = ({
                   });
                 }}
                 disabled={false}
-                className="flex-1 h-11 border-1 border-input/50 focus:border-primary/50 transition-colors"
+                className="flex-1 h-10 rounded-xl border border-border/40 bg-card/30 backdrop-blur-sm focus:border-primary/50 transition-colors"
               />
               {isApiKeyEmpty() ? (
                 <Button
@@ -101,7 +101,7 @@ export const Providers = ({
                   }}
                   disabled={isApiKeyEmpty()}
                   size="icon"
-                  className="shrink-0 h-11 w-11"
+                  className="shrink-0 h-10 w-10 rounded-xl"
                   title={t("dev_submit_api_key")}
                 >
                   <KeyIcon className="h-4 w-4" />
@@ -122,7 +122,7 @@ export const Providers = ({
                   }}
                   size="icon"
                   variant="destructive"
-                  className="shrink-0 h-11 w-11"
+                  className="shrink-0 h-10 w-10 rounded-xl"
                   title={t("dev_remove_api_key")}
                 >
                   <TrashIcon className="h-4 w-4" />

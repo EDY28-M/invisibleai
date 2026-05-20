@@ -12,14 +12,14 @@
 [![Tauri](https://img.shields.io/badge/Built%20with-Tauri-orange)](https://tauri.app/)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.3.0-green)](https://github.com/EDY28-M/InvisibleAI)
+[![Version](https://img.shields.io/badge/version-1.0.0-green)](https://github.com/EDY28-M/InvisibleAI)
 
 > ⚠️ **PROYECTO EN CONSTRUCCIÓN**
 
 ## 📖 Descripción General
 InvisibleAI es una aplicación de escritorio multiplataforma rápida y privada para la interacción con modelos de IA. Esta herramienta te permite experimentar una asistencia en tiempo real con privacidad y control total.
 
-## ✨ Novedades en v1.3.0
+## ✨ Características en v1.0.0
 
 ### 🎨 Diseño y UI
 - **Nuevo logotipo personalizado** en la barra lateral y en el ícono de la aplicación (dock de macOS).

@@ -182,13 +182,13 @@ export const ShortcutRecorder = ({
     <div className="flex flex-col gap-2 w-full">
       <div className="flex gap-2 items-center">
         <div className="flex-1">
-          <div className="px-3 py-2 bg-primary/5 border-2 border-primary/50 rounded-md font-mono text-sm text-center">
+          <div className="px-3 py-2 bg-primary/5 border border-primary/30 rounded-xl font-mono text-sm text-center">
             {isRecording ? (
-              <span className="text-primary font-medium animate-pulse">
-                ⌨️ {displayKey}
+              <span className="text-primary font-semibold tracking-wide animate-pulse">
+                {displayKey}
               </span>
             ) : (
-              <span>{displayKey}</span>
+              <span className="tracking-wide">{displayKey}</span>
             )}
           </div>
         </div>
@@ -198,6 +198,7 @@ export const ShortcutRecorder = ({
           variant="default"
           onClick={handleSave}
           disabled={disabled || recordedKeys.length < minKeys}
+          className="h-9 rounded-xl transition-all"
           title={t("recorder_save_title")}
         >
           <Check className="h-4 w-4" />
@@ -208,6 +209,7 @@ export const ShortcutRecorder = ({
           variant="outline"
           onClick={handleCancel}
           disabled={disabled}
+          className="h-9 rounded-xl border border-border/40 bg-card/30 backdrop-blur-sm hover:bg-card/50 transition-all"
           title={t("recorder_cancel_title")}
         >
           <X className="h-4 w-4" />
@@ -226,7 +228,7 @@ export const ShortcutRecorder = ({
       )}
 
       {recordedKeys.length >= minKeys && !error && (
-        <p className="text-xs text-green-600">
+        <p className="text-xs text-green-600 dark:text-green-400 font-medium">
           {t("recorder_captured")}
         </p>
       )}

@@ -24,8 +24,8 @@ export const DashboardShell = ({ sidebar, children }: DashboardShellProps) => {
         <section className="flex min-w-0 flex-1 flex-col bg-background">
           <DashboardTopBar />
 
-          <main className="min-h-0 flex-1 overflow-hidden px-6 lg:px-8">
-            <div className="mx-auto flex h-full w-full max-w-[800px] flex-col">
+          <main className="min-h-0 flex-1 overflow-hidden px-8 lg:px-12">
+            <div className="mx-auto flex h-full w-full max-w-5xl flex-col">
               {children}
             </div>
           </main>
@@ -41,7 +41,7 @@ const DashboardTopBar = () => {
   const { theme, setTheme } = useTheme();
 
   return (
-    <header className="flex h-12 shrink-0 items-center px-4 lg:px-6">
+    <header className="flex h-14 shrink-0 items-center px-6 lg:px-10">
       <div className="h-full flex-1" data-tauri-drag-region={true} />
       <div className="flex items-center gap-2">
         <DropdownMenu>
@@ -82,7 +82,7 @@ const DashboardFooter = () => {
   const { version, isLoading } = useVersion();
 
   return (
-    <footer className="flex h-12 shrink-0 items-center justify-between border-t border-border/70 px-6 text-xs text-muted-foreground lg:px-8">
+    <footer className="flex h-12 shrink-0 items-center justify-between border-t border-border/40 px-8 text-xs text-muted-foreground lg:px-12">
       <span>InvisibleAI {isLoading ? "" : `v${version}`}</span>
       <div className="flex items-center gap-5">
         <a

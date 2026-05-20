@@ -55,16 +55,18 @@ const Dashboard = () => {
       description={t("dashboard_description")}
       rightSlot={!hasActiveLicense ? <GetLicense /> : null}
     >
-      <InvisibleAIApiSetup />
-
-      <Usage
-        loading={loadingActivity}
-        onRefresh={fetchActivity}
-        data={activityData}
-        totalTokens={totalTokens}
-      />
+      <div className="space-y-5">
+        <InvisibleAIApiSetup />
+        <Usage
+          loading={loadingActivity}
+          onRefresh={fetchActivity}
+          data={activityData}
+          totalTokens={totalTokens}
+        />
+      </div>
     </PageLayout>
   );
+
 };
 
 export default Dashboard;

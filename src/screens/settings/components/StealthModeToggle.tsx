@@ -1,4 +1,4 @@
-import { Switch, Header } from "@/components";
+import { Switch } from "@/components";
 import { useApp } from "@/contexts";
 import { useTranslation } from "@/hooks";
 
@@ -17,20 +17,23 @@ export const StealthModeToggle = ({ className }: StealthModeToggleProps) => {
   return (
     <div
       id="stealth-mode"
-      className={`${className ?? ""} ${
-        hasActiveLicense ? "" : "opacity-60 pointer-events-none"
+      className={`flex items-center justify-between gap-6 ${className ?? ""} ${
+        hasActiveLicense ? "" : "opacity-50 pointer-events-none"
       }`}
     >
-      <Header
-        title={t("settings_stealth_title")}
-        description={t("settings_stealth_desc")}
-        rightSlot={
-          <Switch
-            checked={customizable.contentProtected.isEnabled}
-            onCheckedChange={handleSwitchChange}
-            aria-label="Toggle stealth mode"
-          />
-        }
+      <div>
+        <h3 className="text-[15px] font-bold text-foreground/95 tracking-wide">
+          {t("settings_stealth_title")}
+        </h3>
+        <p className="text-xs text-muted-foreground/60 mt-1 leading-relaxed">
+          {t("settings_stealth_desc")}
+        </p>
+      </div>
+      <Switch
+        checked={customizable.contentProtected.isEnabled}
+        onCheckedChange={handleSwitchChange}
+        className="shrink-0"
+        aria-label="Toggle stealth mode"
       />
     </div>
   );

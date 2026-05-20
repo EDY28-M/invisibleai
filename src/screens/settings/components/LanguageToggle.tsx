@@ -1,5 +1,4 @@
 import { useTranslation } from "@/hooks";
-import { Header } from "@/components";
 import { CheckIcon } from "lucide-react";
 
 export const LanguageToggle = () => {
@@ -9,61 +8,55 @@ export const LanguageToggle = () => {
   const isEnglish = language === "english";
 
   return (
-    <div id="language" className="relative space-y-3">
-      <Header
-        title={t("settings_language_title")}
-        description={t("settings_language_desc")}
-      />
+    <div id="language" className="space-y-3">
+      <div>
+        <h3 className="text-[15px] font-bold text-foreground/95 tracking-wide">
+          {t("settings_language_title")}
+        </h3>
+        <p className="text-xs text-muted-foreground/60 mt-1">
+          {t("settings_language_desc")}
+        </p>
+      </div>
 
-      <div className="flex items-center gap-3 pt-1">
+      <div className="flex items-center gap-3">
         <button
           onClick={() => changeLanguage("spanish")}
-          className={`flex items-center gap-3 flex-1 rounded-lg border p-3 transition-all duration-200 text-left ${
+          className={`flex items-center gap-3 flex-1 rounded-2xl border p-3.5 transition-all duration-200 text-left ${
             isSpanish
-              ? "border-primary bg-primary/5 dark:bg-primary/10"
-              : "border-input/50 bg-black/5 dark:bg-white/5 hover:border-primary/40 hover:bg-primary/5"
+              ? "border-border/30 bg-card/50 shadow-sm"
+              : "border-border/15 bg-card/15 hover:bg-card/30 hover:border-border/25"
           }`}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-semibold text-foreground">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-border/20 bg-muted/30 text-xs font-bold text-foreground/70">
             ES
           </span>
           <div className="flex-1">
-            <p className={`text-sm font-semibold ${isSpanish ? "text-primary" : ""}`}>
+            <p className="text-[15px] font-semibold text-foreground/90">
               {t("settings_language_spanish")}
             </p>
-            <p className="text-xs text-muted-foreground">Español</p>
+            <p className="text-xs text-muted-foreground/50">Español</p>
           </div>
-          {isSpanish && (
-            <div className="flex items-center gap-1 text-xs text-primary font-medium">
-              <CheckIcon className="size-3.5" />
-              {t("settings_language_active")}
-            </div>
-          )}
+          {isSpanish && <CheckIcon className="size-4 text-foreground/40 shrink-0" />}
         </button>
 
         <button
           onClick={() => changeLanguage("english")}
-          className={`flex items-center gap-3 flex-1 rounded-lg border p-3 transition-all duration-200 text-left ${
+          className={`flex items-center gap-3 flex-1 rounded-2xl border p-3.5 transition-all duration-200 text-left ${
             isEnglish
-              ? "border-primary bg-primary/5 dark:bg-primary/10"
-              : "border-input/50 bg-black/5 dark:bg-white/5 hover:border-primary/40 hover:bg-primary/5"
+              ? "border-border/30 bg-card/50 shadow-sm"
+              : "border-border/15 bg-card/15 hover:bg-card/30 hover:border-border/25"
           }`}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-semibold text-foreground">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-border/20 bg-muted/30 text-xs font-bold text-foreground/70">
             EN
           </span>
           <div className="flex-1">
-            <p className={`text-sm font-semibold ${isEnglish ? "text-primary" : ""}`}>
+            <p className="text-[15px] font-semibold text-foreground/90">
               {t("settings_language_english")}
             </p>
-            <p className="text-xs text-muted-foreground">English</p>
+            <p className="text-xs text-muted-foreground/50">English</p>
           </div>
-          {isEnglish && (
-            <div className="flex items-center gap-1 text-xs text-primary font-medium">
-              <CheckIcon className="size-3.5" />
-              {t("settings_language_active")}
-            </div>
-          )}
+          {isEnglish && <CheckIcon className="size-4 text-foreground/40 shrink-0" />}
         </button>
       </div>
     </div>

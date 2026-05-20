@@ -49,10 +49,10 @@ export const Header = ({
         <div className="flex flex-col">
           <Label
             className={`${cn(
-              "font-semibold line-clamp-1",
+              "font-bold line-clamp-1",
               isMainTitle
-                ? "text-[28px] leading-[34px]"
-                : "text-xs lg:text-sm transition-all duration-300"
+                ? "text-[32px] leading-[38px]"
+                : "text-sm lg:text-[15px] transition-all duration-300"
             )} ${titleClassName}`}
           >
             {title}
@@ -61,8 +61,8 @@ export const Header = ({
             className={cn(
               `select-none text-muted-foreground leading-relaxed ${
                 isMainTitle
-                  ? "text-[15px] leading-[22px]"
-                  : "text-[10px] lg:text-xs transition-all duration-300"
+                  ? "text-[16px] leading-[24px] mt-1"
+                  : "text-xs lg:text-[13px] transition-all duration-300 mt-0.5"
               } ${descriptionClassName}`
             )}
           >

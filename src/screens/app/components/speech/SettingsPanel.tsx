@@ -243,7 +243,7 @@ export const SettingsPanel = ({
               <div className="flex-1">
                 <Label className="text-xs font-medium flex items-center gap-1.5">
                   <span>Chat Memory</span>
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-medium bg-gradient-to-r from-violet-500/20 to-fuchsia-500/20 text-violet-300 border border-violet-500/30 animate-pulse select-none">
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8px] font-bold bg-primary/10 text-primary border border-primary/20 select-none uppercase tracking-wider">
                     Memory
                   </span>
                 </Label>
@@ -256,9 +256,6 @@ export const SettingsPanel = ({
               <Switch
                 checked={useConversationalMemory}
                 onCheckedChange={setUseConversationalMemory}
-                className={cn(
-                  useConversationalMemory && "bg-gradient-to-r from-violet-600 to-indigo-600"
-                )}
               />
             </div>
 

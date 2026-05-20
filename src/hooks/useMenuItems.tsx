@@ -11,66 +11,98 @@ import {
   MailIcon,
   BugIcon,
   MessageSquareTextIcon,
+  Layers,
+  Eye,
+  Settings2,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "@/contexts";
 import { useTranslation } from "./useTranslation";
 
+export interface MenuItem {
+  icon: React.ElementType;
+  label: string;
+  href: string;
+  count?: number;
+}
+
+export interface MenuGroup {
+  id: string;
+  title: string;
+  icon: React.ElementType;
+  items: MenuItem[];
+}
+
 export const useMenuItems = () => {
   const { hasActiveLicense } = useApp();
   const { t } = useTranslation();
 
-  const menu: {
-    icon: React.ElementType;
-    label: string;
-    href: string;
-    count?: number;
-  }[] = [
+  const menu: MenuGroup[] = [
     {
-      icon: HomeIcon,
-      label: t("sidebar_dashboard"),
-      href: "/dashboard",
+      id: "core",
+      title: t("sidebar_group_core"),
+      icon: Layers,
+      items: [
+        {
+          icon: HomeIcon,
+          label: t("sidebar_dashboard"),
+          href: "/dashboard",
+        },
+        {
+          icon: MessagesSquare,
+          label: t("sidebar_chats"),
+          href: "/chats",
+        },
+        {
+          icon: WandSparkles,
+          label: t("sidebar_system_prompts"),
+          href: "/system-prompts",
+        },
+      ],
     },
     {
-      icon: MessagesSquare,
-      label: t("sidebar_chats"),
-      href: "/chats",
+      id: "sensors",
+      title: t("sidebar_group_sensors"),
+      icon: Eye,
+      items: [
+        {
+          icon: AudioLinesIcon,
+          label: t("sidebar_audio"),
+          href: "/audio",
+        },
+        {
+          icon: MonitorIcon,
+          label: t("sidebar_screenshot"),
+          href: "/screenshot",
+        },
+        {
+          icon: SquareSlashIcon,
+          label: t("sidebar_shortcuts"),
+          href: "/shortcuts",
+        },
+      ],
     },
     {
-      icon: WandSparkles,
-      label: t("sidebar_system_prompts"),
-      href: "/system-prompts",
-    },
-    {
-      icon: Settings,
-      label: t("sidebar_app_settings"),
-      href: "/settings",
-    },
-    {
-      icon: MessageSquareTextIcon,
-      label: t("sidebar_responses"),
-      href: "/responses",
-    },
-    {
-      icon: MonitorIcon,
-      label: t("sidebar_screenshot"),
-      href: "/screenshot",
-    },
-    {
-      icon: AudioLinesIcon,
-      label: t("sidebar_audio"),
-      href: "/audio",
-    },
-    {
-      icon: SquareSlashIcon,
-      label: t("sidebar_shortcuts"),
-      href: "/shortcuts",
-    },
-
-    {
-      icon: Code,
-      label: t("sidebar_dev_space"),
-      href: "/dev-space",
+      id: "engine",
+      title: t("sidebar_group_engine"),
+      icon: Settings2,
+      items: [
+        {
+          icon: MessageSquareTextIcon,
+          label: t("sidebar_responses"),
+          href: "/responses",
+        },
+        {
+          icon: Code,
+          label: t("sidebar_dev_space"),
+          href: "/dev-space",
+        },
+        {
+          icon: Settings,
+          label: t("sidebar_app_settings"),
+          href: "/settings",
+        },
+      ],
     },
   ];
 

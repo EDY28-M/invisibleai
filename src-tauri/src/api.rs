@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use base64::{engine::general_purpose, Engine as _};
 use futures_util::StreamExt;
 use reqwest::multipart::{Form, Part};
@@ -87,6 +88,7 @@ pub struct AudioResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ChatRequest {
     user_message: String,
     system_prompt: Option<String>,
@@ -95,6 +97,7 @@ pub struct ChatRequest {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ChatResponse {
     success: bool,
     message: Option<String>,

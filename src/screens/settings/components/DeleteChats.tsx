@@ -28,8 +28,8 @@ export const DeleteChats = ({
 
       <div className="space-y-2">
         {isDeleting && (
-          <div className="p-3 bg-green-50 border border-green-200 rounded-md">
-            <p className="text-xs text-green-700 font-medium">
+          <div className="p-3 bg-green-500/5 border border-green-500/20 text-green-600 dark:text-green-400 rounded-xl backdrop-blur-sm shadow-sm">
+            <p className="text-xs font-medium">
               All chat history has been successfully deleted.
             </p>
           </div>
@@ -39,7 +39,7 @@ export const DeleteChats = ({
           onClick={() => setShowDeleteConfirmDialog(true)}
           disabled={isDeleting}
           variant="destructive"
-          className="w-full h-11"
+          className="w-full h-10 rounded-xl transition-all"
           title="Delete all chat history"
         >
           {isDeleting ? (
@@ -58,12 +58,12 @@ export const DeleteChats = ({
 
       {/* Confirmation Dialog */}
       {showDeleteConfirmDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-background border rounded-lg p-6 max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-card/95 border border-border/40 backdrop-blur-md rounded-2xl p-6 max-w-md mx-4 shadow-2xl shadow-black/25">
             <h3 className="text-lg font-semibold mb-2">
               Delete All Chat History
             </h3>
-            <p className="text-sm text-muted-foreground mb-4">
+            <p className="text-sm text-muted-foreground/80 mb-4">
               Are you sure you want to delete all chat history? This action
               cannot be undone and will permanently remove all stored
               conversations.
@@ -72,10 +72,11 @@ export const DeleteChats = ({
               <Button
                 variant="outline"
                 onClick={() => setShowDeleteConfirmDialog(false)}
+                className="h-9 rounded-xl border border-border/40 bg-card/30 backdrop-blur-sm hover:bg-card/50 transition-all"
               >
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={deleteAllChats}>
+              <Button variant="destructive" onClick={deleteAllChats} className="h-9 rounded-xl transition-all">
                 Delete All
               </Button>
             </div>
