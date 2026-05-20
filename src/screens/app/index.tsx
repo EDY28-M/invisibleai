@@ -38,9 +38,8 @@ const App = () => {
       }}
     >
       <div
-        className={`w-screen h-screen flex overflow-hidden justify-center items-start ${
-          isHidden ? "hidden pointer-events-none" : ""
-        }`}
+        className={`w-screen h-screen flex overflow-hidden justify-center items-start ${isHidden ? "hidden pointer-events-none" : ""
+          }`}
       >
         <Card className="w-full flex flex-row items-center gap-2 px-3 py-2 border border-black/5 dark:border-white/5 bg-card/40 dark:bg-card/30 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] rounded-[22px] transition-all duration-500">
           <SystemAudio {...systemAudio} />
@@ -73,11 +72,10 @@ const App = () => {
           ) : null}
 
           <div
-            className={`${
-              systemAudio?.capturing
+            className={`${systemAudio?.capturing
                 ? "hidden w-full fade-out transition-all duration-300"
                 : "w-full flex flex-row gap-2 items-center"
-            }`}
+              }`}
           >
             <Completion isHidden={isHidden} />
             <Button
