@@ -63,7 +63,7 @@ export function MicVadCapturer({
   useMicVAD({
     userSpeakingThreshold: 0.65,
     minSpeechFrames: 5,
-    preSpeechFrames: 10,
+    preSpeechPadFrames: 10,
     startOnLoad: true,
     additionalAudioConstraints: audioConstraints,
     onSpeechEnd: async (audio: Float32Array) => {

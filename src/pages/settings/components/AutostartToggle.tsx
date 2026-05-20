@@ -1,4 +1,4 @@
-import { Switch, Label, Header } from "@/components";
+import { Switch, Header } from "@/components";
 import { useApp } from "@/contexts";
 import { useTranslation } from "@/hooks";
 
