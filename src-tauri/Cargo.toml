@@ -1,9 +1,10 @@
 [package]
 name = "invisibleai"
 version = "1.0.0"
-description = "The Open Source Alternative to Cluely - A lightning-fast, privacy-first AI assistant that works seamlessly during meetings, interviews, and conversations without anyone knowing."
+description = "InvisibleAI - A lightning-fast, privacy-first AI assistant that works seamlessly during meetings, interviews, and conversations without anyone knowing."
 authors = ["EDY28-M <junior.matias@unas.edu.pe>"]
-license = "GPL-3.0"
+license = "Proprietary"
+publish = false
 repository = "https://github.com/EDY28-M/invisibleai"
 homepage = "https://github.com/EDY28-M/invisibleai"
 documentation = "https://github.com/EDY28-M/invisibleai/wiki"

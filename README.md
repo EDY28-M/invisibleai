@@ -8,10 +8,9 @@
 
 ---
 
-[![Open Source](https://img.shields.io/badge/Open%20Source-❤️-blue)](https://github.com/EDY28-M/InvisibleAI)
 [![Tauri](https://img.shields.io/badge/Built%20with-Tauri-orange)](https://tauri.app/)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
-[![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.0.0-green)](https://github.com/EDY28-M/InvisibleAI)
 
 > ⚠️ **PROYECTO EN CONSTRUCCIÓN**

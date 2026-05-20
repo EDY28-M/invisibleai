@@ -2,7 +2,7 @@
 Version=1.0
 Type=Application
 Name=InvisibleAI
-Comment=The Open Source Alternative to Cluely - Lightning-fast, privacy-first AI assistant for meetings and conversations
+Comment=Lightning-fast, privacy-first AI assistant for meetings and conversations
 Exec=invisibleai
 Icon=invisibleai
 Terminal=false

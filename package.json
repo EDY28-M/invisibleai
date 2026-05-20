@@ -1,14 +1,14 @@
 {
   "name": "invisibleai",
-  "private": false,
+  "private": true,
   "version": "1.0.0",
-  "description": "The Open Source Alternative to Cluely - A lightning-fast, privacy-first AI assistant that works seamlessly during meetings, interviews, and conversations without anyone knowing.",
+  "description": "InvisibleAI - A lightning-fast, privacy-first AI assistant that works seamlessly during meetings, interviews, and conversations without anyone knowing.",
   "author": {
     "name": "EDY28-M",
     "email": "junior.matias@unas.edu.pe",
     "url": "https://github.com/EDY28-M"
   },
-  "license": "GPL-3.0",
+  "license": "UNLICENSED",
   "homepage": "https://github.com/EDY28-M/invisibleai#readme",
   "repository": {
     "type": "git",
