@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components";
-import { AudioVisualizer } from "@/pages/app/components/speech/audio-visualizer";
+import { AudioVisualizer } from "@/screens/app/components/speech/audio-visualizer";
 import { fetchSTT } from "@/lib";
 import { useApp } from "@/contexts";
 import { StopCircle, Send } from "lucide-react";

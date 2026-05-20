@@ -11,7 +11,7 @@ import {
   Screenshot,
   Chats,
   Responses,
-} from "@/pages";
+} from "@/screens";
 import { DashboardLayout } from "@/layouts";
 
 export default function AppRoutes() {

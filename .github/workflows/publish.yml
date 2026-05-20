@@ -68,12 +68,16 @@ jobs:
           tagName: app-v__VERSION__
           releaseName: "InvisibleAI v__VERSION__"
           releaseBody: |
-            ### 🚀 Novedades en InvisibleAI v1.3.0
+            ### 🎉 Lanzamiento Oficial: InvisibleAI v1.0.0
             
-            * **🛡️ Modo Sigilo (Stealth Mode):** Oculta la app de grabaciones de pantalla y capturas (requiere licencia activa).
-            * **🎨 Diseño Premium:** Nuevo logo con fondo transparente, tipografía Inter y un tema oscuro más elegante.
-            * **🌐 Soporte Bilingüe:** Textos completamente traducidos y consistentes en español e inglés.
-            * **🔧 Mejoras Técnicas:** Panel de ajustes reorganizado y workflows de GitHub Actions mejorados.
+            ¡Bienvenido a la primera versión oficial de InvisibleAI! Esta actualización establece la arquitectura principal e introduce todas las funciones core que hacen a este asistente único.
+            
+            * **🛡️ Modo Sigilo (Stealth Mode):** La aplicación se vuelve completamente invisible para grabaciones de pantalla, capturas y software de monitoreo (requiere licencia).
+            * **🎙️ Reconocimiento de Voz Avanzado:** Transcripción en tiempo real (STT) ultra rápida y privada.
+            * **🧠 Asistente de IA Oculto:** Integración nativa con los mejores modelos (OpenAI, Claude) para generar respuestas y analizar contexto en tiempo real.
+            * **🔐 Privacidad Primero:** Base de datos local (SQLite) integrada. Tus chats, prompts y configuración nunca salen de tu PC.
+            * **🎨 Diseño Premium:** Interfaz oscura, elegante, con tipografía Inter y animaciones fluidas, diseñada para no distraer.
+            * **🌐 Bilingüe:** Soporte completo en español e inglés.
             
             ---
             

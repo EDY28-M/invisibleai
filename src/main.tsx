@@ -4,7 +4,7 @@ import Overlay from "./components/Overlay";
 import { AppProvider, ThemeProvider, LanguageProvider } from "./contexts";
 import "./global.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import AppRoutes from "./routes";
+import AppRoutes from "./navigation";
 
 const currentWindow = getCurrentWindow();
 const windowLabel = currentWindow.label;

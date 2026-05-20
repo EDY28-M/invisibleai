@@ -122,6 +122,11 @@ InvisibleAI/
 └── images/                 # Imágenes para el README
 ```
 
-## 📝 Licencia
+## 📄 Licencia / License
 
-Este proyecto está licenciado bajo la [GNU General Public License v3.0](LICENSE).
+Este proyecto utiliza una **Licencia Comercial de Código Disponible (Source-Available)**. 
+- Puedes usar la versión gratuita libremente.
+- Puedes leer y auditar el código fuente.
+- **ESTÁ ESTRICTAMENTE PROHIBIDO** modificar el código para saltarse el sistema de licencias, o redistribuir versiones modificadas (cracks/clones) que desbloqueen las funciones premium gratis.
+
+Para ver los términos completos, lee el archivo [LICENSE](LICENSE) en este repositorio.
