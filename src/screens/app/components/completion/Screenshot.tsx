@@ -25,8 +25,9 @@ export const Screenshot = ({
 
   return (
     <Button
+      variant="ghost"
       size="icon"
-      className="cursor-pointer"
+      className="cursor-pointer h-9 w-9 rounded-[14px] transition-all duration-300 border border-transparent bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 hover:border-black/5 dark:hover:border-white/5 text-foreground/80 hover:text-foreground hover:scale-105 active:scale-95 disabled:opacity-40 disabled:pointer-events-none shrink-0"
       title={
         !supportsImages
           ? "Screenshot not supported by current AI provider"
@@ -36,11 +37,11 @@ export const Screenshot = ({
       disabled={isDisabled}
     >
       {isScreenshotLoading ? (
-        <Loader2 className="h-4 w-4 animate-spin" />
+        <Loader2 className="h-4.5 w-4.5 animate-spin text-foreground/70" />
       ) : screenshotConfiguration.enabled ? (
-        <LaptopMinimalIcon className="h-4 w-4" />
+        <LaptopMinimalIcon className="h-4.5 w-4.5" />
       ) : (
-        <MousePointer2Icon className="h-4 w-4" />
+        <MousePointer2Icon className="h-4.5 w-4.5" />
       )}
     </Button>
   );

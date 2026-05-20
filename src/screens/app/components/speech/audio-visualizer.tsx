@@ -29,6 +29,8 @@ export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
   const oscillatorsRef = useRef<OscillatorNode[]>([]);
   const gainNodesRef = useRef<GainNode[]>([]);
   const latestLevelRef = useRef<number>(0);
+  const phasesRef = useRef<number[]>([0, 0, 0, 0]);
+  const smoothLevel = useRef<number>(0);
 
   useEffect(() => {
     if (!isRecording) {
@@ -115,9 +117,10 @@ export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
   }, []);
 
   const startVisualization = async () => {
+    cleanup();
     try {
       if (stream) {
-        const audioContext = new AudioContext();
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
         audioContextRef.current = audioContext;
 
         const analyser = audioContext.createAnalyser();
@@ -127,6 +130,10 @@ export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
 
         const source = audioContext.createMediaStreamSource(stream);
         source.connect(analyser);
+
+        if (audioContext.state === "suspended") {
+          await audioContext.resume().catch((e) => console.error("Failed to resume context in startVisualization:", e));
+        }
       }
 
       draw();
@@ -135,26 +142,38 @@ export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
     }
   };
 
-  const getBarColor = (normalizedHeight: number) => {
-    const intensity =
-      Math.floor(normalizedHeight * AUDIO_CONFIG.COLOR.INTENSITY_RANGE) +
-      AUDIO_CONFIG.COLOR.MIN_INTENSITY;
-    return `rgb(${intensity}, ${intensity}, ${intensity})`;
-  };
-
-  const drawBar = (
+  const drawWave = (
     ctx: CanvasRenderingContext2D,
-    x: number,
-    centerY: number,
     width: number,
     height: number,
-    color: string
+    phase: number,
+    amplitude: number,
+    frequency: number,
+    color: string,
+    lineWidth: number
   ) => {
-    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = "round";
 
-    ctx.fillRect(x, centerY - height, width, height);
-
-    ctx.fillRect(x, centerY, width, height);
+    const centerY = height / 2;
+    
+    for (let x = 0; x < width; x++) {
+      // Gaussian-like tapering envelope to pinch the ends of the wave
+      const envelope = Math.sin((x / width) * Math.PI);
+      
+      // Combine base frequency with a second harmonic for more visual detail
+      const sineVal = Math.sin(x * frequency + phase) * 0.8 + Math.sin(x * frequency * 2.2 - phase) * 0.2;
+      const y = centerY + sineVal * amplitude * envelope;
+      
+      if (x === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
   };
 
   const draw = () => {
@@ -167,71 +186,112 @@ export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
     if (stream && !analyserRef.current) return;
 
     const dpr = window.devicePixelRatio || 1;
-    ctx.scale(dpr, dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const bufferLength = 32;
-    const fftSize = stream && analyserRef.current ? analyserRef.current.frequencyBinCount : 0;
-    const frequencyData = new Uint8Array(fftSize);
+    // Dynamic, colorful translucent overlapping waves configuration
+    const WAVES = [
+      {
+        frequency: 0.022,
+        phaseSpeed: 0.045,
+        amplitudeFactor: 1.0,
+        color: "rgba(16, 185, 129, 0.45)", // Emerald
+        lineWidth: 1.3,
+      },
+      {
+        frequency: 0.015,
+        phaseSpeed: -0.03,
+        amplitudeFactor: 0.8,
+        color: "rgba(245, 158, 11, 0.35)", // Amber
+        lineWidth: 1.0,
+      },
+      {
+        frequency: 0.032,
+        phaseSpeed: 0.06,
+        amplitudeFactor: 0.6,
+        color: "rgba(6, 182, 212, 0.4)", // Cyan
+        lineWidth: 1.0,
+      },
+      {
+        frequency: 0.048,
+        phaseSpeed: -0.045,
+        amplitudeFactor: 0.4,
+        color: "rgba(168, 85, 247, 0.3)", // Violet
+        lineWidth: 0.8,
+      },
+    ];
 
     const drawFrame = () => {
       animationFrameRef.current = requestAnimationFrame(drawFrame);
 
-      if (stream && analyserRef.current) {
-
-        analyserRef.current.getByteFrequencyData(frequencyData);
+      if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+        audioContextRef.current.resume().catch(() => {});
       }
 
-      ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+      const width = canvas.width / dpr;
+      const height = canvas.height / dpr;
+      ctx.clearRect(0, 0, width, height);
 
-      const barWidth = Math.max(
-        AUDIO_CONFIG.MIN_BAR_WIDTH,
-        canvas.width / dpr / bufferLength - AUDIO_CONFIG.BAR_SPACING
-      );
-      const centerY = canvas.height / dpr / 2;
-      let x = 0;
+      // Compute microphone input volume via Time Domain RMS
+      let micLevel = 0;
+      if (stream && analyserRef.current) {
+        const timeData = new Uint8Array(analyserRef.current.fftSize);
+        analyserRef.current.getByteTimeDomainData(timeData);
 
-      for (let i = 0; i < bufferLength; i++) {
-        let normalizedHeight = 0;
-
-        let micHeight = 0;
-        if (stream && analyserRef.current && frequencyData.length > 0) {
-          const sampleIndex = Math.floor((i / bufferLength) * frequencyData.length);
-          micHeight = frequencyData[sampleIndex] / 255;
+        let sumSquares = 0;
+        for (let j = 0; j < timeData.length; j++) {
+          const normalized = (timeData[j] - 128) / 128;
+          sumSquares += normalized * normalized;
         }
-
-        let systemHeight = 0;
-        const currentLevel = latestLevelRef.current;
-
-        if (currentLevel > 0.002) {
-
-          const centerFactor = 1.0 - Math.abs(i - bufferLength / 3) / (bufferLength / 3);
-
-          const wave = Math.sin(Date.now() / 120 + i * 0.5) * 0.4 + 0.6;
-
-          const jitter = Math.random() * 0.15;
-
-          const boost = Math.min(1.0, currentLevel * 8.0);
-
-          systemHeight = Math.max(0, (wave * Math.max(0, centerFactor) + jitter) * boost);
+        const rms = Math.sqrt(sumSquares / timeData.length);
+        
+        // Hyper-responsive sensitivity and gate
+        const gate = 0.0005;
+        if (rms > gate) {
+          micLevel = (rms - gate) * 25.0;
+        } else {
+          micLevel = 0;
         }
+      }
 
-        normalizedHeight = Math.max(micHeight, systemHeight);
+      // Compute loopback system audio level
+      const systemLevel = latestLevelRef.current;
+      
+      // Select the maximum active level between mic and loopback system audio
+      const targetLevel = Math.max(micLevel, systemLevel);
+      
+      // Boost quiet audio using power compression (pow 0.5) and clamp to 1.0
+      const boostedLevel = Math.min(1.0, Math.pow(targetLevel, 0.5) * 3.5);
+      
+      // Smooth linear interpolation for transitions (faster response to rise, gentle fall)
+      const isRising = boostedLevel > smoothLevel.current;
+      const smoothingFactor = isRising ? 0.22 : 0.12;
+      smoothLevel.current += (boostedLevel - smoothLevel.current) * smoothingFactor;
 
-        const barHeight = Math.max(
-          AUDIO_CONFIG.MIN_BAR_HEIGHT,
-          normalizedHeight * centerY
-        );
+      // Keep a very tiny breathing baseline so the console always feels alive and responsive
+      const activeLevel = Math.max(0.06, smoothLevel.current);
+      const centerY = height / 2;
+      const baseAmplitude = activeLevel * (centerY - 2);
 
-        drawBar(
+      // Render wave layers
+      for (let i = 0; i < WAVES.length; i++) {
+        if (phasesRef.current[i] === undefined) {
+          phasesRef.current[i] = 0;
+        }
+        phasesRef.current[i] += WAVES[i].phaseSpeed;
+
+        const wave = WAVES[i];
+        const amplitude = baseAmplitude * wave.amplitudeFactor;
+        
+        drawWave(
           ctx,
-          x,
-          centerY,
-          barWidth,
-          barHeight,
-          getBarColor(normalizedHeight)
+          width,
+          height,
+          phasesRef.current[i],
+          amplitude,
+          wave.frequency,
+          wave.color,
+          wave.lineWidth
         );
-
-        x += barWidth + AUDIO_CONFIG.BAR_SPACING;
       }
     };
 
@@ -239,7 +299,7 @@ export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
   };
 
   return (
-    <div ref={containerRef} className="!h-[32px] !w-full pl-4 pt-2">
+    <div ref={containerRef} className="!h-[32px] !w-full pl-4 pt-1">
       <canvas ref={canvasRef} className="h-full !w-full" />
     </div>
   );

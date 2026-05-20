@@ -1,5 +1,4 @@
 fn main() {
-    println!("cargo:rustc-check-cfg=cfg(cargo-clippy)");
     dotenv::dotenv().ok();
 
     if let Ok(payment_endpoint) = std::env::var("PAYMENT_ENDPOINT") {

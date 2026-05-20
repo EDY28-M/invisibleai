@@ -27,10 +27,10 @@ export const RecordingPanel = ({
   const isWorking = isProcessing || isAIProcessing;
 
   return (
-    <div className="rounded-lg border border-border/50 bg-muted/30 overflow-hidden">
+    <div className="rounded-[18px] border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 overflow-hidden shadow-inner">
       {}
       {!isVadMode && (
-        <div className="p-3 space-y-2">
+        <div className="p-3.5 space-y-3">
           {}
           {isWorking && (
             <div className="flex items-center justify-end gap-1.5">
@@ -48,7 +48,7 @@ export const RecordingPanel = ({
                 {!isRecording ? (
                   <Button
                     onClick={onStartRecording}
-                    className="flex-1 gap-1.5"
+                    className="flex-1 gap-1.5 h-9 rounded-xl border border-transparent bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-xs transition-all cursor-pointer"
                     size="sm"
                   >
                     <MicIcon className="w-3.5 h-3.5" />
@@ -58,9 +58,9 @@ export const RecordingPanel = ({
                   <>
                     <Button
                       onClick={onIgnore}
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
-                      className="flex-1 gap-1"
+                      className="flex-1 gap-1 h-9 rounded-xl border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-500 text-muted-foreground font-semibold shadow-xs transition-all cursor-pointer"
                     >
                       <XIcon className="w-3 h-3" />
                       Discard
@@ -68,7 +68,7 @@ export const RecordingPanel = ({
                     <Button
                       onClick={onStopAndSend}
                       size="sm"
-                      className="flex-1 gap-1"
+                      className="flex-1 gap-1 h-9 rounded-xl border border-transparent bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow-xs transition-all cursor-pointer"
                     >
                       <StopCircleIcon className="w-3 h-3" />
                       Stop & Send

@@ -92,6 +92,7 @@ const AutoSpeechVADInternal = ({
   return (
     <>
       <Button
+        variant="ghost"
         size="icon"
         onClick={() => {
           if (vad.listening) {
@@ -102,16 +103,23 @@ const AutoSpeechVADInternal = ({
             setEnableVAD(true);
           }
         }}
-        className="cursor-pointer"
+        className={`cursor-pointer h-9 w-9 rounded-[14px] transition-all duration-300 border border-transparent hover:scale-105 active:scale-95 shrink-0 ${
+          vad.listening
+            ? vad.userSpeaking
+              ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.12)]"
+              : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.12)]"
+            : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 hover:border-black/5 dark:hover:border-white/5 text-foreground/80 hover:text-foreground"
+        }`}
+        title={isTranscribing ? "Transcribing..." : vad.listening ? (vad.userSpeaking ? "Speaking..." : "Listening (Click to pause)") : "Start listening"}
       >
         {isTranscribing ? (
-          <LoaderCircleIcon className="h-4 w-4 animate-spin text-green-500" />
+          <LoaderCircleIcon className="h-4.5 w-4.5 animate-spin text-emerald-500" />
         ) : vad.userSpeaking ? (
-          <LoaderCircleIcon className="h-4 w-4 animate-spin" />
+          <LoaderCircleIcon className="h-4.5 w-4.5 animate-spin text-amber-500" />
         ) : vad.listening ? (
-          <MicOffIcon className="h-4 w-4 animate-pulse" />
+          <MicOffIcon className="h-4.5 w-4.5 animate-pulse text-emerald-600 dark:text-emerald-400" />
         ) : (
-          <MicIcon className="h-4 w-4" />
+          <MicIcon className="h-4.5 w-4.5" />
         )}
       </Button>
     </>

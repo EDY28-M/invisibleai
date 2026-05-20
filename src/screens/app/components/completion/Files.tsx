@@ -33,31 +33,33 @@ export const Files = ({
       <Popover open={isFilesPopoverOpen} onOpenChange={setIsFilesPopoverOpen}>
         <PopoverTrigger asChild>
           <Button
+            variant="ghost"
             size="icon"
             onClick={() => {
               if (attachedFiles.length === 0) {
-
                 fileInputRef.current?.click();
               } else {
-
                 setIsFilesPopoverOpen(true);
               }
             }}
             disabled={isLoading || !supportsImages}
-            className="cursor-pointer"
+            className={`cursor-pointer h-9 w-9 rounded-[14px] transition-all duration-300 border border-transparent hover:scale-105 active:scale-95 disabled:opacity-40 disabled:pointer-events-none shrink-0 ${
+              attachedFiles.length > 0
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
+                : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 hover:border-black/5 dark:hover:border-white/5 text-foreground/80 hover:text-foreground"
+            }`}
             title={
               supportsImages
                 ? "Attach images"
                 : "Image upload not supported by current AI provider"
             }
           >
-            <PaperclipIcon className="h-4 w-4" />
+            <PaperclipIcon className="h-4.5 w-4.5" />
           </Button>
         </PopoverTrigger>
 
-        {}
         {attachedFiles.length > 0 && (
-          <div className="absolute -top-2 -right-2 bg-primary-foreground text-primary rounded-full h-5 w-5 flex border border-primary items-center justify-center text-xs font-medium">
+          <div className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white rounded-full h-4 w-4 flex items-center justify-center text-[9px] font-bold shadow-sm pointer-events-none">
             {attachedFiles.length}
           </div>
         )}

@@ -6,7 +6,7 @@ import {
   Button,
 } from "@/components";
 import { RefreshCwIcon, Volume2Icon } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useApp } from "@/contexts";
 import { STORAGE_KEYS } from "@/config/constants";
 import { safeLocalStorage } from "@/lib/storage";
@@ -17,6 +17,15 @@ import { useTranslation } from "@/hooks";
 export const AudioSelection = () => {
   const { selectedAudioDevices, setSelectedAudioDevices } = useApp();
   const { t } = useTranslation();
+
+  // Microphone preview references
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number>(0);
+  const smoothLevelRef = useRef<number>(0);
+  const phasesRef = useRef<number[]>([0, 0, 0, 0]);
 
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
   const [showSuccess, setShowSuccess] = useState<{
@@ -131,6 +140,239 @@ export const AudioSelection = () => {
     }, 3000);
   };
 
+  const drawWave = (
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    phase: number,
+    amplitude: number,
+    frequency: number,
+    color: string,
+    lineWidth: number
+  ) => {
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lineWidth;
+    ctx.lineCap = "round";
+    const centerY = height / 2;
+
+    for (let x = 0; x < width; x++) {
+      const envelope = Math.sin((x / width) * Math.PI);
+      const sineVal = Math.sin(x * frequency + phase) * 0.85 + Math.sin(x * frequency * 2.2 - phase) * 0.15;
+      const y = centerY + sineVal * amplitude * envelope;
+
+      if (x === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+  };
+
+  const draw = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    
+    const resizeCanvas = () => {
+      const parent = canvas.parentElement;
+      if (parent) {
+        const rect = parent.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = 48 * dpr;
+        canvas.style.width = `${rect.width}px`;
+        canvas.style.height = `48px`;
+      }
+    };
+    resizeCanvas();
+
+    window.addEventListener("resize", resizeCanvas);
+
+
+    const WAVES = [
+      {
+        frequency: 0.022,
+        phaseSpeed: 0.04,
+        amplitudeFactor: 1.0,
+        color: "rgba(16, 185, 129, 0.55)", // emerald green
+        lineWidth: 1.3,
+      },
+      {
+        frequency: 0.015,
+        phaseSpeed: -0.025,
+        amplitudeFactor: 0.8,
+        color: "rgba(245, 158, 11, 0.45)", // amber orange
+        lineWidth: 1.0,
+      },
+      {
+        frequency: 0.032,
+        phaseSpeed: 0.055,
+        amplitudeFactor: 0.6,
+        color: "rgba(6, 182, 212, 0.5)", // cyan
+        lineWidth: 1.0,
+      },
+      {
+        frequency: 0.045,
+        phaseSpeed: -0.035,
+        amplitudeFactor: 0.4,
+        color: "rgba(168, 85, 247, 0.4)", // violet
+        lineWidth: 0.8,
+      },
+    ];
+
+    const drawFrame = () => {
+      if (!canvasRef.current) return;
+      animationFrameRef.current = requestAnimationFrame(drawFrame);
+
+      if (audioContextRef.current && audioContextRef.current.state === "suspended") {
+        audioContextRef.current.resume().catch(() => {});
+      }
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const width = canvas.width / dpr;
+      const height = canvas.height / dpr;
+      ctx.clearRect(0, 0, width, height);
+
+      let micLevel = 0;
+      if (analyserRef.current) {
+        const timeData = new Uint8Array(analyserRef.current.fftSize);
+        analyserRef.current.getByteTimeDomainData(timeData);
+
+        let sumSquares = 0;
+        for (let j = 0; j < timeData.length; j++) {
+          const normalized = (timeData[j] - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        const rms = Math.sqrt(sumSquares / timeData.length);
+        
+        // Hyper-responsive sensitivity and gate
+        const gate = 0.0005;
+        if (rms > gate) {
+          micLevel = (rms - gate) * 25.0;
+        } else {
+          micLevel = 0;
+        }
+      }
+
+      // Boost quiet audio using power compression (pow 0.5) and clamp to 1.0
+      const boostedLevel = Math.min(1.0, Math.pow(micLevel, 0.5) * 3.5);
+      smoothLevelRef.current += (boostedLevel - smoothLevelRef.current) * 0.22;
+
+      const activeLevel = Math.max(0.06, smoothLevelRef.current);
+      const centerY = height / 2;
+      const baseAmplitude = activeLevel * (centerY - 4);
+
+      for (let i = 0; i < WAVES.length; i++) {
+        if (phasesRef.current[i] === undefined) {
+          phasesRef.current[i] = 0;
+        }
+        phasesRef.current[i] += WAVES[i].phaseSpeed;
+
+        const wave = WAVES[i];
+        const amplitude = baseAmplitude * wave.amplitudeFactor;
+
+        drawWave(
+          ctx,
+          width,
+          height,
+          phasesRef.current[i],
+          amplitude,
+          wave.frequency,
+          wave.color,
+          wave.lineWidth
+        );
+      }
+    };
+
+    drawFrame();
+
+    return () => {
+      window.removeEventListener("resize", resizeCanvas);
+    };
+  };
+
+  useEffect(() => {
+    let active = true;
+    let cleanupResize: (() => void) | undefined;
+
+    const startCapture = async () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (audioContextRef.current) {
+        await audioContextRef.current.close();
+      }
+
+      const deviceId = selectedAudioDevices.input.id;
+      if (!deviceId) return;
+
+      try {
+        let stream: MediaStream;
+        try {
+          const constraints: MediaStreamConstraints = {
+            audio: deviceId === "default" ? true : { deviceId: { exact: deviceId } }
+          };
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (e) {
+          console.warn("Exact constraints failed, trying ideal constraint fallback:", e);
+          const constraints: MediaStreamConstraints = {
+            audio: deviceId === "default" ? true : { deviceId: { ideal: deviceId } }
+          };
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        }
+
+        if (!active) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContextRef.current = audioCtx;
+
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        analyserRef.current = analyser;
+
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        if (audioCtx.state === "suspended") {
+          await audioCtx.resume().catch((e) => console.error("Failed to resume context on start:", e));
+        }
+
+        cleanupResize = draw();
+      } catch (err) {
+        console.error("Failed to capture mic for preview:", err);
+      }
+    };
+
+    startCapture();
+
+    return () => {
+      active = false;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+      if (cleanupResize) {
+        cleanupResize();
+      }
+    };
+  }, [selectedAudioDevices.input.id]);
+
   return (
     <div id="audio" className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-5xl mx-auto p-1">
       {/* INPUT CAPTURE / MICROPHONE CARD */}
@@ -214,7 +456,7 @@ export const AudioSelection = () => {
           </div>
         </div>
 
-        {/* WAVEFORM — SVG sine wave animation */}
+        {/* WAVEFORM — Beautiful Live Interactive Canvas Visualizer */}
         <div className="relative z-10 mt-5 pt-4 border-t border-border/10">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-xs uppercase font-bold tracking-wider text-muted-foreground/50">
@@ -226,50 +468,8 @@ export const AudioSelection = () => {
             </div>
           </div>
 
-          <style>{`
-            @keyframes wave-scroll {
-              from { transform: translateX(0); }
-              to   { transform: translateX(-50%); }
-            }
-            @keyframes wave-scroll-slow {
-              from { transform: translateX(-25%); }
-              to   { transform: translateX(-75%); }
-            }
-            .wave-anim   { animation: wave-scroll 3s linear infinite; }
-            .wave-anim-2 { animation: wave-scroll-slow 4.5s linear infinite; }
-          `}</style>
-
-          <div className="relative h-12 overflow-hidden rounded-lg">
-            {/* Primary wave */}
-            <svg
-              viewBox="0 0 800 48"
-              preserveAspectRatio="none"
-              className="absolute inset-0 w-[200%] h-full wave-anim"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M0,24 C25,8 50,40 75,24 C100,8 125,40 150,24 C175,8 200,40 225,24 C250,8 275,40 300,24 C325,8 350,40 375,24 C400,8 425,40 450,24 C475,8 500,40 525,24 C550,8 575,40 600,24 C625,8 650,40 675,24 C700,8 725,40 750,24 C775,8 800,40 800,24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                className="text-foreground/40"
-              />
-            </svg>
-            {/* Ghost secondary wave (offset + slower) */}
-            <svg
-              viewBox="0 0 800 48"
-              preserveAspectRatio="none"
-              className="absolute inset-0 w-[200%] h-full wave-anim-2"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M0,24 C20,6 55,42 80,24 C105,6 140,42 165,24 C190,6 225,42 250,24 C275,6 310,42 335,24 C360,6 395,42 420,24 C445,6 480,42 505,24 C530,6 565,42 590,24 C615,6 650,42 675,24 C700,6 735,42 760,24 C785,6 800,38 800,24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1"
-                className="text-foreground/20"
-              />
-            </svg>
+          <div className="relative h-12 overflow-hidden rounded-xl bg-background/25 border border-border/10 flex items-center">
+            <canvas ref={canvasRef} className="w-full h-full" />
           </div>
         </div>
       </div>

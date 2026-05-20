@@ -42,7 +42,7 @@ const App = () => {
           isHidden ? "hidden pointer-events-none" : ""
         }`}
       >
-        <Card className="w-full flex flex-row items-center gap-2 p-2.5 border border-border/40 bg-card/45 backdrop-blur-md shadow-lg shadow-black/10 rounded-2xl">
+        <Card className="w-full flex flex-row items-center gap-2 px-3 py-2 border border-black/5 dark:border-white/5 bg-card/40 dark:bg-card/30 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] rounded-[22px] transition-all duration-500">
           <SystemAudio {...systemAudio} />
           {systemAudio?.capturing && systemAudio?.isDualChannel && (
             <MicVadCapturer
@@ -82,7 +82,7 @@ const App = () => {
             <Completion isHidden={isHidden} />
             <Button
               size="icon"
-              className="cursor-pointer h-9 w-9 rounded-xl border border-border/40 bg-card/30 backdrop-blur-sm hover:bg-card/50 transition-all shrink-0"
+              className="cursor-pointer h-9 w-9 rounded-[14px] border border-amber-500/10 dark:border-amber-400/5 bg-amber-500/5 dark:bg-amber-400/5 hover:bg-amber-500/15 dark:hover:bg-amber-400/15 text-amber-600 dark:text-amber-400 shadow-xs transition-all duration-300 hover:scale-105 active:scale-95 shrink-0"
               title="Open Dev Space"
               onClick={openDashboard}
             >

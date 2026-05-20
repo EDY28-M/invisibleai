@@ -144,10 +144,10 @@ export const SystemAudio = (props: useSystemAudioType) => {
     if (setupRequired) return <AlertCircleIcon className="text-orange-500" />;
     if (error && !setupRequired)
       return <AlertCircleIcon className="text-red-500" />;
-    if (isProcessing) return <LoaderIcon className="animate-spin" />;
+    if (isProcessing) return <LoaderIcon className="animate-spin text-foreground/70" />;
     if (capturing)
-      return <AudioLinesIcon className="text-green-500 animate-pulse" />;
-    return <HeadphonesIcon />;
+      return <AudioLinesIcon className="text-emerald-500 dark:text-emerald-400 animate-pulse" />;
+    return <HeadphonesIcon className="h-4.5 w-4.5" />;
   };
 
   const getButtonTitle = () => {
@@ -170,12 +170,17 @@ export const SystemAudio = (props: useSystemAudioType) => {
     >
       <PopoverTrigger asChild>
         <Button
+          variant="ghost"
           size="icon"
           title={getButtonTitle()}
           onClick={handleToggleCapture}
           className={cn(
-            capturing && "bg-green-50 hover:bg-green-100",
-            error && "bg-red-100 hover:bg-red-200"
+            "cursor-pointer h-9 w-9 rounded-[14px] transition-all duration-300 border border-transparent hover:scale-105 active:scale-95 shrink-0",
+            capturing
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.12)]"
+              : error
+              ? "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400"
+              : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 hover:border-black/5 dark:hover:border-white/5 text-foreground/80 hover:text-foreground"
           )}
         >
           {getButtonIcon()}
@@ -186,12 +191,12 @@ export const SystemAudio = (props: useSystemAudioType) => {
         <PopoverContent
           align="end"
           side="bottom"
-          className="select-none w-screen p-0 border shadow-lg overflow-hidden border-input/50"
+          className="select-none w-screen p-0 border border-black/5 dark:border-white/10 bg-card/85 dark:bg-card/75 backdrop-blur-2xl shadow-2xl rounded-2xl overflow-hidden"
           sideOffset={8}
         >
           <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
             {}
-            <div className="flex-shrink-0 p-3 border-b border-border/50">
+            <div className="flex-shrink-0 p-3.5 border-b border-black/5 dark:border-white/5">
               <div className="flex items-center justify-between gap-2">
                 {}
                 {!setupRequired && (
@@ -298,13 +303,15 @@ export const SystemAudio = (props: useSystemAudioType) => {
 
                 {}
                 {error && !setupRequired && (
-                  <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-50 border border-red-200">
-                    <AlertCircleIcon className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-red-500/5 dark:bg-red-500/10 border border-red-500/15 backdrop-blur-md shadow-[0_4px_20px_rgba(239,68,68,0.06)] animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="p-1 rounded-lg bg-red-500/10 dark:bg-red-500/20 text-red-500 flex-shrink-0 mt-0.5">
+                      <AlertCircleIcon className="w-3.5 h-3.5 animate-pulse" />
+                    </div>
                     <div>
-                      <p className="text-[10px] font-medium text-red-800">
-                        Error
+                      <p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">
+                        System Alert
                       </p>
-                      <p className="text-[10px] text-red-700">{error}</p>
+                      <p className="text-[11px] text-red-500/90 dark:text-red-400/90 leading-relaxed font-medium mt-0.5">{error}</p>
                     </div>
                   </div>
                 )}

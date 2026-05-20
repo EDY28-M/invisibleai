@@ -53,17 +53,17 @@ export const ResultsSection = ({
   const modKey = isMac ? "⌘" : "Ctrl";
 
   return (
-    <div className="rounded-lg border border-border/50 bg-muted/20 p-3 space-y-3">
+    <div className="rounded-[18px] border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 p-4 space-y-4 shadow-inner">
       {}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <SparklesIcon className="w-3.5 h-3.5 text-primary" />
-          <h4 className="text-xs font-medium">
+          <SparklesIcon className="w-3.5 h-3.5 text-amber-500" />
+          <h4 className="text-xs font-semibold text-foreground/90">
             {conversationMode ? "Conversation" : "AI Response"}
           </h4>
         </div>
         <div className="flex items-center gap-2 select-none">
-          <span className="text-[9px] text-muted-foreground/50 bg-muted/50 px-1 rounded">
+          <span className="text-[9px] text-muted-foreground/60 bg-black/5 dark:bg-white/5 px-1 py-0.5 rounded font-mono">
             {modKey}+K
           </span>
           <Switch
@@ -77,14 +77,14 @@ export const ResultsSection = ({
 
       {}
       {!conversationMode && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {}
           {lastTranscription && (() => {
             const { roleLabel, text, roleType } = parseMessage(lastTranscription);
             return (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground bg-black/5 dark:bg-white/5 px-3 py-2 rounded-lg border border-black/5 dark:border-white/5">
                 <span className={cn(
-                  "font-semibold",
+                  "font-bold uppercase tracking-wider text-[9px] mr-1.5",
                   roleType === "user-mic" && "text-emerald-500 dark:text-emerald-400",
                   roleType === "system-loopback" && "text-primary"
                 )}>
@@ -100,13 +100,13 @@ export const ResultsSection = ({
             <div>
               {isAIProcessing && !lastAIResponse ? (
                 <div className="flex items-center gap-2 py-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <Loader2 className="h-4 w-4 animate-spin text-primary/80" />
                   <span className="text-xs text-muted-foreground">
                     Generating response...
                   </span>
                 </div>
               ) : (
-                <div className="prose prose-sm max-w-none dark:prose-invert">
+                <div className="prose prose-sm max-w-none dark:prose-invert text-foreground/90 leading-relaxed bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3.5 rounded-xl">
                   <Markdown>{lastAIResponse}</Markdown>
                   {isAIProcessing && (
                     <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1 align-middle" />
@@ -120,13 +120,13 @@ export const ResultsSection = ({
 
       {}
       {conversationMode && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {}
           {hasResponse && (
-            <div className="rounded-md bg-background/50 p-2.5">
-              <div className="flex items-center gap-1.5 mb-1">
-                <BotIcon className="h-3 w-3 text-muted-foreground" />
-                <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide">
+            <div className="rounded-[18px] rounded-bl-[4px] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3.5 mr-6 shadow-xs transition-all">
+              <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
+                <BotIcon className="h-3 w-3 text-foreground" />
+                <span className="text-[9px] font-bold uppercase tracking-wider">
                   AI
                 </span>
               </div>
@@ -138,7 +138,7 @@ export const ResultsSection = ({
                   </span>
                 </div>
               ) : (
-                <div className="prose prose-sm max-w-none dark:prose-invert text-sm">
+                <div className="prose prose-sm max-w-none dark:prose-invert text-sm leading-relaxed">
                   <Markdown>{lastAIResponse}</Markdown>
                   {isAIProcessing && (
                     <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1 align-middle" />
@@ -154,36 +154,36 @@ export const ResultsSection = ({
             const isUserMic = roleType === "user-mic";
             return (
               <div className={cn(
-                "rounded-md border-l-2 p-2.5 transition-all",
+                "rounded-[18px] rounded-br-[4px] border p-3.5 shadow-xs ml-6 transition-all",
                 isUserMic
-                  ? "border-emerald-500/50 bg-emerald-500/5"
-                  : "border-primary/50 bg-primary/5"
+                  ? "border-emerald-500/10 bg-emerald-500/5 text-foreground"
+                  : "border-primary/10 bg-primary/5 text-foreground"
               )}>
-                <div className="flex items-center gap-1.5 mb-1">
+                <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
                   {isUserMic ? (
                     <MicIcon className="h-3 w-3 text-emerald-500" />
                   ) : (
                     <HeadphonesIcon className="h-3 w-3 text-primary" />
                   )}
                   <span className={cn(
-                    "text-[9px] font-medium uppercase tracking-wide",
+                    "text-[9px] font-bold uppercase tracking-wide",
                     isUserMic ? "text-emerald-500" : "text-primary"
                   )}>
                     {roleLabel}
                   </span>
                 </div>
-                <p className="text-sm">{text}</p>
+                <p className="text-sm leading-relaxed">{text}</p>
               </div>
             );
           })()}
 
           {}
           {hasHistory && (
-            <div className="space-y-2 pt-2 border-t border-border/50">
-              <p className="text-[9px] text-muted-foreground uppercase tracking-wide">
+            <div className="space-y-3 pt-3 border-t border-black/5 dark:border-white/5">
+              <p className="text-[9px] text-muted-foreground/60 uppercase font-bold tracking-wider">
                 Previous
               </p>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
                 {conversation.messages
                   .slice(2)
                   .sort((a, b) => b.timestamp - a.timestamp)
@@ -200,22 +200,24 @@ export const ResultsSection = ({
                       <div
                         key={message.id || index}
                         className={cn(
-                          "p-2 rounded-md text-[11px] transition-all",
+                          "p-2.5 text-[11px] transition-all border",
                           isUserRole
                             ? isUserMic
-                              ? "bg-emerald-500/5 border-l-2 border-emerald-500/30"
-                              : "bg-primary/5 border-l-2 border-primary/30"
-                            : "bg-background/50"
+                              ? "bg-emerald-500/5 border-emerald-500/10 rounded-[12px] rounded-br-[2px] ml-4"
+                              : "bg-primary/5 border-primary/10 rounded-[12px] rounded-br-[2px] ml-4"
+                            : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 rounded-[12px] rounded-bl-[2px] mr-4"
                         )}
                       >
-                        <span className={cn(
-                          "text-[8px] font-semibold uppercase tracking-wider",
-                          isUserMic && "text-emerald-500",
-                          isSystemLoopback && "text-primary",
-                          (!isUserMic && !isSystemLoopback) && "text-muted-foreground"
-                        )}>
-                          {roleLabel}
-                        </span>
+                        <div className="flex items-center justify-between gap-2 mb-1 opacity-60">
+                          <span className={cn(
+                            "text-[8px] font-bold uppercase tracking-wider",
+                            isUserMic && "text-emerald-500",
+                            isSystemLoopback && "text-primary",
+                            (!isUserMic && !isSystemLoopback) && "text-muted-foreground"
+                          )}>
+                            {roleLabel}
+                          </span>
+                        </div>
                         <div className="text-muted-foreground leading-relaxed mt-0.5">
                           <Markdown>{text}</Markdown>
                         </div>
