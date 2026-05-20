@@ -16,6 +16,7 @@ import {
   updateAppIconVisibility,
   updateAlwaysOnTop,
   updateAutostart,
+  updateContentProtected,
   CustomizableState,
   DEFAULT_CUSTOMIZABLE_STATE,
   CursorType,
@@ -342,6 +343,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           invoke("set_always_on_top", {
             enabled: customizable.alwaysOnTop.isEnabled,
           }),
+          invoke("set_content_protected", {
+            enabled: customizable.contentProtected.isEnabled,
+          }),
         ]);
       } catch (error) {
         console.error("Failed to apply customizable settings:", error);
@@ -617,6 +621,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     loadData();
   };
 
+  const toggleContentProtected = async (isEnabled: boolean) => {
+    const newState = updateContentProtected(isEnabled);
+    setCustomizable(newState);
+    try {
+      await invoke("set_content_protected", { enabled: isEnabled });
+      loadData();
+    } catch (error) {
+      console.error("Failed to toggle content protection:", error);
+    }
+  };
+
   const setInvisibleAIApiEnabled = async (enabled: boolean) => {
     setInvisibleAIApiEnabledState(enabled);
     safeLocalStorage.setItem(STORAGE_KEYS.INVISIBLEAI_API_ENABLED, String(enabled));
@@ -681,6 +696,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     selectedAudioDevices,
     setSelectedAudioDevices,
     setCursorType,
+    toggleContentProtected,
     supportsImages,
     setSupportsImages,
   };

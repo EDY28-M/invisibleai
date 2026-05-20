@@ -184,6 +184,23 @@ fn setup_dashboard_close_handler<R: Runtime>(window: &WebviewWindow<R>) {
     });
 }
 
+#[tauri::command]
+pub fn set_content_protected(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    // Apply to main window
+    if let Some(main_window) = app.get_webview_window("main") {
+        main_window
+            .set_content_protected(enabled)
+            .map_err(|e| format!("Failed to set content protection on main: {}", e))?;
+    }
+    // Apply to dashboard window
+    if let Some(dashboard_window) = app.get_webview_window("dashboard") {
+        dashboard_window
+            .set_content_protected(enabled)
+            .map_err(|e| format!("Failed to set content protection on dashboard: {}", e))?;
+    }
+    Ok(())
+}
+
 pub fn show_dashboard_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     if let Some(dashboard_window) = app.get_webview_window("dashboard") {
 

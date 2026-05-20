@@ -76,6 +76,7 @@ pub fn run() {
             window::open_dashboard,
             window::toggle_dashboard,
             window::move_window,
+            window::set_content_protected,
             capture::capture_to_base64,
             capture::start_screen_capture,
             capture::capture_selected_area,

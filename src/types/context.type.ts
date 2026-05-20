@@ -56,6 +56,7 @@ export type IContextType = {
     }>
   >;
   setCursorType: (type: CursorType) => void;
+  toggleContentProtected: (isEnabled: boolean) => Promise<void>;
   supportsImages: boolean;
   setSupportsImages: (value: boolean) => void;
 };

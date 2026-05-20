@@ -4,6 +4,7 @@ import {
   AppIconToggle,
   AutostartToggle,
   LanguageToggle,
+  StealthModeToggle,
 } from "./components";
 import { useTranslation } from "@/hooks";
 import { PageLayout } from "@/layouts";
@@ -40,6 +41,7 @@ const Settings = () => {
             <AutostartToggle />
             <AppIconToggle />
             <AlwaysOnTopToggle />
+            <StealthModeToggle />
           </div>
         </div>
       </section>

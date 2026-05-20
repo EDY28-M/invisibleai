@@ -146,6 +146,9 @@ export const translations = {
     settings_always_on_top_enabled_desc: "Window stays above all other applications (default)",
     settings_always_on_top_disabled_desc: "Window behaves like normal applications",
 
+    settings_stealth_title: "Stealth Mode (Invisible to Screenshots)",
+    settings_stealth_desc: "When enabled, the app becomes invisible to screen recordings and screenshots. Requires an active license.",
+
     settings_reset_title: "Reset App Configuration",
     settings_reset_desc: "Reset InvisibleAI to its factory defaults. This will delete ALL data including chat history, API keys, license, system prompts, audio settings, and all preferences. The app will restart automatically.",
     settings_reset_warning: "This action is irreversible. All your configuration, API keys, license, and chat history will be permanently deleted.",
@@ -465,6 +468,9 @@ export const translations = {
     settings_always_on_top_disabled: "Activar Siempre al Frente",
     settings_always_on_top_enabled_desc: "La ventana permanece por encima de todas las demás aplicaciones (por defecto)",
     settings_always_on_top_disabled_desc: "La ventana se comporta como las aplicaciones normales",
+
+    settings_stealth_title: "Modo Sigilo (Invisible en Capturas)",
+    settings_stealth_desc: "Cuando está activado, la app se vuelve invisible en grabaciones de pantalla y capturas. Requiere una licencia activa.",
 
     settings_reset_title: "Restablecer Ajustes de la Aplicación",
     settings_reset_desc: "Restablece InvisibleAI a sus valores predeterminados de fábrica. Esto eliminará TODOS los datos, incluyendo historial de chat, claves API, licencia, prompts del sistema, ajustes de audio y todas las preferencias. La aplicación se reiniciará automáticamente.",
