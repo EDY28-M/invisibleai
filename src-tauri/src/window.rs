@@ -2,7 +2,7 @@
 use tauri::LogicalPosition;
 use tauri::{App, AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilder};
 
-const TOP_OFFSET: i32 = 54;
+const TOP_OFFSET: i32 = 60; // Safe logical Y offset below macOS menu bar
 
 pub fn setup_main_window(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 
@@ -22,18 +22,20 @@ pub fn setup_main_window(app: &mut App) -> Result<(), Box<dyn std::error::Error>
 
 pub fn position_window_top_center(
     window: &WebviewWindow,
-    y_offset: i32,
+    y_offset_logical: i32,
 ) -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(monitor) = window.primary_monitor()? {
+        let scale_factor = monitor.scale_factor();
         let monitor_size = monitor.size();
         let window_size = window.outer_size()?;
 
         let center_x = (monitor_size.width as i32 - window_size.width as i32) / 2;
+        let y_physical = (y_offset_logical as f64 * scale_factor) as i32;
 
         window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
             x: center_x,
-            y: y_offset,
+            y: y_physical,
         }))?;
     }
 
@@ -143,7 +145,6 @@ pub fn create_dashboard_window<R: Runtime>(
     #[cfg(target_os = "macos")]
     let base_builder = base_builder
         .title("InvisibleAI - Dashboard")
-        .center()
         .decorations(true)
         .inner_size(1280.0, 850.0)
         .resizable(false)
@@ -165,9 +166,41 @@ pub fn create_dashboard_window<R: Runtime>(
 
     let window = base_builder.build()?;
 
+    // Position dashboard below the floating capsule bar (centered horizontally)
+    #[cfg(target_os = "macos")]
+    {
+        if let Err(e) = position_dashboard_below_capsule(&window) {
+            eprintln!("Failed to position dashboard window: {}", e);
+        }
+    }
+
     setup_dashboard_close_handler(&window);
 
     Ok(window)
+}
+
+#[cfg(target_os = "macos")]
+fn position_dashboard_below_capsule<R: Runtime>(
+    window: &WebviewWindow<R>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(monitor) = window.primary_monitor()? {
+        let scale_factor = monitor.scale_factor();
+        let monitor_size = monitor.size();
+        let window_size = window.outer_size()?;
+
+        // Center horizontally on screen
+        let center_x = (monitor_size.width as i32 - window_size.width as i32) / 2;
+
+        // Position vertically: capsule is at ~60px logical + ~54px height + 8px gap = ~122px logical
+        let y_logical = 122i32;
+        let y_physical = (y_logical as f64 * scale_factor) as i32;
+
+        window.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
+            x: center_x,
+            y: y_physical,
+        }))?;
+    }
+    Ok(())
 }
 
 fn setup_dashboard_close_handler<R: Runtime>(window: &WebviewWindow<R>) {

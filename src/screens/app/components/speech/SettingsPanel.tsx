@@ -83,7 +83,7 @@ export const SettingsPanel = ({
       if (
         Math.abs(vadConfig.sensitivity_rms - preset.sensitivity_rms) < 0.001 &&
         Math.abs(vadConfig.noise_gate_threshold - preset.noise_gate_threshold) <
-          0.001
+        0.001
       ) {
         return key as SensitivityPreset;
       }
@@ -127,7 +127,7 @@ export const SettingsPanel = ({
 
   return (
     <div className="rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] backdrop-blur-md overflow-hidden transition-all duration-300 shadow-[0_8px_32px_rgba(0,0,0,0.03)] hover:border-black/15 dark:hover:border-white/20">
-      
+
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -145,10 +145,10 @@ export const SettingsPanel = ({
         />
       </button>
 
-      
+
       {isOpen && (
         <div className="px-4 pb-4 space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
-          
+
           <div className="space-y-3">
             <div className="flex items-center gap-1.5 pl-0.5">
               <span className="w-1.5 h-3 rounded-full bg-emerald-500" />
@@ -157,7 +157,7 @@ export const SettingsPanel = ({
               </h4>
             </div>
 
-            
+
             {vadConfig.enabled && (
               <div className="space-y-2.5">
                 <Label className="text-[11px] font-bold text-foreground/80">
@@ -192,12 +192,12 @@ export const SettingsPanel = ({
                   {currentPreset === "custom"
                     ? "Custom sensitivity values"
                     : SENSITIVITY_PRESETS[currentPreset as SensitivityPreset]
-                        .description}
+                      .description}
                 </p>
               </div>
             )}
 
-            
+
             {!vadConfig.enabled && (
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-foreground/80 flex items-center justify-between">
@@ -223,7 +223,7 @@ export const SettingsPanel = ({
             )}
           </div>
 
-          
+
           <div className="space-y-4 pt-4 border-t border-black/5 dark:border-white/5">
             <div className="flex items-center gap-1.5 pl-0.5">
               <span className="w-1.5 h-3 rounded-full bg-indigo-500" />
@@ -247,7 +247,7 @@ export const SettingsPanel = ({
               />
             </div>
 
-            
+
             <div className="flex items-center justify-between gap-4 p-2 rounded-xl bg-black/[0.01] dark:bg-white/[0.01] hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors border-t border-black/5 dark:border-white/5 pt-3">
               <div className="flex-1">
                 <Label className="text-xs font-bold text-foreground/90 flex items-center gap-1.5">
@@ -268,7 +268,7 @@ export const SettingsPanel = ({
               />
             </div>
 
-            
+
             {!useSystemPrompt && (
               <div className="space-y-2 pt-2 animate-in fade-in slide-in-from-top-1 duration-200">
                 <div className="flex justify-end">
@@ -308,7 +308,7 @@ export const SettingsPanel = ({
             )}
           </div>
 
-          
+
           <div className="pt-4 border-t border-black/5 dark:border-white/5">
             <button
               type="button"

@@ -818,7 +818,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      invoke("stop_system_audio_capture").catch(() => {});
+      invoke("stop_system_audio_capture").catch(() => { });
     };
   }, []);
 

@@ -73,8 +73,8 @@ const App = () => {
 
           <div
             className={`${systemAudio?.capturing
-                ? "hidden w-full fade-out transition-all duration-300"
-                : "w-full flex flex-row gap-2 items-center"
+              ? "hidden w-full fade-out transition-all duration-300"
+              : "w-full flex flex-row gap-2 items-center"
               }`}
           >
             <Completion isHidden={isHidden} />
