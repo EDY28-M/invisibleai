@@ -1,4 +1,3 @@
-import { Header } from "@/components";
 import { useApp } from "@/contexts";
 import { getPlatform } from "@/lib";
 import { CursorType } from "@/lib/storage";

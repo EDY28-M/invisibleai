@@ -3,14 +3,7 @@ import { Button, Card, GetLicense, Switch } from "@/components";
 import {
   RotateCcw,
   AlertCircle,
-  Keyboard,
   Lock,
-  Mic as MicIcon,
-  Radio as RadioIcon,
-  XOctagon as XOctagonIcon,
-  Camera as CameraIcon,
-  Ghost as GhostIcon,
-  Keyboard as KeyboardIcon,
 } from "lucide-react";
 import {
   getAllShortcutActions,
@@ -124,55 +117,6 @@ export const ShortcutManager = () => {
     }
   };
 
-  // Select a theme-colored left border and tactical icon based on action ID
-  const getActionTheme = (id: string) => {
-    switch (id) {
-      case "start_recording":
-      case "toggle_recording":
-        return {
-          icon: <RadioIcon className="size-4 text-muted-foreground/50" />,
-          bgColor: "bg-muted/10 border-border/20",
-          borderColor: ""
-        };
-      case "cancel_recording":
-        return {
-          icon: <XOctagonIcon className="size-4 text-muted-foreground/50" />,
-          bgColor: "bg-muted/10 border-border/20",
-          borderColor: ""
-        };
-      case "mute_microphone":
-        return {
-          icon: <MicIcon className="size-4 text-muted-foreground/50" />,
-          bgColor: "bg-muted/10 border-border/20",
-          borderColor: ""
-        };
-      case "take_screenshot":
-        return {
-          icon: <CameraIcon className="size-4 text-muted-foreground/50" />,
-          bgColor: "bg-muted/10 border-border/20",
-          borderColor: ""
-        };
-      case "toggle_stealth_mode":
-        return {
-          icon: <GhostIcon className="size-4 text-muted-foreground/50" />,
-          bgColor: "bg-muted/10 border-border/20",
-          borderColor: ""
-        };
-      case "move_window":
-        return {
-          icon: <KeyboardIcon className="size-4 text-muted-foreground/50" />,
-          bgColor: "bg-muted/10 border-border/20",
-          borderColor: ""
-        };
-      default:
-        return {
-          icon: <Keyboard className="size-4 text-muted-foreground/50" />,
-          bgColor: "bg-muted/10 border-border/20",
-          borderColor: ""
-        };
-    }
-  };
-
   // Custom keycap layout builder mimicking a premium mechanical keyboard feel
   const renderKeycaps = (keyString: string, isMoveWindow: boolean) => {
     const displayStr = formatShortcutKeyForDisplay(keyString);
@@ -274,7 +218,6 @@ export const ShortcutManager = () => {
           };
           const isLocked = !hasActiveLicense;
           const isEditing = editingAction === action.id;
-          const theme = getActionTheme(action.id);
 
           return (
             <div

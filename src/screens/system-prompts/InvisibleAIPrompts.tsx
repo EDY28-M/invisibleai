@@ -5,7 +5,6 @@ import {
   GetLicense,
 } from "@/components";
 import {
-  CheckCircle2,
   Sparkles,
   LockIcon,
 } from "lucide-react";

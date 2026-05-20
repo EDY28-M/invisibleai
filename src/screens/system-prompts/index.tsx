@@ -9,7 +9,6 @@ import {
   PlusIcon,
   Pencil,
   Trash2,
-  CheckCircle2,
 } from "lucide-react";
 import { DeleteSystemPrompt } from "./Delete";
 import { CreateEditDialog } from "./CreateEditDialog";
