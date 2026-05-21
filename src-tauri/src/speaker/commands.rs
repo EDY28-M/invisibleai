@@ -139,8 +139,18 @@ async fn run_vad_capture(
     let mut silence_chunks = 0;
     let mut speech_chunks = 0;
     let max_samples = sr as usize * 30;
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let stop_flag_for_listener = stop_flag.clone();
+
+    let stop_listener = app.listen("vad-stop-capture", move |_| {
+        stop_flag_for_listener.store(true, Ordering::Release);
+    });
 
     while let Some(sample) = stream.next().await {
+        if stop_flag.load(Ordering::Acquire) {
+            break;
+        }
+
         buffer.push_back(sample);
 
         while buffer.len() >= config.hop_size {
@@ -159,7 +169,6 @@ async fn run_vad_capture(
 
             if is_speech {
                 if !in_speech {
-
                     in_speech = true;
                     speech_chunks = 0;
 
@@ -175,7 +184,6 @@ async fn run_vad_capture(
                 if speech_buffer.len() > max_samples {
                     let normalized_buffer = normalize_audio_level(&speech_buffer, 0.1);
                     if let Ok(b64) = samples_to_wav_b64(sr, &normalized_buffer) {
-
                         let _ = app.emit("speech-detected", b64);
                     }
                     speech_buffer.clear();
@@ -183,16 +191,13 @@ async fn run_vad_capture(
                     speech_chunks = 0;
                 }
             } else {
-
                 if in_speech {
                     silence_chunks += 1;
 
                     speech_buffer.extend_from_slice(&mono);
 
                     if silence_chunks >= config.silence_chunks {
-
                         if speech_chunks >= config.min_speech_chunks && !speech_buffer.is_empty() {
-
                             let silence_duration_samples = silence_chunks * config.hop_size;
                             let keep_silence_samples = (sr as usize) * 15 / 100;
                             let trim_amount =
@@ -204,7 +209,6 @@ async fn run_vad_capture(
 
                             let normalized_buffer = normalize_audio_level(&speech_buffer, 0.1);
                             if let Ok(b64) = samples_to_wav_b64(sr, &normalized_buffer) {
-
                                 let _ = app.emit("speech-detected", b64);
                             } else {
                                 error!("Failed to encode speech to WAV");
@@ -223,7 +227,6 @@ async fn run_vad_capture(
                         speech_chunks = 0;
                     }
                 } else {
-
                     pre_speech.extend(mono.into_iter());
 
                     while pre_speech.len() > config.pre_speech_chunks * config.hop_size {
@@ -235,6 +238,18 @@ async fn run_vad_capture(
                     }
                 }
             }
+        }
+    }
+
+    app.unlisten(stop_listener);
+
+    if speech_chunks >= config.min_speech_chunks && !speech_buffer.is_empty() {
+        let normalized_buffer = normalize_audio_level(&speech_buffer, 0.1);
+        if let Ok(b64) = samples_to_wav_b64(sr, &normalized_buffer) {
+            let _ = app.emit("speech-detected", b64);
+        } else {
+            error!("Failed to encode final speech buffer to WAV");
+            let _ = app.emit("audio-encoding-error", "Failed to encode speech");
         }
     }
 }
@@ -297,7 +312,6 @@ async fn run_continuous_capture(
     app.unlisten(stop_listener);
 
     if !audio_buffer.is_empty() {
-
         let cleaned_audio = apply_noise_gate(&audio_buffer, config.noise_gate_threshold);
         let cleaned_audio = normalize_audio_level(&cleaned_audio, 0.1);
 
@@ -376,7 +390,6 @@ fn normalize_audio_level(samples: &[f32], target_rms: f32) -> Vec<f32> {
 }
 
 fn samples_to_wav_b64(sample_rate: u32, mono_f32: &[f32]) -> Result<String, String> {
-
     if !(8000..=96000).contains(&sample_rate) {
         error!("Invalid sample rate: {}", sample_rate);
         return Err(format!(
@@ -436,6 +449,37 @@ pub async fn stop_system_audio_capture(app: AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Failed to update capturing state: {}", e))? = false;
 
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+    let _ = app.emit("capture-stopped", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn finish_system_audio_capture(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<crate::AudioState>();
+
+    let _ = app.emit("vad-stop-capture", ());
+    tokio::time::sleep(tokio::time::Duration::from_millis(700)).await;
+
+    {
+        let mut guard = state
+            .stream_task
+            .lock()
+            .map_err(|e| format!("Failed to acquire task lock: {}", e))?;
+
+        if let Some(task) = guard.as_ref() {
+            if task.is_finished() {
+                let _ = guard.take();
+            } else if let Some(task) = guard.take() {
+                task.abort();
+            }
+        }
+    }
+
+    *state
+        .is_capturing
+        .lock()
+        .map_err(|e| format!("Failed to update capturing state: {}", e))? = false;
 
     let _ = app.emit("capture-stopped", ());
     Ok(())
@@ -517,7 +561,6 @@ pub async fn get_vad_config(app: AppHandle) -> Result<VadConfig, String> {
 
 #[tauri::command]
 pub async fn update_vad_config(app: AppHandle, config: VadConfig) -> Result<(), String> {
-
     if config.sensitivity_rms < 0.0 || config.sensitivity_rms > 1.0 {
         return Err("Invalid sensitivity_rms: must be 0.0-1.0".to_string());
     }

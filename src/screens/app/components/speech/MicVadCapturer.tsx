@@ -25,16 +25,26 @@ interface MicVadCapturerProps {
   onSpeechTranscribed: (transcription: string) => void;
   onStreamActive: (stream: MediaStream | null) => void;
   onError: (error: string) => void;
+  onSpeechStart?: () => void;
+  onSpeechProcessingStart?: () => void;
+  onSpeechProcessingEnd?: () => void;
   microphoneDeviceId?: string;
   vadConfig?: VadConfig;
+  finishSignal?: number;
+
 }
 
 export function MicVadCapturer({
   onSpeechTranscribed,
   onStreamActive,
   onError,
+  onSpeechStart,
+  onSpeechProcessingStart,
+  onSpeechProcessingEnd,
   microphoneDeviceId,
   vadConfig,
+  finishSignal = 0,
+
 }: MicVadCapturerProps) {
   const { selectedSttProvider, allSttProviders, invisibleaiApiEnabled } = useApp();
   const redemptionFrames = getMicRedemptionFrames(vadConfig);
@@ -42,20 +52,34 @@ export function MicVadCapturer({
     onSpeechTranscribed,
     onStreamActive,
     onError,
+    onSpeechStart,
+    onSpeechProcessingStart,
+    onSpeechProcessingEnd,
   });
   const sttConfigRef = useRef({
     selectedSttProvider,
     allSttProviders,
     invisibleaiApiEnabled,
   });
+  const vadRef = useRef<MicVAD | null>(null);
 
   useEffect(() => {
     callbacksRef.current = {
       onSpeechTranscribed,
       onStreamActive,
       onError,
+      onSpeechStart,
+      onSpeechProcessingStart,
+      onSpeechProcessingEnd,
     };
-  }, [onSpeechTranscribed, onStreamActive, onError]);
+  }, [
+    onSpeechTranscribed,
+    onStreamActive,
+    onError,
+    onSpeechStart,
+    onSpeechProcessingStart,
+    onSpeechProcessingEnd,
+  ]);
 
   useEffect(() => {
     sttConfigRef.current = {
@@ -71,6 +95,8 @@ export function MicVadCapturer({
     let cancelled = false;
 
     const handleSpeechEnd = async (audio: Float32Array) => {
+      callbacksRef.current.onSpeechProcessingStart?.();
+
       try {
         const audioBlob = floatArrayToWav(audio, 16000, "wav");
 
@@ -112,6 +138,8 @@ export function MicVadCapturer({
             ? `Microphone STT Error: ${err.message}`
             : "Failed to transcribe microphone speech"
         );
+      } finally {
+        callbacksRef.current.onSpeechProcessingEnd?.();
       }
     };
 
@@ -132,6 +160,10 @@ export function MicVadCapturer({
           minSpeechFrames: 5,
           preSpeechPadFrames: 10,
           redemptionFrames,
+          submitUserSpeechOnPause: true,
+          onSpeechStart: () => {
+            callbacksRef.current.onSpeechStart?.();
+          },
           onSpeechEnd: handleSpeechEnd,
         });
 
@@ -141,6 +173,7 @@ export function MicVadCapturer({
         }
 
         vadInstance = vad;
+        vadRef.current = vad;
         vad.start();
       } catch (err) {
         if (cancelled) {
@@ -168,10 +201,20 @@ export function MicVadCapturer({
     return () => {
       cancelled = true;
       vadInstance?.destroy();
+      if (vadRef.current === vadInstance) {
+        vadRef.current = null;
+      }
       activeStream?.getTracks().forEach((track) => track.stop());
       callbacksRef.current.onStreamActive(null);
     };
   }, [microphoneDeviceId, redemptionFrames]);
+
+  useEffect(() => {
+    if (finishSignal > 0) {
+      vadRef.current?.pause();
+
+    }
+  }, [finishSignal]);
 
   return null;
 }

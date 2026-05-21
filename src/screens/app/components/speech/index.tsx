@@ -34,6 +34,7 @@ import {
 export const SystemAudio = (props: useSystemAudioType) => {
   const {
     capturing,
+    isFinalizingCapture,
     isProcessing,
     isAIProcessing,
     lastTranscription,
@@ -162,7 +163,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
     <Popover
       open={isPopoverOpen}
       onOpenChange={(open) => {
-        if (capturing && !open) {
+        if (!open && (capturing || isFinalizingCapture || isProcessing || isAIProcessing || !!lastAIResponse)) {
           return;
         }
         setIsPopoverOpen(open);
@@ -187,7 +188,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
         </Button>
       </PopoverTrigger>
 
-      {(capturing || setupRequired || error) && (
+      {isPopoverOpen && (
         <PopoverContent
           align="end"
           side="bottom"
@@ -205,6 +206,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                     isDualChannel={isDualChannel}
                     onModeChange={handleModeChange}
                     disabled={
+                      isFinalizingCapture ||
                       isRecordingInContinuousMode ||
                       isProcessing ||
                       isAIProcessing
@@ -253,7 +255,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                   )}
 
                   {/* Close Popover Button */}
-                  {!capturing && (
+                  {!capturing && !isFinalizingCapture && (
                     <Button
                       size="icon"
                       variant="ghost"
