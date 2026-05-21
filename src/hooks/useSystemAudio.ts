@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useWindowResize, useGlobalShortcuts } from ".";
+import { useWindowResize } from "./useWindow";
+import { useGlobalShortcuts } from "./useGlobalShortcuts";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "@/contexts";
@@ -85,6 +86,10 @@ export function useSystemAudio() {
     useState<boolean>(false);
   const [isDualChannel, setIsDualChannel] = useState<boolean>(false);
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
+  const [micVadFinishSignal, setMicVadFinishSignal] = useState(0);
+  const [captureSegmentId, setCaptureSegmentId] = useState<number>(0);
+  const [isFinalizingCapture, setIsFinalizingCapture] = useState(false);
+
 
   const [conversation, setConversation] = useState<ChatConversation>({
     id: "",
@@ -115,10 +120,16 @@ export function useSystemAudio() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const manualMicStreamRef = useRef<MediaStream | null>(null);
+  const isFinalizingCaptureRef = useRef<boolean>(false);
+  const pendingTranscriptionPartsRef = useRef<string[]>([]);
+  const pendingTranscriptionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSpeechTranscriptionsRef = useRef(0);
+  const pendingSpeechWaitersRef = useRef<Array<() => void>>([]);
 
   const conversationRef = useRef(conversation);
   const isDualChannelRef = useRef(isDualChannel);
   const isContinuousModeRef = useRef(isContinuousMode);
+  const vadConfigRef = useRef(vadConfig);
   const useSystemPromptRef = useRef(useSystemPrompt);
   const systemPromptRef = useRef(systemPrompt);
   const contextContentRef = useRef(contextContent);
@@ -127,10 +138,12 @@ export function useSystemAudio() {
   useEffect(() => { conversationRef.current = conversation; }, [conversation]);
   useEffect(() => { isDualChannelRef.current = isDualChannel; }, [isDualChannel]);
   useEffect(() => { isContinuousModeRef.current = isContinuousMode; }, [isContinuousMode]);
+  useEffect(() => { vadConfigRef.current = vadConfig; }, [vadConfig]);
   useEffect(() => { useSystemPromptRef.current = useSystemPrompt; }, [useSystemPrompt]);
   useEffect(() => { systemPromptRef.current = systemPrompt; }, [systemPrompt]);
   useEffect(() => { contextContentRef.current = contextContent; }, [contextContent]);
   useEffect(() => { useConversationalMemoryRef.current = useConversationalMemory; }, [useConversationalMemory]);
+  useEffect(() => { isFinalizingCaptureRef.current = isFinalizingCapture; }, [isFinalizingCapture]);
 
   const isLastTranscriptionSavedRef = useRef<boolean>(true);
   const lastTranscriptionRef = useRef(lastTranscription);
@@ -666,7 +679,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         setIsAIProcessing(false);
       }
     },
-    [selectedAIProvider, allAiProviders, isDualChannel]
+    [selectedAIProvider, allAiProviders, isDualChannel, invisibleaiApiEnabled]
   );
 
   const handleNewTranscription = useCallback(async (formattedText: string) => {
@@ -728,10 +741,109 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     );
   }, [processWithAI]);
 
-  const handleMicSpeechDetected = useCallback((transcription: string) => {
+  const pausePendingTranscriptionCommit = useCallback(() => {
+    if (pendingTranscriptionTimeoutRef.current) {
+      clearTimeout(pendingTranscriptionTimeoutRef.current);
+      pendingTranscriptionTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearPendingTranscriptionCommit = useCallback(() => {
+    pausePendingTranscriptionCommit();
+    pendingTranscriptionPartsRef.current = [];
+  }, [pausePendingTranscriptionCommit]);
+
+  const resolvePendingSpeechWaiters = useCallback(() => {
+    if (pendingSpeechTranscriptionsRef.current > 0) {
+      return;
+    }
+
+    const waiters = pendingSpeechWaitersRef.current;
+    pendingSpeechWaitersRef.current = [];
+    waiters.forEach((resolve) => resolve());
+  }, []);
+
+  const beginPendingSpeechTranscription = useCallback(() => {
+    pendingSpeechTranscriptionsRef.current += 1;
+  }, []);
+
+  const endPendingSpeechTranscription = useCallback(() => {
+    pendingSpeechTranscriptionsRef.current = Math.max(
+      0,
+      pendingSpeechTranscriptionsRef.current - 1
+    );
+    resolvePendingSpeechWaiters();
+  }, [resolvePendingSpeechWaiters]);
+
+  const waitForPendingSpeechTranscriptions = useCallback((timeoutMs = 10000) => {
+    if (pendingSpeechTranscriptionsRef.current === 0) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve) => {
+      let settled = false;
+
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        pendingSpeechWaitersRef.current = pendingSpeechWaitersRef.current.filter(
+          (waiter) => waiter !== finish
+        );
+        resolve();
+      };
+
+      pendingSpeechWaitersRef.current.push(finish);
+      window.setTimeout(finish, timeoutMs);
+    });
+  }, []);
+
+  const getTranscriptionCommitDelayMs = useCallback(() => {
+    const config = vadConfigRef.current;
+    const silenceMs =
+      (config.silence_chunks * config.hop_size * 1000) / 44100;
+
+    return Math.max(5000, Math.round(silenceMs + 750));
+  }, []);
+
+  const flushPendingTranscriptionCommit = useCallback(async () => {
+    pausePendingTranscriptionCommit();
+
+    const pendingParts = pendingTranscriptionPartsRef.current;
+    if (pendingParts.length === 0) {
+      return;
+    }
+
+    pendingTranscriptionPartsRef.current = [];
+    await handleNewTranscription(pendingParts.join("\n"));
+  }, [handleNewTranscription, pausePendingTranscriptionCommit]);
+
+  const scheduleTranscriptionCommit = useCallback((formattedText: string) => {
+    pendingTranscriptionPartsRef.current.push(formattedText);
+    pausePendingTranscriptionCommit();
+
+    pendingTranscriptionTimeoutRef.current = setTimeout(() => {
+      flushPendingTranscriptionCommit();
+    }, getTranscriptionCommitDelayMs());
+  }, [
+    flushPendingTranscriptionCommit,
+    getTranscriptionCommitDelayMs,
+    pausePendingTranscriptionCommit,
+  ]);
+
+  const handleMicSpeechDetected = useCallback((transcription: string, options?: { immediate?: boolean }) => {
     const formattedText = `[Tú]: ${transcription}`;
-    handleNewTranscription(formattedText);
-  }, [handleNewTranscription]);
+
+    if (options?.immediate) {
+      clearPendingTranscriptionCommit();
+      return handleNewTranscription(formattedText);
+    }
+
+    scheduleTranscriptionCommit(formattedText);
+  }, [
+    clearPendingTranscriptionCommit,
+    handleNewTranscription,
+    scheduleTranscriptionCommit,
+  ]);
 
   const transcribeManualMicAudio = useCallback(
     async (audioBlob: Blob) => {
@@ -814,6 +926,8 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             }
 
             setIsProcessing(true);
+            beginPendingSpeechTranscription();
+            trackingSpeechTranscription = true;
 
             const sttPromise = fetchSTT({
               provider: providerConfig,
@@ -840,7 +954,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
                   ? `[Sistema]: ${transcription}`
                   : transcription;
 
-                await handleNewTranscription(formattedTranscription);
+                scheduleTranscriptionCommit(formattedTranscription);
               } else {
                 setError("Received empty transcription");
               }
@@ -852,6 +966,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           } catch (err) {
             setError("Failed to process speech");
           } finally {
+            if (trackingSpeechTranscription) {
+              endPendingSpeechTranscription();
+            }
             if (shouldReleaseProcessing) {
               setIsProcessing(false);
             }
@@ -871,7 +988,10 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     selectedSttProvider,
     allSttProviders,
     invisibleaiApiEnabled,
-    handleNewTranscription,
+    beginPendingSpeechTranscription,
+    endPendingSpeechTranscription,
+    pausePendingTranscriptionCommit,
+    scheduleTranscriptionCommit,
   ]);
 
   const startCapture = useCallback(async () => {
@@ -934,6 +1054,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         abortControllerRef.current = null;
       }
 
+      clearPendingTranscriptionCommit();
       await stopFrontendMicRecording(false);
       await invoke<string>("stop_system_audio_capture");
 
@@ -954,7 +1075,104 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       setError(`Failed to stop capture: ${errorMessage}`);
       console.error("Stop capture error:", err);
     }
-  }, [stopFrontendMicRecording]);
+  }, [clearPendingTranscriptionCommit, stopFrontendMicRecording]);
+
+  const stopCaptureAndSend = useCallback(async () => {
+    try {
+      if (!capturingRef.current) {
+        return;
+      }
+
+      // --- Phase 1: Pre-validate providers BEFORE closing capture ---
+      const useInvisibleAIAPI = invisibleaiApiEnabled;
+      if (!useInvisibleAIAPI) {
+        if (!selectedSttProvider.provider) {
+          setError("No speech-to-text provider configured. Enable InvisibleAI API or select an STT provider.");
+          return;
+        }
+        const sttConfig = allSttProviders.find((p) => p.id === selectedSttProvider.provider);
+        if (!sttConfig) {
+          setError("Speech-to-text provider configuration not found.");
+          return;
+        }
+        if (!selectedAIProvider.provider) {
+          setError("No AI provider selected. Enable InvisibleAI API or select an AI provider.");
+          return;
+        }
+        const aiConfig = allAiProviders.find((p) => p.id === selectedAIProvider.provider);
+        if (!aiConfig) {
+          setError("AI provider configuration not found.");
+          return;
+        }
+      }
+
+      // --- Phase 2: Transition to finalizing state ---
+      setIsFinalizingCapture(true);
+      isFinalizingCaptureRef.current = true;
+      setIsProcessing(true);
+      pausePendingTranscriptionCommit();
+
+      // --- Phase 3: Signal mic VAD to finish and close backend ---
+      if (isDualChannelRef.current) {
+        setMicVadFinishSignal((signal) => signal + 1);
+      }
+
+      await invoke<string>("finish_system_audio_capture");
+
+      // --- Phase 4: Wait for in-flight STT transcriptions to complete ---
+      await new Promise((resolve) => window.setTimeout(resolve, 250));
+      await waitForPendingSpeechTranscriptions();
+
+      // --- Phase 5: Flush any accumulated transcription parts to AI ---
+      const hadPendingParts = pendingTranscriptionPartsRef.current.length > 0;
+      await flushPendingTranscriptionCommit();
+
+      // --- Phase 6: Clean up hardware ---
+      await stopFrontendMicRecording(false);
+
+      // --- Phase 7: Restart capture for next audio segment ---
+      setIsProcessing(false);
+      setMicVadFinishSignal(0);
+      setCaptureSegmentId((prev) => prev + 1);
+
+      const deviceId =
+        selectedAudioDevices.output.id !== "default"
+          ? selectedAudioDevices.output.id
+          : null;
+
+      await invoke<string>("start_system_audio_capture", {
+        vadConfig: vadConfig,
+        deviceId: deviceId,
+      });
+
+      // --- Phase 8: Handle no-audio gracefully ---
+      if (!hadPendingParts && !lastTranscriptionRef.current) {
+        setError("No speech detected to send.");
+      }
+      // NOTE: We intentionally do NOT clear error here.
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Failed to stop and send capture: ${errorMessage}`);
+      setIsProcessing(false);
+      console.error("Stop and send capture error:", err);
+    } finally {
+      // Always clear finalizing flag so UI can settle
+      setIsFinalizingCapture(false);
+      isFinalizingCaptureRef.current = false;
+    }
+  }, [
+    invisibleaiApiEnabled,
+    selectedSttProvider,
+    allSttProviders,
+    selectedAIProvider,
+    allAiProviders,
+    selectedAudioDevices,
+    vadConfig,
+    flushPendingTranscriptionCommit,
+    pausePendingTranscriptionCommit,
+    stopFrontendMicRecording,
+    waitForPendingSpeechTranscriptions,
+  ]);
 
   const manualStopAndSend = useCallback(async () => {
     try {
@@ -1250,6 +1468,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
   return {
     capturing,
+    isFinalizingCapture,
     isProcessing,
     isAIProcessing,
     lastTranscription,
@@ -1259,6 +1478,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     setupRequired,
     startCapture,
     stopCapture,
+    stopCaptureAndSend,
     handleSetup,
     isPopoverOpen,
     setIsPopoverOpen,
@@ -1299,6 +1519,11 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     isDualChannel,
     setIsDualChannel: updateDualChannel,
     handleMicSpeechDetected,
+    pausePendingTranscriptionCommit,
+    beginPendingSpeechTranscription,
+    endPendingSpeechTranscription,
+    micVadFinishSignal,
+    captureSegmentId,
     micStream,
     setMicStream,
 
