@@ -17,6 +17,7 @@ import {
   generateConversationId,
   generateMessageId,
   getGlobalMemoryContext,
+  getMicrophoneStream,
 } from "@/lib";
 import { Message } from "@/types/completion";
 import { extractAndStoreMemories } from "@/lib/functions";
@@ -111,9 +112,13 @@ export function useSystemAudio() {
   const isSavingRef = useRef<boolean>(false);
   const capturingRef = useRef<boolean>(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const manualMicStreamRef = useRef<MediaStream | null>(null);
 
   const conversationRef = useRef(conversation);
   const isDualChannelRef = useRef(isDualChannel);
+  const isContinuousModeRef = useRef(isContinuousMode);
   const useSystemPromptRef = useRef(useSystemPrompt);
   const systemPromptRef = useRef(systemPrompt);
   const contextContentRef = useRef(contextContent);
@@ -121,6 +126,7 @@ export function useSystemAudio() {
 
   useEffect(() => { conversationRef.current = conversation; }, [conversation]);
   useEffect(() => { isDualChannelRef.current = isDualChannel; }, [isDualChannel]);
+  useEffect(() => { isContinuousModeRef.current = isContinuousMode; }, [isContinuousMode]);
   useEffect(() => { useSystemPromptRef.current = useSystemPrompt; }, [useSystemPrompt]);
   useEffect(() => { systemPromptRef.current = systemPrompt; }, [systemPrompt]);
   useEffect(() => { contextContentRef.current = contextContent; }, [contextContent]);
@@ -132,6 +138,55 @@ export function useSystemAudio() {
 
   useEffect(() => { lastTranscriptionRef.current = lastTranscription; }, [lastTranscription]);
   useEffect(() => { lastAIResponseRef.current = lastAIResponse; }, [lastAIResponse]);
+
+  const previousOutputDeviceIdRef = useRef(selectedAudioDevices.output.id);
+
+  useEffect(() => {
+    const previousOutputDeviceId = previousOutputDeviceIdRef.current;
+
+    if (previousOutputDeviceId === selectedAudioDevices.output.id) {
+      return;
+    }
+
+    previousOutputDeviceIdRef.current = selectedAudioDevices.output.id;
+
+    if (!capturingRef.current || !vadConfig.enabled) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const restartBackendCapture = async () => {
+      try {
+        await invoke("stop_system_audio_capture");
+
+        if (cancelled || !capturingRef.current || !vadConfig.enabled) {
+          return;
+        }
+
+        const deviceId =
+          selectedAudioDevices.output.id !== "default"
+            ? selectedAudioDevices.output.id
+            : null;
+
+        await invoke("start_system_audio_capture", {
+          vadConfig,
+          deviceId,
+        });
+      } catch (err) {
+        console.error(
+          "Failed to dynamically restart system audio capture on device change:",
+          err
+        );
+      }
+    };
+
+    restartBackendCapture();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAudioDevices.output.id, vadConfig]);
 
   const updateDualChannel = useCallback((value: boolean) => {
     setIsDualChannel(value);
@@ -222,6 +277,16 @@ export function useSystemAudio() {
 
         errorUnlisten = await listen("audio-encoding-error", (event) => {
           const errorMsg = event.payload as string;
+
+          if (
+            isContinuousModeRef.current &&
+            errorMsg.toLowerCase().includes("no audio recorded")
+          ) {
+            console.warn("Ignoring empty system loopback audio in Manual mode");
+            setIsRecordingInContinuousMode(false);
+            return;
+          }
+
           console.error("Audio encoding error:", errorMsg);
           setError(`Failed to process audio: ${errorMsg}`);
           setIsProcessing(false);
@@ -363,10 +428,85 @@ export function useSystemAudio() {
     await processWithAI(action, effectiveSystemPrompt, previousMessages);
   };
 
+  const startFrontendMicRecording = useCallback(async () => {
+    const stream = await getMicrophoneStream(selectedAudioDevices.input.id);
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : "audio/ogg";
+    const recorder = new MediaRecorder(stream, { mimeType });
+
+    audioChunksRef.current = [];
+    manualMicStreamRef.current = stream;
+    mediaRecorderRef.current = recorder;
+    setMicStream(stream);
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.start(100);
+  }, [selectedAudioDevices.input.id]);
+
+  const stopFrontendMicRecording = useCallback(async (shouldSend: boolean) => {
+    const recorder = mediaRecorderRef.current;
+    const stream = manualMicStreamRef.current;
+
+    mediaRecorderRef.current = null;
+    manualMicStreamRef.current = null;
+    setMicStream(null);
+
+    const stopTracks = () => {
+      stream?.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
+    };
+
+    if (!recorder) {
+      stopTracks();
+      audioChunksRef.current = [];
+      return null;
+    }
+
+    const waitForStop = new Promise<void>((resolve) => {
+      const previousOnStop = recorder.onstop;
+      recorder.onstop = (event) => {
+        if (typeof previousOnStop === "function") {
+          previousOnStop.call(recorder, event);
+        }
+        resolve();
+      };
+    });
+
+    if (recorder.state === "recording") {
+      try {
+        recorder.stop();
+        await waitForStop;
+      } catch (error) {
+        console.error("Failed to stop MediaRecorder:", error);
+      }
+    }
+
+    stopTracks();
+
+    const chunks = [...audioChunksRef.current];
+    audioChunksRef.current = [];
+
+    if (!shouldSend || chunks.length === 0) {
+      return null;
+    }
+
+    return new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+  }, []);
+
   const startContinuousRecording = useCallback(async () => {
     try {
       setRecordingProgress(0);
       setError("");
+
+      await startFrontendMicRecording();
 
       const deviceId =
         selectedAudioDevices.output.id !== "default"
@@ -379,14 +519,21 @@ export function useSystemAudio() {
       });
     } catch (err) {
       console.error("Failed to start continuous recording:", err);
+      await stopFrontendMicRecording(false);
       setError(`Failed to start recording: ${err}`);
     }
-  }, [vadConfig, selectedAudioDevices.output.id]);
+  }, [
+    vadConfig,
+    selectedAudioDevices.output.id,
+    startFrontendMicRecording,
+    stopFrontendMicRecording,
+  ]);
 
   const ignoreContinuousRecording = useCallback(async () => {
     try {
       if (!isContinuousMode || !isRecordingInContinuousMode) return;
 
+      await stopFrontendMicRecording(false);
       await invoke<string>("stop_system_audio_capture");
 
       setRecordingProgress(0);
@@ -396,7 +543,7 @@ export function useSystemAudio() {
       console.error("Failed to ignore recording:", err);
       setError(`Failed to ignore recording: ${err}`);
     }
-  }, [isContinuousMode, isRecordingInContinuousMode]);
+  }, [isContinuousMode, isRecordingInContinuousMode, stopFrontendMicRecording]);
 
   const processWithAI = useCallback(
     async (
@@ -576,23 +723,73 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     handleNewTranscription(formattedText);
   }, [handleNewTranscription]);
 
+  const transcribeManualMicAudio = useCallback(
+    async (audioBlob: Blob) => {
+      const useInvisibleAIAPI = invisibleaiApiEnabled;
+
+      if (!selectedSttProvider.provider && !useInvisibleAIAPI) {
+        setError(
+          "No speech-to-text provider configured. Enable InvisibleAI API or select an STT provider."
+        );
+        return;
+      }
+
+      const providerConfig = allSttProviders.find(
+        (p) => p.id === selectedSttProvider.provider
+      );
+
+      if (!providerConfig && !useInvisibleAIAPI) {
+        setError("Speech-to-text provider configuration not found.");
+        return;
+      }
+
+      const transcription = await fetchSTT({
+        provider: useInvisibleAIAPI ? undefined : providerConfig,
+        selectedProvider: selectedSttProvider,
+        audio: audioBlob,
+        useInvisibleAIAPI,
+      });
+
+      if (transcription?.trim()) {
+        await handleMicSpeechDetected(transcription.trim());
+      } else {
+        setError("No microphone speech detected. Please try again.");
+      }
+    },
+    [
+      invisibleaiApiEnabled,
+      selectedSttProvider,
+      allSttProviders,
+      handleMicSpeechDetected,
+    ]
+  );
+
   useEffect(() => {
     let speechUnlisten: (() => void) | undefined;
 
     const setupEventListener = async () => {
       try {
         speechUnlisten = await listen("speech-detected", async (event) => {
+          let shouldReleaseProcessing = true;
+
           try {
 
             if (!capturingRef.current) return;
 
             const base64Audio = event.payload as string;
 
+            if (isContinuousModeRef.current) {
+              console.warn("Ignoring system loopback transcription in Manual mode");
+              shouldReleaseProcessing = false;
+              return;
+            }
+
             const response = await fetch(`data:audio/wav;base64,${base64Audio}`);
             const audioBlob = await response.blob();
 
             if (!selectedSttProvider.provider && !invisibleaiApiEnabled) {
               setError("No speech provider selected.");
+              setIsProcessing(false);
               return;
             }
 
@@ -602,6 +799,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
             if (!providerConfig && !invisibleaiApiEnabled) {
               setError("Speech provider config not found.");
+              setIsProcessing(false);
               return;
             }
 
@@ -644,7 +842,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           } catch (err) {
             setError("Failed to process speech");
           } finally {
-            setIsProcessing(false);
+            if (shouldReleaseProcessing) {
+              setIsProcessing(false);
+            }
           }
         });
       } catch (err) {
@@ -660,6 +860,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
   }, [
     selectedSttProvider,
     allSttProviders,
+    invisibleaiApiEnabled,
     handleNewTranscription,
   ]);
 
@@ -696,6 +897,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         return;
       }
 
+      await stopFrontendMicRecording(false);
       await invoke<string>("stop_system_audio_capture");
 
       const deviceId =
@@ -712,7 +914,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       setError(errorMessage);
       setIsPopoverOpen(true);
     }
-  }, [vadConfig, selectedAudioDevices.output.id]);
+  }, [vadConfig, selectedAudioDevices.output.id, stopFrontendMicRecording]);
 
   const stopCapture = useCallback(async () => {
     try {
@@ -722,6 +924,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         abortControllerRef.current = null;
       }
 
+      await stopFrontendMicRecording(false);
       await invoke<string>("stop_system_audio_capture");
 
       setCapturing(false);
@@ -741,7 +944,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       setError(`Failed to stop capture: ${errorMessage}`);
       console.error("Stop capture error:", err);
     }
-  }, []);
+  }, [stopFrontendMicRecording]);
 
   const manualStopAndSend = useCallback(async () => {
     try {
@@ -752,14 +955,28 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
       setIsProcessing(true);
 
+      const micAudio = await stopFrontendMicRecording(true);
       await invoke("manual_stop_continuous");
+
+      if (!micAudio) {
+        setError("No microphone audio recorded. Please try again.");
+        setIsProcessing(false);
+        return;
+      }
+
+      await transcribeManualMicAudio(micAudio);
+      setIsProcessing(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(`Failed to manually stop: ${errorMessage}`);
       setIsProcessing(false);
       console.error("Manual stop error:", err);
     }
-  }, [isContinuousMode]);
+  }, [
+    isContinuousMode,
+    stopFrontendMicRecording,
+    transcribeManualMicAudio,
+  ]);
 
   const handleSetup = useCallback(async () => {
     try {
@@ -818,6 +1035,20 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      if (mediaRecorderRef.current?.state === "recording") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          // Ignore cleanup errors during unmount.
+        }
+      }
+      manualMicStreamRef.current?.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
+      mediaRecorderRef.current = null;
+      manualMicStreamRef.current = null;
+      audioChunksRef.current = [];
       invoke("stop_system_audio_capture").catch(() => { });
     };
   }, []);
@@ -898,13 +1129,33 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
   const updateVadConfiguration = useCallback(async (config: VadConfig) => {
     try {
+      const prevEnabled = vadConfig.enabled;
       setVadConfig(config);
       safeLocalStorage.setItem("vad_config", JSON.stringify(config));
       await invoke("update_vad_config", { config });
+
+      if (capturingRef.current && prevEnabled !== config.enabled) {
+        if (!config.enabled) {
+          // Switched from VAD (Auto/Multihilo) to Manual
+          await invoke("stop_system_audio_capture");
+        } else {
+          // Switched from Manual to VAD (Auto/Multihilo)
+          await invoke("stop_system_audio_capture");
+          const deviceId =
+            selectedAudioDevices.output.id !== "default"
+              ? selectedAudioDevices.output.id
+              : null;
+          await invoke("start_system_audio_capture", {
+            vadConfig: config,
+            deviceId: deviceId,
+          });
+        }
+      }
     } catch (error) {
       console.error("Failed to update VAD config:", error);
     }
-  }, []);
+  }, [vadConfig.enabled, selectedAudioDevices.output.id]);
+
 
   useEffect(() => {
     if (capturing) {

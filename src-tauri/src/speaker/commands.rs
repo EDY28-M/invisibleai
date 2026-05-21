@@ -265,51 +265,32 @@ async fn run_continuous_capture(
         config.max_recording_duration_secs,
     );
 
-    loop {
-
+    while let Some(sample) = stream.next().await {
         if stop_flag.load(Ordering::Acquire) {
             break;
         }
 
-        tokio::select! {
-            sample_opt = stream.next() => {
-                match sample_opt {
-                    Some(sample) => {
-                        if stop_flag.load(Ordering::Acquire) {
-                            break;
-                        }
+        audio_buffer.push(sample);
 
-                        audio_buffer.push(sample);
+        chunk_buffer.push(sample);
+        if chunk_buffer.len() >= 1024 {
+            let (rms, _) = calculate_audio_metrics(&chunk_buffer);
+            let _ = app.emit("audio-level", rms);
+            chunk_buffer.clear();
+        }
 
-                        chunk_buffer.push(sample);
-                        if chunk_buffer.len() >= 1024 {
-                            let (rms, _) = calculate_audio_metrics(&chunk_buffer);
-                            let _ = app.emit("audio-level", rms);
-                            chunk_buffer.clear();
-                        }
+        let elapsed = start_time.elapsed();
 
-                        let elapsed = start_time.elapsed();
+        if audio_buffer.len() % (sr as usize) == 0 {
+            let _ = app.emit("recording-progress", elapsed.as_secs());
+        }
 
-                        if audio_buffer.len() % (sr as usize) == 0 {
-                            let _ = app.emit("recording-progress", elapsed.as_secs());
-                        }
+        if audio_buffer.len() >= max_samples {
+            break;
+        }
 
-                        if audio_buffer.len() >= max_samples {
-                            break;
-                        }
-
-                        if elapsed >= max_duration {
-                            break;
-                        }
-                    },
-                    None => {
-                        warn!("Audio stream ended unexpectedly");
-                        break;
-                    }
-                }
-            }
-            _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {
-            }
+        if elapsed >= max_duration {
+            break;
         }
     }
 

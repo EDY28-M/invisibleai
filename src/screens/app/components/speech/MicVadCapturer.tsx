@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { useMicVAD } from "@ricky0123/vad-react";
+import { MicVAD } from "@ricky0123/vad-web";
 import { useApp } from "@/contexts";
-import { fetchSTT } from "@/lib";
+import { fetchSTT, getMicrophoneStream } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
 
 interface MicVadCapturerProps {
@@ -18,60 +18,49 @@ export function MicVadCapturer({
   microphoneDeviceId,
 }: MicVadCapturerProps) {
   const { selectedSttProvider, allSttProviders, invisibleaiApiEnabled } = useApp();
-  const streamRef = useRef<MediaStream | null>(null);
+  const callbacksRef = useRef({
+    onSpeechTranscribed,
+    onStreamActive,
+    onError,
+  });
+  const sttConfigRef = useRef({
+    selectedSttProvider,
+    allSttProviders,
+    invisibleaiApiEnabled,
+  });
 
-  const audioConstraints: MediaTrackConstraints =
-    microphoneDeviceId && microphoneDeviceId !== "default"
-      ? { deviceId: { ideal: microphoneDeviceId } }
-      : {};
+  useEffect(() => {
+    callbacksRef.current = {
+      onSpeechTranscribed,
+      onStreamActive,
+      onError,
+    };
+  }, [onSpeechTranscribed, onStreamActive, onError]);
+
+  useEffect(() => {
+    sttConfigRef.current = {
+      selectedSttProvider,
+      allSttProviders,
+      invisibleaiApiEnabled,
+    };
+  }, [selectedSttProvider, allSttProviders, invisibleaiApiEnabled]);
 
   useEffect(() => {
     let activeStream: MediaStream | null = null;
+    let vadInstance: MicVAD | null = null;
+    let cancelled = false;
 
-    const setupStream = async () => {
+    const handleSpeechEnd = async (audio: Float32Array) => {
       try {
-        const constraints: MediaStreamConstraints = {
-          audio: microphoneDeviceId && microphoneDeviceId !== "default"
-            ? { deviceId: { ideal: microphoneDeviceId } }
-            : true,
-        };
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        activeStream = stream;
-        streamRef.current = stream;
-        onStreamActive(stream);
-      } catch (err) {
-        console.error("Failed to capture microphone stream for visualizer:", err);
-        onError(
-          err instanceof Error
-            ? `Microphone Access Error: ${err.message}`
-            : "Failed to access microphone"
-        );
-      }
-    };
-
-    setupStream();
-
-    return () => {
-      if (activeStream) {
-        activeStream.getTracks().forEach((track) => track.stop());
-      }
-      streamRef.current = null;
-      onStreamActive(null);
-    };
-  }, [microphoneDeviceId, onStreamActive, onError]);
-
-  useMicVAD({
-    userSpeakingThreshold: 0.65,
-    minSpeechFrames: 5,
-    preSpeechPadFrames: 10,
-    startOnLoad: true,
-    additionalAudioConstraints: audioConstraints,
-    onSpeechEnd: async (audio: Float32Array) => {
-      try {
-
         const audioBlob = floatArrayToWav(audio, 16000, "wav");
 
+        const {
+          selectedSttProvider,
+          allSttProviders,
+          invisibleaiApiEnabled,
+        } = sttConfigRef.current;
         const useInvisibleAIAPI = invisibleaiApiEnabled;
+
         if (!selectedSttProvider.provider && !useInvisibleAIAPI) {
           console.warn("No STT provider selected for microphone channel");
           return;
@@ -94,18 +83,74 @@ export function MicVadCapturer({
         });
 
         if (transcription && transcription.trim()) {
-          onSpeechTranscribed(transcription);
+          callbacksRef.current.onSpeechTranscribed(transcription);
         }
       } catch (err) {
         console.error("Failed to transcribe microphone speech:", err);
-        onError(
+        callbacksRef.current.onError(
           err instanceof Error
             ? `Microphone STT Error: ${err.message}`
             : "Failed to transcribe microphone speech"
         );
       }
-    },
-  });
+    };
+
+    const setupVadStream = async () => {
+      try {
+        const stream = await getMicrophoneStream(microphoneDeviceId);
+
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        activeStream = stream;
+        callbacksRef.current.onStreamActive(stream);
+
+        const vad = await MicVAD.new({
+          stream,
+          minSpeechFrames: 5,
+          preSpeechPadFrames: 10,
+          onSpeechEnd: handleSpeechEnd,
+        });
+
+        if (cancelled) {
+          vad.destroy();
+          return;
+        }
+
+        vadInstance = vad;
+        vad.start();
+      } catch (err) {
+        if (cancelled) {
+          activeStream?.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        console.error("Failed to initialize microphone VAD stream:", err);
+        callbacksRef.current.onError(
+          err instanceof Error
+            ? `Microphone Access Error: ${err.message}`
+            : "Failed to initialize microphone VAD stream"
+        );
+
+        if (activeStream) {
+          activeStream.getTracks().forEach((track) => track.stop());
+          activeStream = null;
+        }
+        callbacksRef.current.onStreamActive(null);
+      }
+    };
+
+    setupVadStream();
+
+    return () => {
+      cancelled = true;
+      vadInstance?.destroy();
+      activeStream?.getTracks().forEach((track) => track.stop());
+      callbacksRef.current.onStreamActive(null);
+    };
+  }, [microphoneDeviceId]);
 
   return null;
 }

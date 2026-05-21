@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components";
 import { AudioVisualizer } from "@/screens/app/components/speech/audio-visualizer";
-import { fetchSTT } from "@/lib";
+import { fetchSTT, getMicrophoneStream } from "@/lib";
 import { useApp } from "@/contexts";
 import { StopCircle, Send } from "lucide-react";
 
@@ -79,14 +79,7 @@ export const AudioRecorder = ({
     try {
       const deviceId = selectedAudioDevices?.input?.id;
 
-      const audioConstraints: MediaTrackConstraints =
-        deviceId && deviceId !== "default"
-          ? { deviceId: { exact: deviceId } }
-          : {};
-
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-      });
+      const stream = await getMicrophoneStream(deviceId);
 
       streamRef.current = stream;
       setAudioStream(stream);

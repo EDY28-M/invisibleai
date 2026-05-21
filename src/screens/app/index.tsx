@@ -45,6 +45,7 @@ const App = () => {
           <SystemAudio {...systemAudio} />
           {systemAudio?.capturing && systemAudio?.isDualChannel && (
             <MicVadCapturer
+              key={selectedAudioDevices?.input?.id || "default"}
               onSpeechTranscribed={systemAudio.handleMicSpeechDetected}
               onStreamActive={systemAudio.setMicStream}
               onError={systemAudio.setError}

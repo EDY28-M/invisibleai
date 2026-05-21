@@ -10,6 +10,7 @@ import { useState, useEffect, useRef } from "react";
 import { useApp } from "@/contexts";
 import { STORAGE_KEYS } from "@/config/constants";
 import { safeLocalStorage } from "@/lib/storage";
+import { getMicrophoneStream } from "@/lib";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "@/hooks";
 
@@ -17,6 +18,43 @@ import { useTranslation } from "@/hooks";
 export const AudioSelection = () => {
   const { selectedAudioDevices, setSelectedAudioDevices } = useApp();
   const { t } = useTranslation();
+
+  const [isSystemCapturing, setIsSystemCapturing] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let unlistenStart: (() => void) | undefined;
+    let unlistenStop: (() => void) | undefined;
+
+    const setupListeners = async () => {
+      try {
+        const isCapturing = await invoke<boolean>("get_capture_status");
+        if (active) {
+          setIsSystemCapturing(isCapturing);
+        }
+
+        const { listen } = await import("@tauri-apps/api/event");
+
+        unlistenStart = await listen("capture-started", () => {
+          if (active) setIsSystemCapturing(true);
+        });
+
+        unlistenStop = await listen("capture-stopped", () => {
+          if (active) setIsSystemCapturing(false);
+        });
+      } catch (err) {
+        console.error("Failed to check capture status or setup listeners:", err);
+      }
+    };
+
+    setupListeners();
+
+    return () => {
+      active = false;
+      if (unlistenStart) unlistenStart();
+      if (unlistenStop) unlistenStop();
+    };
+  }, []);
 
   // Microphone preview references
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -309,25 +347,25 @@ export const AudioSelection = () => {
         await audioContextRef.current.close();
       }
 
+      if (isSystemCapturing) {
+        // Draw flat line
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext("2d");
+        if (canvas && ctx) {
+          const dpr = window.devicePixelRatio || 1;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+        }
+        return;
+      }
+
       const deviceId = selectedAudioDevices.input.id;
       if (!deviceId) return;
 
       try {
-        let stream: MediaStream;
-        try {
-          const constraints: MediaStreamConstraints = {
-            audio: deviceId === "default" ? true : { deviceId: { exact: deviceId } }
-          };
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-        } catch (e) {
-          console.warn("Exact constraints failed, trying ideal constraint fallback:", e);
-          const constraints: MediaStreamConstraints = {
-            audio: deviceId === "default" ? true : { deviceId: { ideal: deviceId } }
-          };
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-        }
+        const stream = await getMicrophoneStream(deviceId);
 
-        if (!active) {
+        if (!active || isSystemCapturing) {
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
@@ -371,7 +409,7 @@ export const AudioSelection = () => {
         cleanupResize();
       }
     };
-  }, [selectedAudioDevices.input.id]);
+  }, [selectedAudioDevices.input.id, isSystemCapturing]);
 
   return (
     <div id="audio" className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-5xl mx-auto p-1">
@@ -460,11 +498,20 @@ export const AudioSelection = () => {
         <div className="relative z-10 mt-5 pt-4 border-t border-border/10">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-xs uppercase font-bold tracking-wider text-muted-foreground/50">
-              Input Waveform
+              {isSystemCapturing ? "Input Waveform (Paused)" : "Input Waveform"}
             </span>
             <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-semibold text-emerald-400/80 tracking-wider">LIVE</span>
+              {isSystemCapturing ? (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-xs font-semibold text-amber-400/80 tracking-wider">CAPTURING</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-xs font-semibold text-emerald-400/80 tracking-wider">LIVE</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -626,4 +673,3 @@ export const AudioSelection = () => {
     </div>
   );
 };
-
