@@ -3,83 +3,39 @@ import { MicVAD } from "@ricky0123/vad-web";
 import { useApp } from "@/contexts";
 import { fetchSTT, getMicrophoneStream } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
-import type { VadConfig } from "@/hooks/useSystemAudio";
-
-const SYSTEM_AUDIO_SAMPLE_RATE = 44100;
-const MIC_VAD_FRAME_SAMPLES = 1536;
-const MIC_VAD_SAMPLE_RATE = 16000;
-const MIC_VAD_FRAME_SECONDS = MIC_VAD_FRAME_SAMPLES / MIC_VAD_SAMPLE_RATE;
-
-const getMicRedemptionFrames = (vadConfig?: VadConfig) => {
-  if (!vadConfig) {
-    return 10;
-  }
-
-  const silenceSeconds =
-    (vadConfig.silence_chunks * vadConfig.hop_size) / SYSTEM_AUDIO_SAMPLE_RATE;
-
-  return Math.max(10, Math.round(silenceSeconds / MIC_VAD_FRAME_SECONDS));
-};
 
 interface MicVadCapturerProps {
   onSpeechTranscribed: (transcription: string) => void;
   onStreamActive: (stream: MediaStream | null) => void;
   onError: (error: string) => void;
-  onSpeechStart?: () => void;
-  onSpeechProcessingStart?: () => void;
-  onSpeechProcessingEnd?: () => void;
   microphoneDeviceId?: string;
-  vadConfig?: VadConfig;
-  finishSignal?: number;
-
 }
 
 export function MicVadCapturer({
   onSpeechTranscribed,
   onStreamActive,
   onError,
-  onSpeechStart,
-  onSpeechProcessingStart,
-  onSpeechProcessingEnd,
   microphoneDeviceId,
-  vadConfig,
-  finishSignal = 0,
-
 }: MicVadCapturerProps) {
   const { selectedSttProvider, allSttProviders, invisibleaiApiEnabled } = useApp();
-  const redemptionFrames = getMicRedemptionFrames(vadConfig);
   const callbacksRef = useRef({
     onSpeechTranscribed,
     onStreamActive,
     onError,
-    onSpeechStart,
-    onSpeechProcessingStart,
-    onSpeechProcessingEnd,
   });
   const sttConfigRef = useRef({
     selectedSttProvider,
     allSttProviders,
     invisibleaiApiEnabled,
   });
-  const vadRef = useRef<MicVAD | null>(null);
 
   useEffect(() => {
     callbacksRef.current = {
       onSpeechTranscribed,
       onStreamActive,
       onError,
-      onSpeechStart,
-      onSpeechProcessingStart,
-      onSpeechProcessingEnd,
     };
-  }, [
-    onSpeechTranscribed,
-    onStreamActive,
-    onError,
-    onSpeechStart,
-    onSpeechProcessingStart,
-    onSpeechProcessingEnd,
-  ]);
+  }, [onSpeechTranscribed, onStreamActive, onError]);
 
   useEffect(() => {
     sttConfigRef.current = {
@@ -95,8 +51,6 @@ export function MicVadCapturer({
     let cancelled = false;
 
     const handleSpeechEnd = async (audio: Float32Array) => {
-      callbacksRef.current.onSpeechProcessingStart?.();
-
       try {
         const audioBlob = floatArrayToWav(audio, 16000, "wav");
 
@@ -138,8 +92,6 @@ export function MicVadCapturer({
             ? `Microphone STT Error: ${err.message}`
             : "Failed to transcribe microphone speech"
         );
-      } finally {
-        callbacksRef.current.onSpeechProcessingEnd?.();
       }
     };
 
@@ -159,11 +111,6 @@ export function MicVadCapturer({
           stream,
           minSpeechFrames: 5,
           preSpeechPadFrames: 10,
-          redemptionFrames,
-          submitUserSpeechOnPause: true,
-          onSpeechStart: () => {
-            callbacksRef.current.onSpeechStart?.();
-          },
           onSpeechEnd: handleSpeechEnd,
         });
 
@@ -173,7 +120,6 @@ export function MicVadCapturer({
         }
 
         vadInstance = vad;
-        vadRef.current = vad;
         vad.start();
       } catch (err) {
         if (cancelled) {
@@ -201,20 +147,10 @@ export function MicVadCapturer({
     return () => {
       cancelled = true;
       vadInstance?.destroy();
-      if (vadRef.current === vadInstance) {
-        vadRef.current = null;
-      }
       activeStream?.getTracks().forEach((track) => track.stop());
       callbacksRef.current.onStreamActive(null);
     };
-  }, [microphoneDeviceId, redemptionFrames]);
-
-  useEffect(() => {
-    if (finishSignal > 0) {
-      vadRef.current?.pause();
-
-    }
-  }, [finishSignal]);
+  }, [microphoneDeviceId]);
 
   return null;
 }

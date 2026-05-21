@@ -107,7 +107,6 @@ pub fn run() {
             api::get_activity,
             speaker::start_system_audio_capture,
             speaker::stop_system_audio_capture,
-            speaker::finish_system_audio_capture,
             speaker::manual_stop_continuous,
             speaker::check_system_audio_access,
             speaker::request_system_audio_access,

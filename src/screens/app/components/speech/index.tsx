@@ -34,7 +34,6 @@ import {
 export const SystemAudio = (props: useSystemAudioType) => {
   const {
     capturing,
-    isFinalizingCapture,
     isProcessing,
     isAIProcessing,
     lastTranscription,
@@ -163,7 +162,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
     <Popover
       open={isPopoverOpen}
       onOpenChange={(open) => {
-        if (!open && (capturing || isFinalizingCapture || isProcessing || isAIProcessing || !!lastAIResponse)) {
+        if (capturing && !open) {
           return;
         }
         setIsPopoverOpen(open);
@@ -188,7 +187,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
         </Button>
       </PopoverTrigger>
 
-      {isPopoverOpen && (
+      {(capturing || setupRequired || error) && (
         <PopoverContent
           align="end"
           side="bottom"
@@ -206,7 +205,6 @@ export const SystemAudio = (props: useSystemAudioType) => {
                     isDualChannel={isDualChannel}
                     onModeChange={handleModeChange}
                     disabled={
-                      isFinalizingCapture ||
                       isRecordingInContinuousMode ||
                       isProcessing ||
                       isAIProcessing
@@ -255,7 +253,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                   )}
 
                   {/* Close Popover Button */}
-                  {!capturing && !isFinalizingCapture && (
+                  {!capturing && (
                     <Button
                       size="icon"
                       variant="ghost"
@@ -308,11 +306,27 @@ export const SystemAudio = (props: useSystemAudioType) => {
                     <div className="p-1 rounded-lg bg-red-500/10 dark:bg-red-500/20 text-red-500 flex-shrink-0 mt-0.5">
                       <AlertCircleIcon className="w-3.5 h-3.5 animate-pulse" />
                     </div>
-                    <div>
+                    <div className="flex-1">
                       <p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">
                         System Alert
                       </p>
                       <p className="text-[11px] text-red-500/90 dark:text-red-400/90 leading-relaxed font-medium mt-0.5">{error}</p>
+                      {error.toLowerCase().includes("speech provider") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              await invoke("open_dashboard");
+                            } catch (e) {
+                              console.error(e);
+                            }
+                          }}
+                          className="mt-2.5 h-7.5 rounded-xl text-[10px] font-bold uppercase tracking-wider bg-white dark:bg-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-750 border border-black/10 dark:border-white/10 shadow-xs cursor-pointer active:scale-95 transition-all duration-200"
+                        >
+                          Open Dev Space Settings
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )}
