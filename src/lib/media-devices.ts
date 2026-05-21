@@ -3,16 +3,53 @@ const getMicrophoneConstraints = (
 ): MediaStreamConstraints[] => {
   const deviceId = microphoneDeviceId?.trim();
 
+  const optimalAudio = {
+    channelCount: { ideal: 1 },
+    sampleRate: { ideal: 16000 },
+    echoCancellation: true,
+    noiseSuppression: true,
+  };
+
+  const monoAudio = {
+    channelCount: { ideal: 1 },
+    echoCancellation: true,
+    noiseSuppression: true,
+  };
+
+  const genericAudio = {
+    echoCancellation: true,
+    noiseSuppression: true,
+  };
+
   if (!deviceId || deviceId === "default") {
-    return [{ audio: true }];
+    return [
+      { audio: optimalAudio },
+      { audio: monoAudio },
+      { audio: genericAudio },
+      { audio: true },
+    ];
   }
 
   return [
     {
       audio: {
         deviceId: { ideal: deviceId },
+        ...optimalAudio,
       },
     },
+    {
+      audio: {
+        deviceId: { ideal: deviceId },
+        ...monoAudio,
+      },
+    },
+    {
+      audio: {
+        deviceId: { ideal: deviceId },
+        ...genericAudio,
+      },
+    },
+    { audio: genericAudio },
     { audio: true },
   ];
 };
