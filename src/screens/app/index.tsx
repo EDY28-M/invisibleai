@@ -50,6 +50,7 @@ const App = () => {
               onStreamActive={systemAudio.setMicStream}
               onError={systemAudio.setError}
               microphoneDeviceId={selectedAudioDevices?.input?.id}
+              vadConfig={systemAudio.vadConfig}
             />
           )}
           {systemAudio?.capturing ? (

@@ -3,12 +3,30 @@ import { MicVAD } from "@ricky0123/vad-web";
 import { useApp } from "@/contexts";
 import { fetchSTT, getMicrophoneStream } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
+import type { VadConfig } from "@/hooks/useSystemAudio";
+
+const SYSTEM_AUDIO_SAMPLE_RATE = 44100;
+const MIC_VAD_FRAME_SAMPLES = 1536;
+const MIC_VAD_SAMPLE_RATE = 16000;
+const MIC_VAD_FRAME_SECONDS = MIC_VAD_FRAME_SAMPLES / MIC_VAD_SAMPLE_RATE;
+
+const getMicRedemptionFrames = (vadConfig?: VadConfig) => {
+  if (!vadConfig) {
+    return 10;
+  }
+
+  const silenceSeconds =
+    (vadConfig.silence_chunks * vadConfig.hop_size) / SYSTEM_AUDIO_SAMPLE_RATE;
+
+  return Math.max(10, Math.round(silenceSeconds / MIC_VAD_FRAME_SECONDS));
+};
 
 interface MicVadCapturerProps {
   onSpeechTranscribed: (transcription: string) => void;
   onStreamActive: (stream: MediaStream | null) => void;
   onError: (error: string) => void;
   microphoneDeviceId?: string;
+  vadConfig?: VadConfig;
 }
 
 export function MicVadCapturer({
@@ -16,8 +34,10 @@ export function MicVadCapturer({
   onStreamActive,
   onError,
   microphoneDeviceId,
+  vadConfig,
 }: MicVadCapturerProps) {
   const { selectedSttProvider, allSttProviders, invisibleaiApiEnabled } = useApp();
+  const redemptionFrames = getMicRedemptionFrames(vadConfig);
   const callbacksRef = useRef({
     onSpeechTranscribed,
     onStreamActive,
@@ -111,6 +131,7 @@ export function MicVadCapturer({
           stream,
           minSpeechFrames: 5,
           preSpeechPadFrames: 10,
+          redemptionFrames,
           onSpeechEnd: handleSpeechEnd,
         });
 
@@ -150,7 +171,7 @@ export function MicVadCapturer({
       activeStream?.getTracks().forEach((track) => track.stop());
       callbacksRef.current.onStreamActive(null);
     };
-  }, [microphoneDeviceId]);
+  }, [microphoneDeviceId, redemptionFrames]);
 
   return null;
 }
