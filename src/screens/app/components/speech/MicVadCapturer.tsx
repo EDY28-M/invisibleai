@@ -1,49 +1,38 @@
 import { useEffect, useRef } from "react";
 import { MicVAD } from "@ricky0123/vad-web";
-import { useApp } from "@/contexts";
-import { fetchSTT, getMicrophoneStream } from "@/lib";
+import { getMicrophoneStream } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
 
 interface MicVadCapturerProps {
-  onSpeechTranscribed: (transcription: string) => void;
+  onSpeechStart?: () => void;
+  onSpeechEnd: (audioBlob: Blob) => void;
   onStreamActive: (stream: MediaStream | null) => void;
   onError: (error: string) => void;
   microphoneDeviceId?: string;
 }
 
 export function MicVadCapturer({
-  onSpeechTranscribed,
+  onSpeechStart,
+  onSpeechEnd,
   onStreamActive,
   onError,
   microphoneDeviceId,
 }: MicVadCapturerProps) {
-  const { selectedSttProvider, allSttProviders, invisibleaiApiEnabled } = useApp();
   const callbacksRef = useRef({
-    onSpeechTranscribed,
+    onSpeechStart,
+    onSpeechEnd,
     onStreamActive,
     onError,
-  });
-  const sttConfigRef = useRef({
-    selectedSttProvider,
-    allSttProviders,
-    invisibleaiApiEnabled,
   });
 
   useEffect(() => {
     callbacksRef.current = {
-      onSpeechTranscribed,
+      onSpeechStart,
+      onSpeechEnd,
       onStreamActive,
       onError,
     };
-  }, [onSpeechTranscribed, onStreamActive, onError]);
-
-  useEffect(() => {
-    sttConfigRef.current = {
-      selectedSttProvider,
-      allSttProviders,
-      invisibleaiApiEnabled,
-    };
-  }, [selectedSttProvider, allSttProviders, invisibleaiApiEnabled]);
+  }, [onSpeechStart, onSpeechEnd, onStreamActive, onError]);
 
   useEffect(() => {
     let activeStream: MediaStream | null = null;
@@ -53,44 +42,13 @@ export function MicVadCapturer({
     const handleSpeechEnd = async (audio: Float32Array) => {
       try {
         const audioBlob = floatArrayToWav(audio, 16000, "wav");
-
-        const {
-          selectedSttProvider,
-          allSttProviders,
-          invisibleaiApiEnabled,
-        } = sttConfigRef.current;
-        const useInvisibleAIAPI = invisibleaiApiEnabled;
-
-        if (!selectedSttProvider.provider && !useInvisibleAIAPI) {
-          console.warn("No STT provider selected for microphone channel");
-          return;
-        }
-
-        const providerConfig = allSttProviders.find(
-          (p) => p.id === selectedSttProvider.provider
-        );
-
-        if (!providerConfig && !useInvisibleAIAPI) {
-          console.warn("STT provider configuration not found");
-          return;
-        }
-
-        const transcription = await fetchSTT({
-          provider: useInvisibleAIAPI ? undefined : providerConfig,
-          selectedProvider: selectedSttProvider,
-          audio: audioBlob,
-          useInvisibleAIAPI,
-        });
-
-        if (transcription && transcription.trim()) {
-          callbacksRef.current.onSpeechTranscribed(transcription);
-        }
+        callbacksRef.current.onSpeechEnd(audioBlob);
       } catch (err) {
-        console.error("Failed to transcribe microphone speech:", err);
+        console.error("Failed to process microphone speech audio:", err);
         callbacksRef.current.onError(
           err instanceof Error
-            ? `Microphone STT Error: ${err.message}`
-            : "Failed to transcribe microphone speech"
+            ? `Microphone Audio Processing Error: ${err.message}`
+            : "Failed to process microphone speech audio"
         );
       }
     };
@@ -111,6 +69,9 @@ export function MicVadCapturer({
           stream,
           minSpeechFrames: 5,
           preSpeechPadFrames: 10,
+          onSpeechStart: () => {
+            callbacksRef.current.onSpeechStart?.();
+          },
           onSpeechEnd: handleSpeechEnd,
         });
 

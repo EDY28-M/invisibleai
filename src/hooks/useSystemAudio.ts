@@ -63,6 +63,18 @@ export interface ChatConversation {
 
 export type useSystemAudioType = ReturnType<typeof useSystemAudio>;
 
+export interface SpeechUtterance {
+  id: string;
+  startTime: number;
+  channel: "system" | "mic";
+  isRecording: boolean;
+  isProcessed: boolean;
+  isDiscarded: boolean;
+  audioBlob?: Blob;
+  base64Audio?: string;
+  sttPromise?: Promise<string>;
+}
+
 export function useSystemAudio() {
   const { resizeWindow } = useWindowResize();
   const globalShortcuts = useGlobalShortcuts();
@@ -146,6 +158,10 @@ export function useSystemAudio() {
 
   useEffect(() => { lastTranscriptionRef.current = lastTranscription; }, [lastTranscription]);
   useEffect(() => { lastAIResponseRef.current = lastAIResponse; }, [lastAIResponse]);
+
+  // Chronological queue to track concurrent active speech utterances across both channels
+  const activeSpeechUtterancesRef = useRef<SpeechUtterance[]>([]);
+  const isProcessingQueueRef = useRef<boolean>(false);
 
   const previousOutputDeviceIdRef = useRef(selectedAudioDevices.output.id);
 
@@ -264,26 +280,32 @@ export function useSystemAudio() {
     let stopUnlisten: (() => void) | undefined;
     let errorUnlisten: (() => void) | undefined;
     let discardedUnlisten: (() => void) | undefined;
+    let cancelled = false;
 
     const setupContinuousListeners = async () => {
       try {
-
-        progressUnlisten = await listen("recording-progress", (event) => {
+        const uProgress = await listen("recording-progress", (event) => {
           const seconds = event.payload as number;
           setRecordingProgress(seconds);
         });
+        if (cancelled) { uProgress(); return; }
+        progressUnlisten = uProgress;
 
-        startUnlisten = await listen("continuous-recording-start", () => {
+        const uStart = await listen("continuous-recording-start", () => {
           setRecordingProgress(0);
           setIsRecordingInContinuousMode(true);
         });
+        if (cancelled) { uStart(); return; }
+        startUnlisten = uStart;
 
-        stopUnlisten = await listen("continuous-recording-stopped", () => {
+        const uStop = await listen("continuous-recording-stopped", () => {
           setRecordingProgress(0);
           setIsRecordingInContinuousMode(false);
         });
+        if (cancelled) { uStop(); return; }
+        stopUnlisten = uStop;
 
-        errorUnlisten = await listen("audio-encoding-error", (event) => {
+        const uError = await listen("audio-encoding-error", (event) => {
           const errorMsg = event.payload as string;
 
           if (
@@ -300,13 +322,26 @@ export function useSystemAudio() {
           setIsProcessing(false);
           setIsAIProcessing(false);
           setIsRecordingInContinuousMode(false);
-        });
 
-        discardedUnlisten = await listen("speech-discarded", (event) => {
+          // Discard active recording system utterance to unblock queue
+          const utterance = activeSpeechUtterancesRef.current.find(
+            (u) => u.channel === "system" && u.isRecording && !u.isDiscarded
+          );
+          if (utterance) {
+            utterance.isDiscarded = true;
+            utterance.isRecording = false;
+          }
+          processSpeechQueueRef.current();
+        });
+        if (cancelled) { uError(); return; }
+        errorUnlisten = uError;
+
+        const uDiscarded = await listen("speech-discarded", (event) => {
           const reason = event.payload as string;
           console.log("Speech discarded:", reason);
-
         });
+        if (cancelled) { uDiscarded(); return; }
+        discardedUnlisten = uDiscarded;
       } catch (err) {
         console.error("Failed to setup continuous recording listeners:", err);
       }
@@ -315,6 +350,7 @@ export function useSystemAudio() {
     setupContinuousListeners();
 
     return () => {
+      cancelled = true;
       if (progressUnlisten) progressUnlisten();
       if (startUnlisten) startUnlisten();
       if (stopUnlisten) stopUnlisten();
@@ -416,12 +452,14 @@ export function useSystemAudio() {
       };
       updatedMessages.push(userMessage, assistantMessage);
 
-      setConversation((prev) => ({
-        ...prev,
-        messages: [...prev.messages, userMessage, assistantMessage],
+      conversationRef.current = {
+        ...conversationRef.current,
+        messages: [...conversationRef.current.messages, userMessage, assistantMessage],
         updatedAt: timestamp,
-        title: prev.title || generateConversationTitle(prevTranscription),
-      }));
+        title: conversationRef.current.title || generateConversationTitle(prevTranscription),
+      };
+
+      setConversation(conversationRef.current);
       isLastTranscriptionSavedRef.current = true;
     }
 
@@ -558,6 +596,127 @@ export function useSystemAudio() {
     }
   }, [isContinuousMode, isRecordingInContinuousMode, stopFrontendMicRecording]);
 
+  const handleSystemSpeechStart = useCallback(() => {
+    if (!capturingRef.current) return;
+
+    const newUtterance: SpeechUtterance = {
+      id: `system_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      startTime: Date.now(),
+      channel: "system",
+      isRecording: true,
+      isProcessed: false,
+      isDiscarded: false,
+    };
+
+    activeSpeechUtterancesRef.current.push(newUtterance);
+    console.log("[Queue] Registered system speech start at", newUtterance.startTime);
+  }, []);
+
+  const handleMicSpeechStart = useCallback(() => {
+    if (!capturingRef.current) return;
+
+    const newUtterance: SpeechUtterance = {
+      id: `mic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      startTime: Date.now(),
+      channel: "mic",
+      isRecording: true,
+      isProcessed: false,
+      isDiscarded: false,
+    };
+
+    activeSpeechUtterancesRef.current.push(newUtterance);
+    console.log("[Queue] Registered mic speech start at", newUtterance.startTime);
+  }, []);
+
+  const processSpeechQueue = useCallback(async () => {
+    if (isProcessingQueueRef.current) return;
+    isProcessingQueueRef.current = true;
+
+    try {
+      while (true) {
+        if (!capturingRef.current) break;
+
+        // Filter out non-discarded and non-processed utterances
+        const activeUtterances = activeSpeechUtterancesRef.current.filter(
+          (u) => !u.isDiscarded && !u.isProcessed
+        );
+
+        if (activeUtterances.length === 0) break;
+
+        // Sort by startTime ascending (chronological order)
+        activeUtterances.sort((a, b) => a.startTime - b.startTime);
+
+        const firstUtterance = activeUtterances[0];
+
+        // If the earliest utterance is still recording, we MUST wait (block subsequent utterances)
+        if (firstUtterance.isRecording) {
+          console.log(`[Queue] Blocking queue: Earliest utterance (${firstUtterance.channel}) is still recording.`);
+          break;
+        }
+
+        // If it stopped recording but doesn't have an STT promise, wait
+        if (!firstUtterance.sttPromise) {
+          console.log(`[Queue] Waiting for STT promise initialization for ${firstUtterance.channel}`);
+          break;
+        }
+
+        console.log(`[Queue] Processing completed utterance from channel: ${firstUtterance.channel} (startTime: ${firstUtterance.startTime})`);
+
+        setIsProcessing(true);
+        let transcription = "";
+        try {
+          const timeoutPromise = new Promise<string>((_, reject) => {
+            setTimeout(
+              () => reject(new Error("Speech transcription timed out (30s)")),
+              30000
+            );
+          });
+
+          transcription = await Promise.race([
+            firstUtterance.sttPromise,
+            timeoutPromise,
+          ]);
+        } catch (sttError: any) {
+          console.error(`STT Error for ${firstUtterance.channel}:`, sttError);
+          setError(sttError.message || `Failed to transcribe ${firstUtterance.channel} audio`);
+          setIsPopoverOpen(true);
+        } finally {
+          setIsProcessing(false);
+        }
+
+        // Send to AI if non-empty
+        if (transcription && transcription.trim()) {
+          const trimmed = transcription.trim();
+          const formattedTranscription =
+            firstUtterance.channel === "mic"
+              ? `[Tú]: ${trimmed}`
+              : isDualChannelRef.current
+              ? `[Sistema]: ${trimmed}`
+              : trimmed;
+
+          await handleNewTranscriptionRef.current(formattedTranscription);
+        } else {
+          console.log(`[Queue] Received empty transcription from ${firstUtterance.channel}`);
+        }
+
+        // Mark as processed
+        firstUtterance.isProcessed = true;
+
+        // Prune processed/discarded utterances from the array to prevent growing indefinitely
+        activeSpeechUtterancesRef.current = activeSpeechUtterancesRef.current.filter(
+          (u) => !u.isProcessed && !u.isDiscarded
+        );
+
+        // Sleep to let React process states smoothly
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+    } catch (err) {
+      console.error("[Queue] Error in processSpeechQueue:", err);
+    } finally {
+      isProcessingQueueRef.current = false;
+    }
+  }, []);
+
   const processWithAI = useCallback(
     async (
       transcription: string,
@@ -569,6 +728,7 @@ export function useSystemAudio() {
       }
 
       abortControllerRef.current = new AbortController();
+      const signal = abortControllerRef.current.signal;
 
       try {
         setIsAIProcessing(true);
@@ -631,36 +791,43 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             userMessage: transcription,
             imagesBase64: [],
             useInvisibleAIAPI,
+            signal,
           })) {
+            if (signal.aborted) {
+              break;
+            }
             fullResponse += chunk;
             setLastAIResponse((prev) => prev + chunk);
           }
         } catch (aiError: any) {
-          setError(aiError.message || "Failed to get AI response");
+          if (aiError.name !== "AbortError") {
+            setError(aiError.message || "Failed to get AI response");
+          }
         }
 
         if (fullResponse) {
           const timestamp = Date.now();
-          setConversation((prev) => ({
-            ...prev,
-            messages: [
-              ...prev.messages,
-              {
-                id: generateMessageId("user", timestamp),
-                role: "user" as const,
-                content: transcription,
-                timestamp,
-              },
-              {
-                id: generateMessageId("assistant", timestamp + 1),
-                role: "assistant" as const,
-                content: fullResponse,
-                timestamp: timestamp + 1,
-              },
-            ],
+          const userMsg = {
+            id: generateMessageId("user", timestamp),
+            role: "user" as const,
+            content: transcription,
+            timestamp,
+          };
+          const assistantMsg = {
+            id: generateMessageId("assistant", timestamp + 1),
+            role: "assistant" as const,
+            content: fullResponse,
+            timestamp: timestamp + 1,
+          };
+
+          conversationRef.current = {
+            ...conversationRef.current,
+            messages: [...conversationRef.current.messages, userMsg, assistantMsg],
             updatedAt: timestamp,
-            title: prev.title || generateConversationTitle(transcription),
-          }));
+            title: conversationRef.current.title || generateConversationTitle(transcription),
+          };
+
+          setConversation(conversationRef.current);
           isLastTranscriptionSavedRef.current = true;
         }
       } catch (err) {
@@ -697,12 +864,14 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       };
       updatedMessages.push(userMsg, assistantMsg);
 
-      setConversation((prev) => ({
-        ...prev,
-        messages: [...prev.messages, userMsg, assistantMsg],
+      conversationRef.current = {
+        ...conversationRef.current,
+        messages: [...conversationRef.current.messages, userMsg, assistantMsg],
         updatedAt: timestamp,
-        title: prev.title || generateConversationTitle(prevTranscription),
-      }));
+        title: conversationRef.current.title || generateConversationTitle(prevTranscription),
+      };
+
+      setConversation(conversationRef.current);
 
       isLastTranscriptionSavedRef.current = true;
     }
@@ -736,143 +905,168 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     handleNewTranscriptionRef.current = handleNewTranscription;
   }, [handleNewTranscription]);
 
-  const handleMicSpeechDetected = useCallback((transcription: string) => {
-    const formattedText = `[Tú]: ${transcription}`;
-    handleNewTranscription(formattedText);
-  }, [handleNewTranscription]);
+  const processSpeechQueueRef = useRef(processSpeechQueue);
+  useEffect(() => {
+    processSpeechQueueRef.current = processSpeechQueue;
+  }, [processSpeechQueue]);
+
+  const handleSystemSpeechStartRef = useRef(handleSystemSpeechStart);
+  useEffect(() => {
+    handleSystemSpeechStartRef.current = handleSystemSpeechStart;
+  }, [handleSystemSpeechStart]);
+
+  const handleMicSpeechStartRef = useRef(handleMicSpeechStart);
+  useEffect(() => {
+    handleMicSpeechStartRef.current = handleMicSpeechStart;
+  }, [handleMicSpeechStart]);
+
+  const handleMicSpeechDetected = useCallback((audioBlob: Blob) => {
+    if (!capturingRef.current) return;
+
+    let utterance = activeSpeechUtterancesRef.current.find(
+      (u) => u.channel === "mic" && u.isRecording && !u.isDiscarded
+    );
+
+    if (!utterance) {
+      console.warn("[Queue] Received handleMicSpeechDetected without handleMicSpeechStart");
+      utterance = {
+        id: `mic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        startTime: Date.now() - 1000, // Estimate start time
+        channel: "mic",
+        isRecording: true,
+        isProcessed: false,
+        isDiscarded: false,
+      };
+      activeSpeechUtterancesRef.current.push(utterance);
+    }
+
+    utterance.isRecording = false;
+    utterance.audioBlob = audioBlob;
+
+    // Trigger the STT immediately in parallel!
+    utterance.sttPromise = (async () => {
+      const providerConfig = allSttProvidersRef.current.find(
+        (p) => p.id === selectedSttProviderRef.current.provider
+      );
+      
+      return fetchSTT({
+        provider: providerConfig,
+        selectedProvider: selectedSttProviderRef.current,
+        audio: audioBlob,
+        useInvisibleAIAPI: invisibleaiApiEnabledRef.current,
+      });
+    })();
+
+    processSpeechQueue();
+  }, [processSpeechQueue]);
 
   const transcribeManualMicAudio = useCallback(
     async (audioBlob: Blob) => {
-      const useInvisibleAIAPI = invisibleaiApiEnabled;
-
-      if (!selectedSttProvider.provider && !useInvisibleAIAPI) {
-        setError(
-          "No speech-to-text provider configured. Enable InvisibleAI API or select an STT provider."
-        );
-        return;
-      }
-
-      const providerConfig = allSttProviders.find(
-        (p) => p.id === selectedSttProvider.provider
-      );
-
-      if (!providerConfig && !useInvisibleAIAPI) {
-        setError("Speech-to-text provider configuration not found.");
-        return;
-      }
-
-      const transcription = await fetchSTT({
-        provider: useInvisibleAIAPI ? undefined : providerConfig,
-        selectedProvider: selectedSttProvider,
-        audio: audioBlob,
-        useInvisibleAIAPI,
-      });
-
-      if (transcription?.trim()) {
-        await handleMicSpeechDetected(transcription.trim());
-      } else {
-        setError("No microphone speech detected. Please try again.");
-      }
+      handleMicSpeechDetected(audioBlob);
     },
-    [
-      invisibleaiApiEnabled,
-      selectedSttProvider,
-      allSttProviders,
-      handleMicSpeechDetected,
-    ]
+    [handleMicSpeechDetected]
   );
 
   useEffect(() => {
     let speechUnlisten: (() => void) | undefined;
+    let startUnlisten: (() => void) | undefined;
+    let discardedUnlisten: (() => void) | undefined;
+    let cancelled = false;
 
-    const setupEventListener = async () => {
+    const setupEventListeners = async () => {
       try {
-        speechUnlisten = await listen("speech-detected", async (event) => {
-          let shouldReleaseProcessing = true;
+        const uStart = await listen("speech-start", () => {
+          handleSystemSpeechStartRef.current();
+        });
+        if (cancelled) { uStart(); return; }
+        startUnlisten = uStart;
 
-          try {
-            if (!capturingRef.current) return;
+        const uDetected = await listen("speech-detected", async (event) => {
+          if (!capturingRef.current) return;
 
-            const base64Audio = event.payload as string;
+          const base64Audio = event.payload as string;
 
-            if (isContinuousModeRef.current) {
-              console.warn("Ignoring system loopback transcription in Manual mode");
-              shouldReleaseProcessing = false;
-              return;
-            }
+          if (isContinuousModeRef.current) {
+            console.warn("Ignoring system loopback transcription in Manual mode");
+            return;
+          }
 
-            const response = await fetch(`data:audio/wav;base64,${base64Audio}`);
-            const audioBlob = await response.blob();
+          let utterance = activeSpeechUtterancesRef.current.find(
+            (u) => u.channel === "system" && u.isRecording && !u.isDiscarded
+          );
 
-            if (!selectedSttProviderRef.current.provider && !invisibleaiApiEnabledRef.current) {
-              setError("No speech provider selected.");
-              setIsProcessing(false);
-              return;
-            }
+          if (!utterance) {
+            console.warn("[Queue] Received speech-detected without speech-start on system channel");
+            utterance = {
+              id: `system_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              startTime: Date.now() - 2000,
+              channel: "system",
+              isRecording: true,
+              isProcessed: false,
+              isDiscarded: false,
+            };
+            activeSpeechUtterancesRef.current.push(utterance);
+          }
 
+          utterance.isRecording = false;
+          utterance.base64Audio = base64Audio;
+
+          // Trigger the STT immediately in parallel!
+          utterance.sttPromise = (async () => {
             const providerConfig = allSttProvidersRef.current.find(
               (p) => p.id === selectedSttProviderRef.current.provider
             );
+            
+            const response = await fetch(`data:audio/wav;base64,${base64Audio}`);
+            const audioBlob = await response.blob();
 
-            if (!providerConfig && !invisibleaiApiEnabledRef.current) {
-              setError("Speech provider config not found.");
-              setIsProcessing(false);
-              return;
-            }
-
-            setIsProcessing(true);
-
-            const sttPromise = fetchSTT({
+            return fetchSTT({
               provider: providerConfig,
               selectedProvider: selectedSttProviderRef.current,
               audio: audioBlob,
               useInvisibleAIAPI: invisibleaiApiEnabledRef.current,
             });
+          })();
 
-            const timeoutPromise = new Promise<string>((_, reject) => {
-              setTimeout(
-                () => reject(new Error("Speech transcription timed out (30s)")),
-                30000
-              );
-            });
-
-            try {
-              const transcription = await Promise.race([
-                sttPromise,
-                timeoutPromise,
-              ]);
-
-              if (transcription.trim()) {
-                const formattedTranscription = isDualChannelRef.current
-                  ? `[Sistema]: ${transcription}`
-                  : transcription;
-
-                await handleNewTranscriptionRef.current(formattedTranscription);
-              } else {
-                setError("Received empty transcription");
-              }
-            } catch (sttError: any) {
-              console.error("STT Error:", sttError);
-              setError(sttError.message || "Failed to transcribe audio");
-              setIsPopoverOpen(true);
-            }
-          } catch (err) {
-            setError("Failed to process speech");
-          } finally {
-            if (shouldReleaseProcessing) {
-              setIsProcessing(false);
-            }
-          }
+          processSpeechQueueRef.current();
         });
+        if (cancelled) { uDetected(); return; }
+        speechUnlisten = uDetected;
+
+        const uDiscarded = await listen("speech-discarded", (event) => {
+          if (isContinuousModeRef.current) {
+            console.warn("Ignoring system loopback speech-discarded in Manual mode");
+            return;
+          }
+
+          console.log("[Queue] Speech discarded event:", event.payload);
+
+          const utterance = activeSpeechUtterancesRef.current.find(
+            (u) => u.channel === "system" && u.isRecording && !u.isDiscarded
+          );
+
+          if (utterance) {
+            utterance.isDiscarded = true;
+            utterance.isRecording = false;
+          }
+
+          processSpeechQueueRef.current();
+        });
+        if (cancelled) { uDiscarded(); return; }
+        discardedUnlisten = uDiscarded;
+
       } catch (err) {
-        setError("Failed to setup speech listener");
+        setError("Failed to setup speech listeners");
       }
     };
 
-    setupEventListener();
+    setupEventListeners();
 
     return () => {
+      cancelled = true;
       if (speechUnlisten) speechUnlisten();
+      if (startUnlisten) startUnlisten();
+      if (discardedUnlisten) discardedUnlisten();
     };
   }, []);
 
@@ -936,6 +1130,8 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
   const stopCapture = useCallback(async () => {
     try {
+      activeSpeechUtterancesRef.current = [];
+      isProcessingQueueRef.current = false;
 
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -1306,6 +1502,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
     isDualChannel,
     setIsDualChannel: updateDualChannel,
+    handleMicSpeechStart,
     handleMicSpeechDetected,
     micStream,
     setMicStream,

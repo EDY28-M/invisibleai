@@ -46,7 +46,8 @@ const App = () => {
           {systemAudio?.capturing && systemAudio?.isDualChannel && (
             <MicVadCapturer
               key={selectedAudioDevices?.input?.id || "default"}
-              onSpeechTranscribed={systemAudio.handleMicSpeechDetected}
+              onSpeechStart={systemAudio.handleMicSpeechStart}
+              onSpeechEnd={systemAudio.handleMicSpeechDetected}
               onStreamActive={systemAudio.setMicStream}
               onError={systemAudio.setError}
               microphoneDeviceId={selectedAudioDevices?.input?.id}
@@ -72,22 +73,19 @@ const App = () => {
             </div>
           ) : null}
 
-          <div
-            className={`${systemAudio?.capturing
-              ? "hidden w-full fade-out transition-all duration-300"
-              : "w-full flex flex-row gap-2 items-center"
-              }`}
-          >
-            <Completion isHidden={isHidden} />
-            <Button
-              size="icon"
-              className="cursor-pointer h-9 w-9 rounded-[14px] border border-amber-500/10 dark:border-amber-400/5 bg-amber-500/5 dark:bg-amber-400/5 hover:bg-amber-500/15 dark:hover:bg-amber-400/15 text-amber-600 dark:text-amber-400 shadow-xs transition-all duration-300 hover:scale-105 active:scale-95 shrink-0"
-              title="Open Dev Space"
-              onClick={openDashboard}
-            >
-              <SparklesIcon className="h-4 w-4" />
-            </Button>
-          </div>
+          {!systemAudio?.capturing ? (
+            <div className="w-full flex flex-row gap-2 items-center">
+              <Completion isHidden={isHidden} />
+              <Button
+                size="icon"
+                className="cursor-pointer h-9 w-9 rounded-[14px] border border-amber-500/10 dark:border-amber-400/5 bg-amber-500/5 dark:bg-amber-400/5 hover:bg-amber-500/15 dark:hover:bg-amber-400/15 text-amber-600 dark:text-amber-400 shadow-xs transition-all duration-300 hover:scale-105 active:scale-95 shrink-0"
+                title="Open Dev Space"
+                onClick={openDashboard}
+              >
+                <SparklesIcon className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : null}
 
           <Updater />
           <DragButton />

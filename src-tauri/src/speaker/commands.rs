@@ -428,14 +428,10 @@ pub async fn stop_system_audio_capture(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-
     *state
         .is_capturing
         .lock()
         .map_err(|e| format!("Failed to update capturing state: {}", e))? = false;
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
     let _ = app.emit("capture-stopped", ());
     Ok(())
