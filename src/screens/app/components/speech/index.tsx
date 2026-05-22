@@ -71,14 +71,19 @@ export const SystemAudio = (props: useSystemAudioType) => {
     setIsDualChannel,
     useConversationalMemory,
     setUseConversationalMemory,
+    isStreamingMode,
+    interimTranscription,
+    systemInterimTranscription,
+    screenshotImage,
+    isCapturingScreenshot,
+    accumulatedSystemText,
+    handleCaptureScreenshot,
+    handleRemoveScreenshot,
   } = props;
 
   const { hasActiveLicense, supportsImages } = useApp();
 
   const [conversationMode, setConversationMode] = useState(false);
-
-  const [screenshotImage, setScreenshotImage] = useState<string | null>(null);
-  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
 
   const isVadMode = vadConfig.enabled;
   const hasResponse = lastAIResponse || isAIProcessing;
@@ -97,12 +102,6 @@ export const SystemAudio = (props: useSystemAudioType) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isPopoverOpen]);
 
-  useEffect(() => {
-    if (isProcessing && screenshotImage) {
-      setScreenshotImage(null);
-    }
-  }, [isProcessing, screenshotImage]);
-
   const handleToggleCapture = async () => {
     if (capturing) {
       await stopCapture();
@@ -115,30 +114,9 @@ export const SystemAudio = (props: useSystemAudioType) => {
     updateVadConfiguration({
       ...vadConfig,
       enabled: vadEnabled,
-    });
+    }, dualChannelEnabled);
     setIsDualChannel(dualChannelEnabled);
   };
-
-  const handleCaptureScreenshot = useCallback(async () => {
-    if (isCapturingScreenshot) return;
-
-    setIsCapturingScreenshot(true);
-    try {
-      await requestScreenRecordingPermissionIfNeeded();
-
-      const base64: string = await invoke("capture_to_base64");
-
-      setScreenshotImage(base64);
-    } catch (err) {
-      console.error(await getScreenCaptureErrorMessage(err), err);
-    } finally {
-      setIsCapturingScreenshot(false);
-    }
-  }, [isCapturingScreenshot]);
-
-  const handleRemoveScreenshot = useCallback(() => {
-    setScreenshotImage(null);
-  }, []);
 
   const getButtonIcon = () => {
     if (setupRequired) return <AlertCircleIcon className="text-orange-500" />;
@@ -364,6 +342,10 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       conversation={conversation}
                       conversationMode={conversationMode}
                       setConversationMode={setConversationMode}
+                      interimTranscription={interimTranscription}
+                      systemInterimTranscription={systemInterimTranscription}
+                      isStreamingMode={isStreamingMode}
+                      accumulatedSystemText={accumulatedSystemText}
                     />
 
                     { }

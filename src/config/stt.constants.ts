@@ -101,4 +101,11 @@ export const SPEECH_TO_TEXT_PROVIDERS = [
     responseContentPath: "results[0].alternatives[0].transcript",
     streaming: false,
   },
+  {
+    id: "deepgram-streaming",
+    name: "Deepgram Streaming (Real-time)",
+    curl: "",
+    responseContentPath: "",
+    streaming: true,
+  },
 ];

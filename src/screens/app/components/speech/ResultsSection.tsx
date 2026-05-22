@@ -10,6 +10,10 @@ type Props = {
   conversation: ChatConversation;
   conversationMode: boolean;
   setConversationMode: (mode: boolean) => void;
+  interimTranscription?: string;
+  systemInterimTranscription?: string;
+  isStreamingMode?: boolean;
+  accumulatedSystemText?: string;
 };
 
 const parseMessage = (content: string) => {
@@ -41,11 +45,15 @@ export const ResultsSection = ({
   conversation,
   conversationMode,
   setConversationMode,
+  interimTranscription = "",
+  systemInterimTranscription = "",
+  isStreamingMode = false,
+  accumulatedSystemText = "",
 }: Props) => {
   const hasResponse = lastAIResponse || isAIProcessing;
   const hasHistory = conversation.messages.length > 2;
 
-  if (!hasResponse && !lastTranscription) {
+  if (!hasResponse && !lastTranscription && !interimTranscription && !systemInterimTranscription && !accumulatedSystemText) {
     return null;
   }
 
@@ -81,6 +89,7 @@ export const ResultsSection = ({
           {}
           {lastTranscription && (() => {
             const { roleLabel, text, roleType } = parseMessage(lastTranscription);
+            if (isStreamingMode && roleType === "system-loopback") return null;
             return (
               <p className="text-[11px] text-muted-foreground bg-black/5 dark:bg-white/5 px-3 py-2 rounded-lg border border-black/5 dark:border-white/5">
                 <span className={cn(
@@ -94,6 +103,28 @@ export const ResultsSection = ({
               </p>
             );
           })()}
+
+          {/* Interim Transcription for Streaming mode (Mic & System Audio) */}
+          {interimTranscription && (
+            <p className="text-[11px] text-muted-foreground bg-emerald-500/5 dark:bg-emerald-500/5 px-3 py-2 rounded-lg border border-emerald-500/10 dark:border-emerald-500/10 animate-pulse">
+              <span className="font-bold uppercase tracking-wider text-[9px] mr-1.5 text-emerald-500 dark:text-emerald-400">
+                Tú (hablando...):
+              </span>{" "}
+              {interimTranscription}
+              <span className="inline-block w-1.5 h-3 bg-emerald-500 animate-ping ml-1 align-middle" />
+            </p>
+          )}
+
+          {(accumulatedSystemText || systemInterimTranscription) && (
+            <p className="text-[11px] text-muted-foreground bg-amber-500/5 dark:bg-amber-500/5 px-3 py-2 rounded-lg border border-amber-500/10 dark:border-amber-500/10 animate-pulse">
+              <span className="font-bold uppercase tracking-wider text-[9px] mr-1.5 text-amber-500 dark:text-amber-400">
+                Sistema (escuchando...):
+              </span>{" "}
+              {accumulatedSystemText}
+              {systemInterimTranscription ? ` ${systemInterimTranscription}` : ""}
+              <span className="inline-block w-1.5 h-3 bg-amber-500 animate-ping ml-1 align-middle" />
+            </p>
+          )}
 
           {}
           {hasResponse && (
@@ -148,9 +179,9 @@ export const ResultsSection = ({
             </div>
           )}
 
-          {}
           {lastTranscription && (() => {
             const { roleLabel, text, roleType } = parseMessage(lastTranscription);
+            if (isStreamingMode && roleType === "system-loopback") return null;
             const isUserMic = roleType === "user-mic";
             return (
               <div className={cn(
@@ -177,7 +208,38 @@ export const ResultsSection = ({
             );
           })()}
 
-          {}
+          {/* Interim Speech Bubbles for Streaming mode (Mic & System Audio) */}
+          {interimTranscription && (
+            <div className="rounded-[18px] rounded-br-[4px] border border-emerald-500/15 bg-emerald-500/5 text-foreground p-3.5 ml-6 animate-pulse transition-all">
+              <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
+                <MicIcon className="h-3 w-3 text-emerald-500" />
+                <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-500">
+                  Tú (hablando...)
+                </span>
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {interimTranscription}
+                <span className="inline-block w-1.5 h-3.5 bg-emerald-500 animate-ping ml-1 align-middle" />
+              </p>
+            </div>
+          )}
+
+          {(accumulatedSystemText || systemInterimTranscription) && (
+            <div className="rounded-[18px] rounded-br-[4px] border border-amber-500/15 bg-amber-500/5 text-foreground p-3.5 ml-6 animate-pulse transition-all">
+              <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
+                <HeadphonesIcon className="h-3 w-3 text-amber-500" />
+                <span className="text-[9px] font-bold uppercase tracking-wide text-amber-500">
+                  Sistema (escuchando...)
+                </span>
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {accumulatedSystemText}
+                {systemInterimTranscription ? ` ${systemInterimTranscription}` : ""}
+                <span className="inline-block w-1.5 h-3.5 bg-amber-500 animate-ping ml-1 align-middle" />
+              </p>
+            </div>
+          )}
+
           {hasHistory && (
             <div className="space-y-3 pt-3 border-t border-black/5 dark:border-white/5">
               <p className="text-[9px] text-muted-foreground/60 uppercase font-bold tracking-wider">

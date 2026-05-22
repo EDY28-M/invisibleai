@@ -86,6 +86,14 @@ pub async fn start_system_audio_capture(
         ));
     }
 
+    {
+        let mut sr_guard = state
+            .sample_rate
+            .lock()
+            .map_err(|e| format!("Failed to lock sample rate: {}", e))?;
+        *sr_guard = Some(sr);
+    }
+
     let app_clone = app.clone();
     let vad_config = state
         .vad_config
@@ -109,11 +117,12 @@ pub async fn start_system_audio_capture(
         }
 
         let state = app_clone.state::<crate::AudioState>();
-        {
-            if let Ok(mut guard) = state.stream_task.lock() {
-                *guard = None;
-            };
+        if let Ok(mut guard) = state.stream_task.lock() {
+            *guard = None;
         }
+        if let Ok(mut sr_guard) = state.sample_rate.lock() {
+            *sr_guard = None;
+        };
     });
 
     *state_clone
@@ -155,6 +164,7 @@ async fn run_vad_capture(
 
             let (rms, peak) = calculate_audio_metrics(&mono);
             let _ = app.emit("audio-level", rms);
+            let _ = app.emit("system-audio-chunk", &mono);
             let is_speech = rms > config.sensitivity_rms || peak > config.peak_threshold;
 
             if is_speech {
@@ -276,6 +286,7 @@ async fn run_continuous_capture(
         if chunk_buffer.len() >= 1024 {
             let (rms, _) = calculate_audio_metrics(&chunk_buffer);
             let _ = app.emit("audio-level", rms);
+            let _ = app.emit("system-audio-chunk", &chunk_buffer);
             chunk_buffer.clear();
         }
 
@@ -428,6 +439,12 @@ pub async fn stop_system_audio_capture(app: AppHandle) -> Result<(), String> {
         }
     }
 
+    {
+        if let Ok(mut sr_guard) = state.sample_rate.lock() {
+            *sr_guard = None;
+        }
+    }
+
     *state
         .is_capturing
         .lock()
@@ -541,7 +558,15 @@ pub async fn get_capture_status(app: AppHandle) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn get_audio_sample_rate(_app: AppHandle) -> Result<u32, String> {
+pub fn get_audio_sample_rate(app: AppHandle) -> Result<u32, String> {
+    let state = app.state::<crate::AudioState>();
+
+    if let Ok(sr_guard) = state.sample_rate.lock() {
+        if let Some(sr) = *sr_guard {
+            return Ok(sr);
+        }
+    }
+
     let input = SpeakerInput::new().map_err(|e| {
         error!("Failed to create speaker input: {}", e);
         format!("Failed to access system audio: {}", e)

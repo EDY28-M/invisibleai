@@ -48,7 +48,12 @@ const App = () => {
               key={selectedAudioDevices?.input?.id || "default"}
               onSpeechStart={systemAudio.handleMicSpeechStart}
               onSpeechEnd={systemAudio.handleMicSpeechDetected}
-              onStreamActive={systemAudio.setMicStream}
+              onStreamActive={(stream) => {
+                systemAudio.setMicStream(stream);
+                if (systemAudio.isStreamingMode && systemAudio.initializeStreaming && stream) {
+                  systemAudio.initializeStreaming(stream);
+                }
+              }}
               onError={systemAudio.setError}
               microphoneDeviceId={selectedAudioDevices?.input?.id}
             />

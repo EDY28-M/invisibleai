@@ -79,8 +79,16 @@ export const useSettings = () => {
         (p) => p.id === selectedSttProvider.provider
       );
       if (provider) {
-        const variables = extractVariables(provider?.curl);
-        setSttVariables(variables);
+        if (provider.id === "deepgram-streaming") {
+          setSttVariables([
+            { key: "api_key", value: "" },
+            { key: "model", value: "" },
+            { key: "language", value: "" },
+          ]);
+        } else {
+          const variables = extractVariables(provider?.curl);
+          setSttVariables(variables);
+        }
       }
     }
   }, [selectedSttProvider.provider]);

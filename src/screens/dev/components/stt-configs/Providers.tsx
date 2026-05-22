@@ -33,10 +33,17 @@ export const Providers = ({
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        <Header
-          title={t("dev_select_stt_provider")}
-          description={t("dev_select_stt_provider_desc")}
-        />
+        <div className="flex items-center justify-between">
+          <Header
+            title={t("dev_select_stt_provider")}
+            description={t("dev_select_stt_provider_desc")}
+          />
+          {allSttProviders?.find((p) => p?.id === selectedSttProvider?.provider)?.streaming && (
+            <span className="px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-400/5 border border-emerald-500/20 rounded-full animate-pulse select-none shrink-0">
+              ⚡ Streaming
+            </span>
+          )}
+        </div>
         <Selection
           selected={selectedSttProvider?.provider}
           options={allSttProviders?.map((provider) => ({
@@ -152,7 +159,40 @@ export const Providers = ({
                   )}
                 />
                 <TextInput
-                  placeholder={t("dev_model_placeholder")}
+                  placeholder={selectedSttProvider?.provider === "deepgram-streaming" ? "nova-3" : t("dev_model_placeholder")}
+                  value={getVariableValue()}
+                  onChange={(value) => {
+                    if (!variable?.key || !selectedSttProvider) return;
+
+                    onSetSelectedSttProvider({
+                      ...selectedSttProvider,
+                      variables: {
+                        ...selectedSttProvider.variables,
+                        [variable.key]: value,
+                      },
+                    });
+                  }}
+                />
+              </div>
+            );
+          })}
+
+        {sttVariables
+          ?.filter((variable) => variable?.key === "language")
+          .map((variable) => {
+            const getVariableValue = () => {
+              if (!variable?.key || !selectedSttProvider?.variables) return "";
+              return selectedSttProvider.variables[variable.key] || "";
+            };
+
+            return (
+              <div className="space-y-1" key={variable?.key}>
+                <Header
+                  title="Language"
+                  description={`Specify the language code (e.g. es-419, en-US) for ${selectedProviderName}`}
+                />
+                <TextInput
+                  placeholder="es-419"
                   value={getVariableValue()}
                   onChange={(value) => {
                     if (!variable?.key || !selectedSttProvider) return;
