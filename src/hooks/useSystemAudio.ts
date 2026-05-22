@@ -1739,7 +1739,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
                 track.stop();
                 track.enabled = false;
               });
-            } catch {}
+            } catch { }
             streamingMicStreamRef.current = null;
           }
           await invoke("stop_system_audio_capture");
@@ -1808,12 +1808,101 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
               track.stop();
               track.enabled = false;
             });
-          } catch {}
+          } catch { }
           streamingMicStreamRef.current = null;
         }
       }
     }
   }, [isDualChannel, isStreamingMode, capturing]);
+
+  // React to STT provider changes during active capture:
+  // Transition between streaming and non-streaming modes when the user switches providers.
+  useEffect(() => {
+    if (!capturing) return;
+    // Only handle transitions during Auto/Multihilo mode (vadConfig.enabled === true)
+    if (!vadConfig.enabled) return;
+
+    const currentSttProvider = allSttProviders.find(
+      (p) => p.id === selectedSttProvider.provider
+    );
+    const providerSupportsStreaming = currentSttProvider?.streaming === true;
+
+    // No transition needed if modes are already aligned
+    if (providerSupportsStreaming === isStreamingMode) return;
+
+    const transitionProvider = async () => {
+      const deviceId =
+        selectedAudioDevices.output.id !== "default"
+          ? selectedAudioDevices.output.id
+          : null;
+
+      if (providerSupportsStreaming && !isStreamingMode) {
+        // Transition: non-streaming → streaming
+        console.log("[Provider Switch] Transitioning to streaming mode");
+        try {
+          await invoke("stop_system_audio_capture");
+
+          setIsStreamingMode(true);
+          isStreamingModeRef.current = true;
+          setInterimTranscription("");
+
+          const effectiveVadConfig = { ...vadConfig, enabled: false, max_recording_duration_secs: 86400 };
+          await invoke("start_system_audio_capture", {
+            vadConfig: effectiveVadConfig,
+            deviceId,
+          });
+
+          if (!isDualChannel) {
+            await initializeStreaming(null);
+          }
+        } catch (err) {
+          console.error("[Provider Switch] Failed to transition to streaming:", err);
+          setError(`Failed to switch to streaming: ${err}`);
+        }
+      } else if (!providerSupportsStreaming && isStreamingMode) {
+        // Transition: streaming → non-streaming (classic VAD)
+        console.log("[Provider Switch] Transitioning to non-streaming (classic VAD) mode");
+        try {
+          // Tear down Deepgram managers
+          if (deepgramManagerRef.current) {
+            deepgramManagerRef.current.destroy();
+            deepgramManagerRef.current = null;
+          }
+          if (systemDeepgramManagerRef.current) {
+            systemDeepgramManagerRef.current.destroy();
+            systemDeepgramManagerRef.current = null;
+          }
+          setIsStreamingMode(false);
+          isStreamingModeRef.current = false;
+          setInterimTranscription("");
+          setSystemInterimTranscription("");
+
+          // Stop mic stream if it was used for streaming
+          if (streamingMicStreamRef.current) {
+            try {
+              streamingMicStreamRef.current.getTracks().forEach((track) => {
+                track.stop();
+                track.enabled = false;
+              });
+            } catch { }
+            streamingMicStreamRef.current = null;
+          }
+
+          // Restart backend with classic VAD config
+          await invoke("stop_system_audio_capture");
+          await invoke("start_system_audio_capture", {
+            vadConfig,
+            deviceId,
+          });
+        } catch (err) {
+          console.error("[Provider Switch] Failed to transition to non-streaming:", err);
+          setError(`Failed to switch provider: ${err}`);
+        }
+      }
+    };
+
+    transitionProvider();
+  }, [selectedSttProvider.provider, capturing, vadConfig, isStreamingMode, allSttProviders, selectedAudioDevices.output.id, isDualChannel, initializeStreaming]);
 
   useEffect(() => {
     if (capturing) {
