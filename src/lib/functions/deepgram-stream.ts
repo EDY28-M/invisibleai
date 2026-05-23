@@ -93,7 +93,7 @@ export class DeepgramStreamManager {
       language: config.language || "es-419",
       smartFormat: config.smartFormat ?? true,
       interimResults: config.interimResults ?? true,
-      endpointing: config.endpointing ?? 10,
+      endpointing: config.endpointing ?? 100,
       utteranceEndMs: config.utteranceEndMs ?? 1500,
       numerals: config.numerals ?? true,
       diarize: config.diarize ?? false,
