@@ -1173,16 +1173,21 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       apiKey,
       model: vars.model || vars.MODEL || "nova-3",
       language: vars.language || vars.LANGUAGE || "es-419",
+      utteranceEndMs: 1000,
+      endpointing: 10,
     };
 
     // 1. Microphone Deepgram Stream (Only if micMediaStream is available and we are in Dual Channel / Multihilo mode)
     let micManager: DeepgramStreamManager | null = null;
     if (micMediaStream && isDualChannelRef.current) {
       const micCallbacks = {
-        onTranscript: (_text: string, isFinal: boolean, fullAccumulated: string) => {
+        onTranscript: (_text: string, _isFinal: boolean, fullAccumulated: string) => {
           setInterimTranscription(fullAccumulated);
-          if (isFinal) {
-            debouncedDispatchStreamingTranscript("mic");
+        },
+        onUtteranceEnd: (finalText: string) => {
+          if (finalText.trim() && capturingRef.current) {
+            console.log("[Streaming] Deepgram mic utterance_end triggered:", finalText);
+            dispatchStreamingTranscript("mic", finalText);
           }
         },
         onError: (error: Error) => {
@@ -1197,10 +1202,13 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
     // 2. System Audio Deepgram Stream
     const systemCallbacks = {
-      onTranscript: (_text: string, isFinal: boolean, fullAccumulated: string) => {
+      onTranscript: (_text: string, _isFinal: boolean, fullAccumulated: string) => {
         setSystemInterimTranscription(fullAccumulated);
-        if (isFinal) {
-          debouncedDispatchStreamingTranscript("system");
+      },
+      onUtteranceEnd: (finalText: string) => {
+        if (finalText.trim() && capturingRef.current) {
+          console.log("[Streaming] Deepgram system utterance_end triggered:", finalText);
+          dispatchStreamingTranscript("system", finalText);
         }
       },
       onError: (error: Error) => {
@@ -1228,7 +1236,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     } catch (err) {
       setError(`Failed to start Deepgram streaming: ${err}`);
     }
-  }, [debouncedDispatchStreamingTranscript]);
+  }, [dispatchStreamingTranscript]);
 
   const handleMicSpeechDetected = useCallback((audioBlob: Blob) => {
     if (!capturingRef.current) return;

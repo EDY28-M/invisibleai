@@ -93,8 +93,8 @@ export class DeepgramStreamManager {
       language: config.language || "es-419",
       smartFormat: config.smartFormat ?? true,
       interimResults: config.interimResults ?? true,
-      endpointing: config.endpointing ?? 100,
-      utteranceEndMs: config.utteranceEndMs ?? 1500,
+      endpointing: config.endpointing ?? 200,
+      utteranceEndMs: config.utteranceEndMs ?? 1000,
       numerals: config.numerals ?? true,
       diarize: config.diarize ?? false,
     };
@@ -535,6 +535,7 @@ export class DeepgramStreamManager {
         const text = this.getAccumulatedText();
         if (text.trim()) {
           this.callbacks.onUtteranceEnd?.(text);
+          this.resetTranscripts(); // Clear segments after dispatch to prevent re-sending
         }
       } else if (data.type === "Metadata") {
         console.log("[DeepgramStream] Metadata received:", data.request_id);
@@ -569,12 +570,10 @@ export class DeepgramStreamManager {
     this.lastFullAccumulated = this.getFullLiveText();
     this.callbacks.onTranscript(transcript, isFinal, this.lastFullAccumulated);
 
-    if (speechFinal) {
-      const text = this.getAccumulatedText();
-      if (text.trim()) {
-        this.callbacks.onUtteranceEnd?.(text);
-      }
-    }
+    // NOTE: speech_final only means "this segment is done" — NOT "the user is done speaking".
+    // We deliberately do NOT call onUtteranceEnd here.
+    // The UtteranceEnd event (controlled by utteranceEndMs) is the proper signal
+    // that the user has truly stopped speaking, and that's where we dispatch.
   }
 
   // ─── KeepAlive ───────────────────────────────────────────────────────────
