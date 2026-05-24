@@ -49,6 +49,8 @@ export interface DeepgramStreamCallbacks {
   onClose?: (reason: string) => void;
   /** Called on state transitions */
   onStateChange?: (state: StreamState) => void;
+  /** Called when input audio is active enough to be treated as speech/audio presence */
+  onAudioActivity?: (level: number) => void;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -58,6 +60,9 @@ const KEEPALIVE_INTERVAL_MS = 8000;
 const DRAIN_TIMEOUT_MS = 2500;
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_BASE_DELAY_MS = 500;
+const AUDIO_ACTIVITY_RMS_THRESHOLD = 0.006;
+const AUDIO_ACTIVITY_PEAK_THRESHOLD = 0.02;
+const AUDIO_ACTIVITY_NOTIFY_INTERVAL_MS = 100;
 
 // ─── Class ───────────────────────────────────────────────────────────────────
 
@@ -79,6 +84,7 @@ export class DeepgramStreamManager {
   private drainTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts: number = 0;
   private shouldReconnect: boolean = false;
+  private lastAudioActivityNotificationAt: number = 0;
 
   // Drain promise resolution
   private drainResolve: ((text: string) => void) | null = null;
@@ -236,6 +242,8 @@ export class DeepgramStreamManager {
       language: this.config.language,
       smart_format: String(this.config.smartFormat),
       interim_results: String(this.config.interimResults),
+      vad_events: "true",
+      no_delay: "true",
       endpointing: String(this.config.endpointing),
       utterance_end_ms: String(this.config.utteranceEndMs),
       numerals: String(this.config.numerals),
@@ -360,6 +368,7 @@ export class DeepgramStreamManager {
     const toSampleRate = 16000;
 
     const data = inputData instanceof Float32Array ? inputData : new Float32Array(inputData);
+    this.notifyAudioActivity(data);
     let pcm16: Int16Array;
 
     if (fromSampleRate === toSampleRate) {
@@ -421,6 +430,7 @@ export class DeepgramStreamManager {
         }
 
         const inputData = e.inputBuffer.getChannelData(0);
+        this.notifyAudioActivity(inputData);
         const fromSampleRate = audioContext.sampleRate;
         const toSampleRate = 16000;
 
@@ -480,6 +490,30 @@ export class DeepgramStreamManager {
         err instanceof Error ? err : new Error("Failed to start audio capture")
       );
     }
+  }
+
+  private notifyAudioActivity(samples: Float32Array): void {
+    let sumSquares = 0;
+    let peak = 0;
+
+    for (let i = 0; i < samples.length; i++) {
+      const abs = Math.abs(samples[i]);
+      peak = Math.max(peak, abs);
+      sumSquares += samples[i] * samples[i];
+    }
+
+    const rms = Math.sqrt(sumSquares / Math.max(samples.length, 1));
+    if (rms < AUDIO_ACTIVITY_RMS_THRESHOLD && peak < AUDIO_ACTIVITY_PEAK_THRESHOLD) {
+      return;
+    }
+
+    const now = Date.now();
+    if (now - this.lastAudioActivityNotificationAt < AUDIO_ACTIVITY_NOTIFY_INTERVAL_MS) {
+      return;
+    }
+
+    this.lastAudioActivityNotificationAt = now;
+    this.callbacks.onAudioActivity?.(rms);
   }
 
   private stopMediaRecorder(): void {
@@ -570,10 +604,13 @@ export class DeepgramStreamManager {
     this.lastFullAccumulated = this.getFullLiveText();
     this.callbacks.onTranscript(transcript, isFinal, this.lastFullAccumulated);
 
-    // NOTE: speech_final only means "this segment is done" — NOT "the user is done speaking".
-    // We deliberately do NOT call onUtteranceEnd here.
-    // The UtteranceEnd event (controlled by utteranceEndMs) is the proper signal
-    // that the user has truly stopped speaking, and that's where we dispatch.
+    if (isFinal && speechFinal) {
+      const finalText = this.getAccumulatedText();
+      if (finalText.trim()) {
+        this.callbacks.onUtteranceEnd?.(finalText);
+        this.resetTranscripts();
+      }
+    }
   }
 
   // ─── KeepAlive ───────────────────────────────────────────────────────────

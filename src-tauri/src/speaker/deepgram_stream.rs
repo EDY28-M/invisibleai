@@ -3,15 +3,22 @@ use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tokio_tungstenite::{connect_async, tungstenite::{client::IntoClientRequest, Message}};
+use tokio_tungstenite::{
+    connect_async,
+    tungstenite::{client::IntoClientRequest, Message},
+};
 use tracing::{error, info};
 
 const TARGET_SAMPLE_RATE: u32 = 16000;
-const FRAME_WINDOW_MS: u64 = 100;
+const FRAME_WINDOW_MS: u64 = 20;
 const KEEPALIVE_INTERVAL_SECS: u64 = 8;
+const AUDIO_ACTIVITY_RMS_THRESHOLD: f32 = 0.003;
+const AUDIO_ACTIVITY_PEAK_THRESHOLD: f32 = 0.015;
+const AUDIO_ACTIVITY_NOTIFY_INTERVAL_MS: u64 = 100;
 
 #[derive(Default)]
 pub struct DeepgramStreamState {
@@ -30,6 +37,12 @@ struct TranscriptPayload {
 #[derive(Debug, Clone, Serialize)]
 struct UtteranceEndPayload {
     text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AudioActivityPayload {
+    rms: f32,
+    peak: f32,
 }
 
 #[tauri::command]
@@ -192,7 +205,7 @@ async fn run_deepgram_stream(
     let _ = app.emit("system-stream-state", "connecting");
 
     let params = format!(
-        "model={}&language={}&smart_format=true&interim_results=true\
+        "model={}&language={}&smart_format=true&interim_results=true&vad_events=true&no_delay=true\
          &endpointing=10&utterance_end_ms=1000\
          &encoding=linear16&sample_rate={}&channels=1",
         model, language, TARGET_SAMPLE_RATE
@@ -209,10 +222,7 @@ async fn run_deepgram_stream(
         }
         Err(e) => {
             error!("[DeepgramStream] Failed to build request: {}", e);
-            let _ = app.emit(
-                "system-stream-error",
-                format!("Request build error: {}", e),
-            );
+            let _ = app.emit("system-stream-error", format!("Request build error: {}", e));
             let _ = app.emit("system-stream-state", "error");
             return;
         }
@@ -222,10 +232,7 @@ async fn run_deepgram_stream(
         Ok((stream, _)) => stream,
         Err(e) => {
             error!("[DeepgramStream] WebSocket connection failed: {}", e);
-            let _ = app.emit(
-                "system-stream-error",
-                format!("Connection failed: {}", e),
-            );
+            let _ = app.emit("system-stream-error", format!("Connection failed: {}", e));
             let _ = app.emit("system-stream-state", "error");
             return;
         }
@@ -243,12 +250,13 @@ async fn run_deepgram_stream(
 
     let _ = app.emit("system-stream-state", "streaming");
 
+    let app_capture = app.clone();
     let capture_handle = tokio::spawn(async move {
         let mut audio_stream = audio_stream;
         let mut accumulator: Vec<f32> = Vec::new();
         let samples_per_frame = ((native_sr as u64) * FRAME_WINDOW_MS / 1000) as usize;
-        let mut frame_count: u64 = 0;
-        let mut total_samples: u64 = 0;
+        let mut last_audio_activity_emit =
+            Instant::now() - Duration::from_millis(AUDIO_ACTIVITY_NOTIFY_INTERVAL_MS);
 
         info!(
             "[DeepgramStream] Audio capture starting, native_sr={}, samples_per_frame={}",
@@ -261,23 +269,24 @@ async fn run_deepgram_stream(
                 break;
             }
 
-            total_samples += 1;
             accumulator.push(sample);
 
             if accumulator.len() >= samples_per_frame {
+                if let Some((rms, peak)) = audio_activity_level(&accumulator) {
+                    if last_audio_activity_emit.elapsed()
+                        >= Duration::from_millis(AUDIO_ACTIVITY_NOTIFY_INTERVAL_MS)
+                    {
+                        let _ = app_capture.emit(
+                            "system-stream-audio-activity",
+                            AudioActivityPayload { rms, peak },
+                        );
+                        last_audio_activity_emit = Instant::now();
+                    }
+                }
+
                 let pcm16_bytes =
                     resample_to_pcm16_bytes(&accumulator, native_sr, TARGET_SAMPLE_RATE);
                 accumulator.clear();
-                frame_count += 1;
-
-                if frame_count == 1 || frame_count % 100 == 0 {
-                    info!(
-                        "[DeepgramStream] Sent frame #{}, total_samples={}, pcm16_bytes={}",
-                        frame_count,
-                        total_samples,
-                        pcm16_bytes.len()
-                    );
-                }
 
                 if audio_tx.send(pcm16_bytes).await.is_err() {
                     error!("[DeepgramStream] Audio channel closed");
@@ -285,16 +294,12 @@ async fn run_deepgram_stream(
                 }
             }
         }
-        info!(
-            "[DeepgramStream] Audio capture task ended after {} frames, {} total samples",
-            frame_count, total_samples
-        );
+        info!("[DeepgramStream] Audio capture task ended");
     });
 
     let writer_handle = tokio::spawn(async move {
-        let mut keepalive = tokio::time::interval(tokio::time::Duration::from_secs(
-            KEEPALIVE_INTERVAL_SECS,
-        ));
+        let mut keepalive =
+            tokio::time::interval(tokio::time::Duration::from_secs(KEEPALIVE_INTERVAL_SECS));
 
         loop {
             if stop_write.load(Ordering::Acquire) {
@@ -332,7 +337,7 @@ async fn run_deepgram_stream(
     let reader_handle = tokio::spawn(async move {
         let mut final_segments: Vec<String> = Vec::new();
         let mut current_interim = String::new();
-        let mut msg_count: u64 = 0;
+        let mut last_dispatched_utterance = String::new();
 
         info!("[DeepgramStream] Reader task started, waiting for Deepgram messages...");
 
@@ -342,18 +347,14 @@ async fn run_deepgram_stream(
                 break;
             }
 
-            msg_count += 1;
-
             match msg {
                 Ok(Message::Text(text)) => {
-                    if msg_count <= 5 || msg_count % 50 == 0 {
-                        info!("[DeepgramStream] WS msg #{}: {}", msg_count, &text[..text.len().min(200)]);
-                    }
                     handle_deepgram_message(
                         &app_read,
                         &text,
                         &mut final_segments,
                         &mut current_interim,
+                        &mut last_dispatched_utterance,
                     );
                 }
                 Ok(Message::Close(frame)) => {
@@ -362,18 +363,15 @@ async fn run_deepgram_stream(
                 }
                 Err(e) => {
                     error!("[DeepgramStream] Read error: {}", e);
-                    let _ = app_read.emit(
-                        "system-stream-error",
-                        format!("WebSocket error: {}", e),
-                    );
+                    let _ = app_read.emit("system-stream-error", format!("WebSocket error: {}", e));
                     break;
                 }
                 _ => {
-                    info!("[DeepgramStream] Other WS message type received");
+                    // Ignore non-text control frames; state changes are handled above.
                 }
             }
         }
-        info!("[DeepgramStream] Reader task ended after {} messages", msg_count);
+        info!("[DeepgramStream] Reader task ended");
     });
 
     tokio::select! {
@@ -391,6 +389,7 @@ fn handle_deepgram_message(
     text: &str,
     final_segments: &mut Vec<String>,
     current_interim: &mut String,
+    last_dispatched_utterance: &mut String,
 ) {
     let data: serde_json::Value = match serde_json::from_str(text) {
         Ok(v) => v,
@@ -413,6 +412,10 @@ fn handle_deepgram_message(
                 .get("is_final")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
+            let speech_final = data
+                .get("speech_final")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
 
             if is_final {
                 final_segments.push(transcript.to_string());
@@ -431,17 +434,19 @@ fn handle_deepgram_message(
                     accumulated,
                 },
             );
-        }
-        Some("UtteranceEnd") => {
-            let text = final_segments.join(" ").trim().to_string();
-            if !text.is_empty() {
-                let _ = app.emit(
-                    "system-stream-utterance-end",
-                    UtteranceEndPayload { text },
-                );
+
+            if is_final && speech_final {
+                let text = final_segments.join(" ").trim().to_string();
+                emit_utterance_end(app, text, last_dispatched_utterance);
                 final_segments.clear();
                 current_interim.clear();
             }
+        }
+        Some("UtteranceEnd") => {
+            let text = final_segments.join(" ").trim().to_string();
+            emit_utterance_end(app, text, last_dispatched_utterance);
+            final_segments.clear();
+            current_interim.clear();
         }
         Some("Error") => {
             let msg = data
@@ -457,6 +462,41 @@ fn handle_deepgram_message(
             }
         }
         _ => {}
+    }
+}
+
+fn emit_utterance_end(app: &AppHandle, text: String, last_dispatched_utterance: &mut String) {
+    let text = text.trim().to_string();
+    if text.is_empty() || *last_dispatched_utterance == text {
+        return;
+    }
+
+    let _ = app.emit(
+        "system-stream-utterance-end",
+        UtteranceEndPayload { text: text.clone() },
+    );
+    *last_dispatched_utterance = text;
+}
+
+fn audio_activity_level(samples: &[f32]) -> Option<(f32, f32)> {
+    if samples.is_empty() {
+        return None;
+    }
+
+    let mut sum_squares = 0.0_f32;
+    let mut peak = 0.0_f32;
+
+    for sample in samples {
+        let abs = sample.abs();
+        peak = peak.max(abs);
+        sum_squares += sample * sample;
+    }
+
+    let rms = (sum_squares / samples.len() as f32).sqrt();
+    if rms >= AUDIO_ACTIVITY_RMS_THRESHOLD || peak >= AUDIO_ACTIVITY_PEAK_THRESHOLD {
+        Some((rms, peak))
+    } else {
+        None
     }
 }
 

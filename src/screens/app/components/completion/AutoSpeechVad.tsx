@@ -1,6 +1,6 @@
 import { Button } from "@/components";
 import { useApp } from "@/contexts";
-import { fetchSTT, getMicrophoneStream } from "@/lib";
+import { DeepgramStreamManager, fetchSTT, getMicrophoneStream } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
 import { UseCompletionReturn } from "@/types";
 import { MicVAD } from "@ricky0123/vad-web";
@@ -13,6 +13,19 @@ interface AutoSpeechVADProps {
   setEnableVAD: UseCompletionReturn["setEnableVAD"];
   microphoneDeviceId?: string;
 }
+
+const STREAMING_MIC_DISPATCH_IDLE_MS = 1000;
+
+const mergeStreamingTranscriptText = (currentText: string, nextText: string) => {
+  const current = currentText.trim();
+  const next = nextText.trim();
+
+  if (!current) return next;
+  if (!next || current === next || current.endsWith(next)) return current;
+  if (next.startsWith(current)) return next;
+
+  return `${current} ${next}`;
+};
 
 const AutoSpeechVADInternal = ({
   submit,
@@ -28,6 +41,11 @@ const AutoSpeechVADInternal = ({
   const { selectedSttProvider, allSttProviders, invisibleaiApiEnabled } =
     useApp();
   const vadRef = useRef<MicVAD | null>(null);
+  const streamingManagerRef = useRef<DeepgramStreamManager | null>(null);
+  const streamingDispatchTimerRef = useRef<number | null>(null);
+  const streamingSpeakingTimerRef = useRef<number | null>(null);
+  const streamingPendingTextRef = useRef("");
+  const lastStreamingAudioAtRef = useRef(0);
   const callbacksRef = useRef({ submit, setState });
   const sttConfigRef = useRef({
     selectedSttProvider,
@@ -50,6 +68,89 @@ const AutoSpeechVADInternal = ({
   useEffect(() => {
     let active = true;
     let stream: MediaStream | null = null;
+
+    const clearStreamingDispatchTimer = () => {
+      if (streamingDispatchTimerRef.current !== null) {
+        window.clearTimeout(streamingDispatchTimerRef.current);
+        streamingDispatchTimerRef.current = null;
+      }
+    };
+
+    const clearStreamingSpeakingTimer = () => {
+      if (streamingSpeakingTimerRef.current !== null) {
+        window.clearTimeout(streamingSpeakingTimerRef.current);
+        streamingSpeakingTimerRef.current = null;
+      }
+    };
+
+    const flushStreamingPendingTranscript = () => {
+      clearStreamingDispatchTimer();
+
+      const finalText = streamingPendingTextRef.current.trim();
+      streamingPendingTextRef.current = "";
+
+      if (!active || !finalText) {
+        return;
+      }
+
+      const idleForMs = Date.now() - lastStreamingAudioAtRef.current;
+      if (
+        lastStreamingAudioAtRef.current > 0 &&
+        idleForMs < STREAMING_MIC_DISPATCH_IDLE_MS
+      ) {
+        const delay = Math.max(50, STREAMING_MIC_DISPATCH_IDLE_MS - idleForMs);
+        streamingPendingTextRef.current = finalText;
+        streamingDispatchTimerRef.current = window.setTimeout(
+          flushStreamingPendingTranscript,
+          delay
+        );
+        return;
+      }
+
+      setIsTranscribing(false);
+      callbacksRef.current.setState((prev: any) => ({
+        ...prev,
+        input: finalText,
+        error: null,
+      }));
+      callbacksRef.current.submit(finalText);
+    };
+
+    const scheduleStreamingDispatch = () => {
+      clearStreamingDispatchTimer();
+      streamingDispatchTimerRef.current = window.setTimeout(
+        flushStreamingPendingTranscript,
+        STREAMING_MIC_DISPATCH_IDLE_MS
+      );
+    };
+
+    const markStreamingAudioActivity = () => {
+      lastStreamingAudioAtRef.current = Date.now();
+      setUserSpeaking(true);
+      clearStreamingSpeakingTimer();
+      streamingSpeakingTimerRef.current = window.setTimeout(() => {
+        if (active) {
+          setUserSpeaking(false);
+        }
+      }, 350);
+
+      if (streamingPendingTextRef.current.trim()) {
+        scheduleStreamingDispatch();
+      }
+    };
+
+    const queueStreamingTranscript = (text: string) => {
+      const trimmedText = text.trim();
+      if (!active || !trimmedText) {
+        return;
+      }
+
+      streamingPendingTextRef.current = mergeStreamingTranscriptText(
+        streamingPendingTextRef.current,
+        trimmedText
+      );
+      scheduleStreamingDispatch();
+    };
 
     const handleSpeechEnd = async (audio: Float32Array) => {
       try {
@@ -114,11 +215,80 @@ const AutoSpeechVADInternal = ({
         setLoading(true);
         setErrored(false);
         setUserSpeaking(false);
+        streamingPendingTextRef.current = "";
+        lastStreamingAudioAtRef.current = 0;
+        clearStreamingDispatchTimer();
+        clearStreamingSpeakingTimer();
+
+        const {
+          selectedSttProvider,
+          allSttProviders,
+          invisibleaiApiEnabled,
+        } = sttConfigRef.current;
+        const providerConfig = allSttProviders.find(
+          (p) => p.id === selectedSttProvider.provider
+        );
+        const useStreamingProvider =
+          !invisibleaiApiEnabled && providerConfig?.streaming === true;
 
         stream = await getMicrophoneStream(microphoneDeviceId);
 
         if (!active) {
           stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        if (useStreamingProvider) {
+          const vars = selectedSttProvider.variables || {};
+          const apiKey = vars.api_key || vars.API_KEY || "";
+
+          if (!apiKey) {
+            throw new Error("Deepgram Streaming requires an API Key.");
+          }
+
+          const streamingManager = new DeepgramStreamManager(
+            {
+              apiKey,
+              model: vars.model || vars.MODEL || "nova-3",
+              language: vars.language || vars.LANGUAGE || "es-419",
+              utteranceEndMs: 1000,
+              endpointing: 10,
+            },
+            {
+              onTranscript: (_text, _isFinal, fullAccumulated) => {
+                if (!active) return;
+                callbacksRef.current.setState((prev: any) => ({
+                  ...prev,
+                  input: fullAccumulated,
+                  error: null,
+                }));
+              },
+              onUtteranceEnd: (finalText) => {
+                queueStreamingTranscript(finalText);
+              },
+              onAudioActivity: () => {
+                markStreamingAudioActivity();
+              },
+              onError: (error) => {
+                if (!active) return;
+                callbacksRef.current.setState((prev: any) => ({
+                  ...prev,
+                  error: error.message,
+                }));
+              },
+            }
+          );
+
+          streamingManagerRef.current = streamingManager;
+          await streamingManager.start(stream);
+
+          if (!active) {
+            streamingManager.destroy();
+            return;
+          }
+
+          setListening(true);
+          setLoading(false);
           return;
         }
 
@@ -163,6 +333,12 @@ const AutoSpeechVADInternal = ({
       active = false;
       vadRef.current?.destroy();
       vadRef.current = null;
+      streamingManagerRef.current?.destroy();
+      streamingManagerRef.current = null;
+      clearStreamingDispatchTimer();
+      clearStreamingSpeakingTimer();
+      streamingPendingTextRef.current = "";
+      lastStreamingAudioAtRef.current = 0;
       stream?.getTracks().forEach((track) => track.stop());
       setListening(false);
       setUserSpeaking(false);

@@ -43,7 +43,7 @@ const App = () => {
       >
         <Card className="w-full flex flex-row items-center gap-2 px-3 py-2 border border-black/5 dark:border-white/5 bg-card/40 dark:bg-card/30 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] rounded-[22px] transition-all duration-500">
           <SystemAudio {...systemAudio} />
-          {systemAudio?.capturing && systemAudio?.isDualChannel && (
+          {systemAudio?.capturing && systemAudio?.isDualChannel && !systemAudio?.isStreamingMode && (
             <MicVadCapturer
               key={selectedAudioDevices?.input?.id || "default"}
               onSpeechStart={systemAudio.handleMicSpeechStart}

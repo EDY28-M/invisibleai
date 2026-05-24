@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Button,
   Popover,
@@ -26,10 +26,6 @@ import { Warning } from "./Warning";
 import { useSystemAudioType } from "@/hooks";
 import { useApp } from "@/contexts";
 import { cn } from "@/lib/utils";
-import {
-  getScreenCaptureErrorMessage,
-  requestScreenRecordingPermissionIfNeeded,
-} from "@/lib/screen-capture-permission";
 
 export const SystemAudio = (props: useSystemAudioType) => {
   const {
