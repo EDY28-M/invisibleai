@@ -51,12 +51,12 @@ export interface VadConfig {
 const DEFAULT_VAD_CONFIG: VadConfig = {
   enabled: true,
   hop_size: 1024,
-  sensitivity_rms: 0.012,
-  peak_threshold: 0.035,
-  silence_chunks: 25,
-  min_speech_chunks: 7,
-  pre_speech_chunks: 12,
-  noise_gate_threshold: 0.003,
+  sensitivity_rms: 0.005,
+  peak_threshold: 0.015,
+  silence_chunks: 35,
+  min_speech_chunks: 4,
+  pre_speech_chunks: 15,
+  noise_gate_threshold: 0.001,
   max_recording_duration_secs: 180,
 };
 
@@ -222,6 +222,7 @@ export function useSystemAudio() {
   const conversationRef = useRef(conversation);
   const isDualChannelRef = useRef(isDualChannel);
   const isContinuousModeRef = useRef(isContinuousMode);
+  const vadConfigRef = useRef(vadConfig);
   const useSystemPromptRef = useRef(useSystemPrompt);
   const systemPromptRef = useRef(systemPrompt);
   const contextContentRef = useRef(contextContent);
@@ -234,6 +235,7 @@ export function useSystemAudio() {
   useEffect(() => { conversationRef.current = conversation; }, [conversation]);
   useEffect(() => { isDualChannelRef.current = isDualChannel; }, [isDualChannel]);
   useEffect(() => { isContinuousModeRef.current = isContinuousMode; }, [isContinuousMode]);
+  useEffect(() => { vadConfigRef.current = vadConfig; }, [vadConfig]);
   useEffect(() => { useSystemPromptRef.current = useSystemPrompt; }, [useSystemPrompt]);
   useEffect(() => { systemPromptRef.current = systemPrompt; }, [systemPrompt]);
   useEffect(() => { contextContentRef.current = contextContent; }, [contextContent]);
@@ -253,6 +255,20 @@ export function useSystemAudio() {
   // Chronological queue to track concurrent active speech utterances across both channels
   const activeSpeechUtterancesRef = useRef<SpeechUtterance[]>([]);
   const isProcessingQueueRef = useRef<boolean>(false);
+
+  const resetSpeechQueue = useCallback(() => {
+    activeSpeechUtterancesRef.current = [];
+    isProcessingQueueRef.current = false;
+  }, []);
+
+  const discardQueuedSpeechUtterances = useCallback((channel: SpeechUtterance["channel"]) => {
+    const before = activeSpeechUtterancesRef.current.length;
+    activeSpeechUtterancesRef.current = activeSpeechUtterancesRef.current.filter(
+      (utterance) =>
+        utterance.channel !== channel || utterance.isProcessed || utterance.isDiscarded
+    );
+    return activeSpeechUtterancesRef.current.length !== before;
+  }, []);
 
   const previousOutputDeviceIdRef = useRef(selectedAudioDevices.output.id);
 
@@ -293,6 +309,7 @@ export function useSystemAudio() {
           });
         } else {
           // Restart classic VAD capture
+          resetSpeechQueue();
           await invoke("stop_system_audio_capture");
 
           if (cancelled || !capturingRef.current || !vadConfig.enabled) {
@@ -322,7 +339,7 @@ export function useSystemAudio() {
     return () => {
       cancelled = true;
     };
-  }, [selectedAudioDevices.output.id, vadConfig]);
+  }, [resetSpeechQueue, selectedAudioDevices.output.id, vadConfig]);
 
   const updateDualChannel = useCallback((value: boolean) => {
     setIsDualChannel(value);
@@ -1312,6 +1329,13 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     processSpeechQueueRef.current = processSpeechQueue;
   }, [processSpeechQueue]);
 
+  useEffect(() => {
+    if (isDualChannel || isStreamingMode) return;
+    if (discardQueuedSpeechUtterances("mic")) {
+      processSpeechQueueRef.current();
+    }
+  }, [discardQueuedSpeechUtterances, isDualChannel, isStreamingMode]);
+
   const handleSystemSpeechStartRef = useRef(handleSystemSpeechStart);
   useEffect(() => {
     handleSystemSpeechStartRef.current = handleSystemSpeechStart;
@@ -1582,6 +1606,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     let speechUnlisten: (() => void) | undefined;
     let startUnlisten: (() => void) | undefined;
     let discardedUnlisten: (() => void) | undefined;
+    let debugUnlisten: (() => void) | undefined;
     let streamStateUnlisten: (() => void) | undefined;
     let streamTranscriptUnlisten: (() => void) | undefined;
     let streamUtteranceEndUnlisten: (() => void) | undefined;
@@ -1591,8 +1616,30 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
     const setupEventListeners = async () => {
       try {
+        // Diagnostic listener for classic (non-streaming) system audio debug
+        const uDebug = await listen<{
+          sample_rate: number;
+          raw_rms: number;
+          raw_peak: number;
+          is_speech: boolean;
+          in_speech: boolean;
+          speech_chunks: number;
+          silence_chunks: number;
+          emitted_event: string;
+        }>("classic-system-audio-debug", (event) => {
+          const d = event.payload;
+          if (d.raw_rms > 0.001 || d.is_speech || d.in_speech) {
+            console.log(
+              `[ClassicSystemAudio] rms=${d.raw_rms.toFixed(4)} peak=${d.raw_peak.toFixed(4)} speech=${d.is_speech} in_speech=${d.in_speech} chunks=${d.speech_chunks} silence=${d.silence_chunks} event=${d.emitted_event}`
+            );
+          }
+        });
+        if (cancelled) { uDebug(); return; }
+        debugUnlisten = uDebug;
+
         const uStart = await listen("speech-start", () => {
           if (isStreamingModeRef.current) return;
+          console.log("[ClassicSystemAudio] speech-start received");
           handleSystemSpeechStartRef.current();
         });
         if (cancelled) { uStart(); return; }
@@ -1603,8 +1650,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           if (!capturingRef.current) return;
 
           const base64Audio = event.payload as string;
+          console.log(`[ClassicSystemAudio] speech-detected received, base64 length=${base64Audio.length}`);
 
-          if (isContinuousModeRef.current) {
+          if (!vadConfigRef.current.enabled) {
             console.warn("Ignoring system loopback transcription in Manual mode");
             return;
           }
@@ -1650,13 +1698,21 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
             const response = await fetch(`data:audio/wav;base64,${base64Audio}`);
             const audioBlob = await response.blob();
+            console.log(`[ClassicSystemAudio] WAV Blob size=${audioBlob.size}, provider=${providerConfig?.id || 'invisibleai-api'}`);
 
-            return fetchSTT({
-              provider: providerConfig,
-              selectedProvider: selectedSttProviderRef.current,
-              audio: audioBlob,
-              useInvisibleAIAPI: invisibleaiApiEnabledRef.current,
-            });
+            try {
+              const result = await fetchSTT({
+                provider: providerConfig,
+                selectedProvider: selectedSttProviderRef.current,
+                audio: audioBlob,
+                useInvisibleAIAPI: invisibleaiApiEnabledRef.current,
+              });
+              console.log(`[ClassicSystemAudio] STT result: "${result?.substring(0, 100)}..."`);
+              return result;
+            } catch (sttErr) {
+              console.error(`[ClassicSystemAudio] STT error:`, sttErr);
+              throw sttErr;
+            }
           })();
 
           processSpeechQueueRef.current();
@@ -1666,7 +1722,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
         const uDiscarded = await listen("speech-discarded", (event) => {
           if (isStreamingModeRef.current) return;
-          if (isContinuousModeRef.current) {
+          if (!vadConfigRef.current.enabled) {
             console.warn("Ignoring system loopback speech-discarded in Manual mode");
             return;
           }
@@ -1755,6 +1811,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       if (speechUnlisten) speechUnlisten();
       if (startUnlisten) startUnlisten();
       if (discardedUnlisten) discardedUnlisten();
+      if (debugUnlisten) debugUnlisten();
       if (streamStateUnlisten) streamStateUnlisten();
       if (streamTranscriptUnlisten) streamTranscriptUnlisten();
       if (streamUtteranceEndUnlisten) streamUtteranceEndUnlisten();
@@ -1772,6 +1829,8 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
   const startCapture = useCallback(async () => {
     try {
       setError("");
+      vadConfigRef.current = vadConfig;
+      resetSpeechQueue();
       clearStreamingPendingTranscript("mic");
       clearStreamingPendingTranscript("system");
       resetStreamingCopilotBuffers();
@@ -1852,6 +1911,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       setIsPopoverOpen(true);
     }
   }, [
+    resetSpeechQueue,
     clearStreamingPendingTranscript,
     resetStreamingCopilotBuffers,
     vadConfig,
@@ -1882,8 +1942,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       accumulatedSystemTextRef.current = "";
       setScreenshotImage(null);
 
-      activeSpeechUtterancesRef.current = [];
-      isProcessingQueueRef.current = false;
+      resetSpeechQueue();
 
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -1910,7 +1969,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       setError(`Failed to stop capture: ${errorMessage}`);
       console.error("Stop capture error:", err);
     }
-  }, [clearStreamingPendingTranscript, resetStreamingCopilotBuffers, stopFrontendMicRecording]);
+  }, [clearStreamingPendingTranscript, resetSpeechQueue, resetStreamingCopilotBuffers, stopFrontendMicRecording]);
 
   const manualStopAndSend = useCallback(async () => {
     try {
@@ -2099,10 +2158,15 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
   const updateVadConfiguration = useCallback(async (config: VadConfig, overrideDualChannel?: boolean) => {
     const prevEnabled = vadConfig.enabled;
+    vadConfigRef.current = config;
     setVadConfig(config);
     safeLocalStorage.setItem("vad_config", JSON.stringify(config));
 
     const activeDualChannel = overrideDualChannel !== undefined ? overrideDualChannel : isDualChannel;
+
+    if (!activeDualChannel && discardQueuedSpeechUtterances("mic")) {
+      processSpeechQueueRef.current();
+    }
 
     // Determine if the current provider supports real-time streaming
     const currentSttProvider = allSttProvidersRef.current.find(
@@ -2182,12 +2246,26 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             });
           }
         }
+      } else if (capturingRef.current && config.enabled && !streamingEnabled) {
+        const isBackendCapturing = await invoke<boolean>("get_capture_status").catch(() => false);
+        if (!isBackendCapturing) {
+          const deviceId =
+            selectedAudioDevices.output.id !== "default"
+              ? selectedAudioDevices.output.id
+              : null;
+
+          await invoke("start_system_audio_capture", {
+            vadConfig: config,
+            deviceId,
+          });
+        }
       }
     } catch (error) {
       console.error("Failed to update VAD config:", error);
     }
   }, [
     clearStreamingPendingTranscript,
+    discardQueuedSpeechUtterances,
     resetStreamingCopilotBuffers,
     vadConfig.enabled,
     selectedAudioDevices.output.id,
@@ -2303,6 +2381,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         // Transition: non-streaming → streaming
         console.log("[Provider Switch] Transitioning to streaming mode");
         try {
+          resetSpeechQueue();
           await invoke("stop_system_audio_capture");
 
           let micStream: MediaStream | null = null;
@@ -2363,6 +2442,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         // Transition: streaming → non-streaming (classic VAD)
         console.log("[Provider Switch] Transitioning to non-streaming (classic VAD) mode");
         try {
+          resetSpeechQueue();
           // Tear down mic Deepgram manager
           if (deepgramManagerRef.current) {
             deepgramManagerRef.current.destroy();
@@ -2408,6 +2488,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     initializeStreaming,
     isDualChannel,
     isStreamingMode,
+    resetSpeechQueue,
     resetStreamingCopilotBuffers,
     selectedAudioDevices.input.id,
     selectedAudioDevices.output.id,

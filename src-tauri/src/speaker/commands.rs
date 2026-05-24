@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_shell::ShellExt;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VadConfig {
@@ -31,15 +31,27 @@ impl Default for VadConfig {
         Self {
             enabled: true,
             hop_size: 1024,
-            sensitivity_rms: 0.012,
-            peak_threshold: 0.035,
-            silence_chunks: 25,
-            min_speech_chunks: 7,
-            pre_speech_chunks: 12,
-            noise_gate_threshold: 0.003,
+            sensitivity_rms: 0.005,
+            peak_threshold: 0.015,
+            silence_chunks: 35,
+            min_speech_chunks: 4,
+            pre_speech_chunks: 15,
+            noise_gate_threshold: 0.001,
             max_recording_duration_secs: 180,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ClassicAudioDebug {
+    sample_rate: u32,
+    raw_rms: f32,
+    raw_peak: f32,
+    is_speech: bool,
+    in_speech: bool,
+    speech_chunks: usize,
+    silence_chunks: usize,
+    emitted_event: String,
 }
 
 #[tauri::command]
@@ -145,9 +157,16 @@ async fn run_vad_capture(
         VecDeque::with_capacity(config.pre_speech_chunks * config.hop_size);
     let mut speech_buffer = Vec::new();
     let mut in_speech = false;
-    let mut silence_chunks = 0;
-    let mut speech_chunks = 0;
+    let mut silence_chunks: usize = 0;
+    let mut speech_chunks: usize = 0;
     let max_samples = sr as usize * 30;
+    let mut last_debug_emit = Instant::now();
+    let debug_interval = Duration::from_millis(500);
+
+    info!(
+        "[ClassicVAD] Started: sr={}, sensitivity_rms={}, peak_threshold={}, noise_gate={}, silence_chunks={}, min_speech_chunks={}",
+        sr, config.sensitivity_rms, config.peak_threshold, config.noise_gate_threshold, config.silence_chunks, config.min_speech_chunks
+    );
 
     while let Some(sample) = stream.next().await {
         buffer.push_back(sample);
@@ -160,93 +179,106 @@ async fn run_vad_capture(
                 }
             }
 
-            let mono = apply_noise_gate(&mono, config.noise_gate_threshold);
+            let raw_mono = mono;
 
-            let (rms, peak) = calculate_audio_metrics(&mono);
-            let _ = app.emit("audio-level", rms);
-            let _ = app.emit("system-audio-chunk", &mono);
-            let is_speech = rms > config.sensitivity_rms || peak > config.peak_threshold;
+            let (raw_rms, raw_peak) = calculate_audio_metrics(&raw_mono);
+            let _ = app.emit("audio-level", raw_rms);
+            let _ = app.emit("system-audio-chunk", &raw_mono);
+
+            // Speech detection uses RAW metrics only — noise gate must NOT suppress detection
+            let is_speech =
+                raw_rms > config.sensitivity_rms || raw_peak > config.peak_threshold;
+
+            let mut emitted_event = "none".to_string();
 
             if is_speech {
                 if !in_speech {
-
                     in_speech = true;
                     speech_chunks = 0;
-
                     speech_buffer.extend(pre_speech.drain(..));
-
                     let _ = app.emit("speech-start", ());
+                    emitted_event = "speech-start".to_string();
                 }
 
                 speech_chunks += 1;
-                speech_buffer.extend_from_slice(&mono);
+                speech_buffer.extend_from_slice(&raw_mono);
                 silence_chunks = 0;
 
                 if speech_buffer.len() > max_samples {
+                    // Normalize raw audio for STT — no noise gate destruction
                     let normalized_buffer = normalize_audio_level(&speech_buffer, 0.1);
                     if let Ok(b64) = samples_to_wav_b64(sr, &normalized_buffer) {
-
                         let _ = app.emit("speech-detected", b64);
+                        emitted_event = "speech-detected".to_string();
                     }
                     speech_buffer.clear();
                     in_speech = false;
                     speech_chunks = 0;
                 }
-            } else {
+            } else if in_speech {
+                silence_chunks += 1;
+                speech_buffer.extend_from_slice(&raw_mono);
 
-                if in_speech {
-                    silence_chunks += 1;
+                if silence_chunks >= config.silence_chunks {
+                    if speech_chunks >= config.min_speech_chunks && !speech_buffer.is_empty() {
+                        let silence_duration_samples = silence_chunks * config.hop_size;
+                        let keep_silence_samples = (sr as usize) * 15 / 100;
+                        let trim_amount =
+                            silence_duration_samples.saturating_sub(keep_silence_samples);
 
-                    speech_buffer.extend_from_slice(&mono);
-
-                    if silence_chunks >= config.silence_chunks {
-
-                        if speech_chunks >= config.min_speech_chunks && !speech_buffer.is_empty() {
-
-                            let silence_duration_samples = silence_chunks * config.hop_size;
-                            let keep_silence_samples = (sr as usize) * 15 / 100;
-                            let trim_amount =
-                                silence_duration_samples.saturating_sub(keep_silence_samples);
-
-                            if speech_buffer.len() > trim_amount {
-                                speech_buffer.truncate(speech_buffer.len() - trim_amount);
-                            }
-
-                            let normalized_buffer = normalize_audio_level(&speech_buffer, 0.1);
-                            if let Ok(b64) = samples_to_wav_b64(sr, &normalized_buffer) {
-
-                                let _ = app.emit("speech-detected", b64);
-                            } else {
-                                error!("Failed to encode speech to WAV");
-                                let _ = app.emit("audio-encoding-error", "Failed to encode speech");
-                            }
-                        } else {
-                            let _ = app.emit(
-                                "speech-discarded",
-                                "Audio too short (likely background noise)",
-                            );
+                        if speech_buffer.len() > trim_amount {
+                            speech_buffer.truncate(speech_buffer.len() - trim_amount);
                         }
 
-                        speech_buffer.clear();
-                        in_speech = false;
-                        silence_chunks = 0;
-                        speech_chunks = 0;
+                        // Send raw/normalized audio to STT — no noise gate
+                        let normalized_buffer = normalize_audio_level(&speech_buffer, 0.1);
+                        if let Ok(b64) = samples_to_wav_b64(sr, &normalized_buffer) {
+                            let _ = app.emit("speech-detected", b64);
+                            emitted_event = "speech-detected".to_string();
+                        } else {
+                            error!("Failed to encode speech to WAV");
+                            let _ = app.emit("audio-encoding-error", "Failed to encode speech");
+                        }
+                    } else {
+                        let _ = app.emit(
+                            "speech-discarded",
+                            "Audio too short (likely background noise)",
+                        );
+                        emitted_event = "speech-discarded".to_string();
                     }
-                } else {
 
-                    pre_speech.extend(mono.into_iter());
-
-                    while pre_speech.len() > config.pre_speech_chunks * config.hop_size {
-                        pre_speech.pop_front();
-                    }
-
-                    if pre_speech.len() == config.pre_speech_chunks * config.hop_size {
-                        pre_speech.shrink_to_fit();
-                    }
+                    speech_buffer.clear();
+                    in_speech = false;
+                    silence_chunks = 0;
+                    speech_chunks = 0;
                 }
+            } else {
+                pre_speech.extend(raw_mono.into_iter());
+
+                while pre_speech.len() > config.pre_speech_chunks * config.hop_size {
+                    pre_speech.pop_front();
+                }
+            }
+
+            // Emit diagnostic debug event throttled to every 500ms
+            if last_debug_emit.elapsed() >= debug_interval {
+                last_debug_emit = Instant::now();
+                let debug_payload = ClassicAudioDebug {
+                    sample_rate: sr,
+                    raw_rms,
+                    raw_peak,
+                    is_speech,
+                    in_speech,
+                    speech_chunks,
+                    silence_chunks,
+                    emitted_event: emitted_event.clone(),
+                };
+                let _ = app.emit("classic-system-audio-debug", &debug_payload);
             }
         }
     }
+
+    info!("[ClassicVAD] Stream ended");
 }
 
 async fn run_continuous_capture(
