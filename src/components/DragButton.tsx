@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { GripVerticalIcon } from "lucide-react";
 import { useApp } from "@/contexts";
 import {
   GetLicense,
@@ -9,6 +8,7 @@ import {
   PopoverTrigger,
 } from "@/components";
 import { useWindowResize } from "@/hooks";
+import { AppIcons } from "@/screens/app/components/icons/AppIcons";
 
 export const DragButton = () => {
   const { hasActiveLicense } = useApp();
@@ -26,7 +26,7 @@ export const DragButton = () => {
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild className="border-none hover:bg-transparent">
           <Button variant="ghost" size="icon" className={`-ml-[2px] w-fit`}>
-            <GripVerticalIcon className="h-4 w-4" />
+            <AppIcons.Drag className="h-4 w-4" strokeWidth={1.7} />
           </Button>
         </PopoverTrigger>
         <PopoverContent
@@ -60,7 +60,7 @@ export const DragButton = () => {
       className={`-ml-[2px] w-fit`}
       data-tauri-drag-region={hasActiveLicense}
     >
-      <GripVerticalIcon className="h-4 w-4" />
+      <AppIcons.Drag className="h-4 w-4" strokeWidth={1.7} />
     </Button>
   );
 };

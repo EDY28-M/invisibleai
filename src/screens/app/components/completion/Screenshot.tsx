@@ -1,8 +1,8 @@
 import { Button } from "@/components";
-import { LaptopMinimalIcon, Loader2, MousePointer2Icon } from "lucide-react";
 import { UseCompletionReturn } from "@/types";
 import { MAX_FILES } from "@/config";
 import { useApp } from "@/contexts";
+import { AppIcons } from "../icons/AppIcons";
 
 export const Screenshot = ({
   screenshotConfiguration,
@@ -37,11 +37,11 @@ export const Screenshot = ({
       disabled={isDisabled}
     >
       {isScreenshotLoading ? (
-        <Loader2 className="h-4.5 w-4.5 animate-spin text-foreground/70" />
+        <AppIcons.Loader className="h-4.5 w-4.5 animate-spin text-foreground/70" strokeWidth={1.7} />
       ) : screenshotConfiguration.enabled ? (
-        <LaptopMinimalIcon className="h-4.5 w-4.5" />
+        <AppIcons.Screen className="h-4.5 w-4.5" strokeWidth={1.7} />
       ) : (
-        <MousePointer2Icon className="h-4.5 w-4.5" />
+        <AppIcons.Cursor className="h-4.5 w-4.5" strokeWidth={1.7} />
       )}
     </Button>
   );

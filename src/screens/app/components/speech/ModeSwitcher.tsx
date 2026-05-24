@@ -1,6 +1,6 @@
 import { Switch } from "@/components";
 import { cn } from "@/lib/utils";
-import { AudioWaveformIcon, MicIcon, RadioIcon, SparklesIcon } from "lucide-react";
+import { AppIcons } from "../icons/AppIcons";
 
 interface ModeSwitcherProps {
   isVadMode: boolean;
@@ -46,11 +46,12 @@ export const ModeSwitcher = ({
             : "text-muted-foreground/80 hover:text-foreground hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30"
         )}
       >
-        <AudioWaveformIcon
+        <AppIcons.Auto
           className={cn(
             "w-3.5 h-3.5 transition-transform duration-300",
             currentMode === "auto" ? "text-amber-500 dark:text-amber-400 scale-105" : "opacity-70"
           )}
+          strokeWidth={1.7}
         />
         <span className="font-semibold tracking-wide">Auto</span>
       </button>
@@ -67,11 +68,12 @@ export const ModeSwitcher = ({
             : "text-muted-foreground/80 hover:text-foreground hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30"
         )}
       >
-        <RadioIcon
+        <AppIcons.Multi
           className={cn(
             "w-3.5 h-3.5 transition-all duration-300",
             currentMode === "both" ? "text-amber-500 dark:text-amber-400 scale-105" : "opacity-70"
           )}
+          strokeWidth={1.7}
         />
         <span className="font-semibold tracking-wide">Multihilo</span>
       </button>
@@ -88,11 +90,12 @@ export const ModeSwitcher = ({
               : "text-muted-foreground/80 hover:text-foreground hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30"
           )}
         >
-          <MicIcon
+          <AppIcons.Mic
             className={cn(
               "w-3.5 h-3.5 transition-transform duration-300",
               currentMode === "manual" ? "text-amber-500 dark:text-amber-400 scale-105" : "opacity-70"
             )}
+            strokeWidth={1.7}
           />
           <span className="font-semibold tracking-wide">Manual</span>
         </button>
@@ -108,11 +111,12 @@ export const ModeSwitcher = ({
           )}
           title="Activa detección avanzada para preguntas, debates, opiniones y objeciones del audio del sistema"
         >
-          <SparklesIcon
+          <AppIcons.Smart
             className={cn(
               "w-3.5 h-3.5 transition-transform duration-300",
               streamingSmartMode ? "text-emerald-500 dark:text-emerald-400 scale-105" : "opacity-70"
             )}
+            strokeWidth={1.7}
           />
           <span className="font-semibold tracking-wide">
             <span className="max-[640px]:hidden">Modo </span>inteligente

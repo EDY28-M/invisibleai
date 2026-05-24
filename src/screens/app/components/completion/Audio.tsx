@@ -1,8 +1,8 @@
-import { InfoIcon, MicIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger, Button } from "@/components";
 import { AutoSpeechVAD } from "./AutoSpeechVad";
 import { UseCompletionReturn } from "@/types";
 import { useApp } from "@/contexts";
+import { AppIcons } from "../icons/AppIcons";
 
 export const Audio = ({
   micOpen,
@@ -38,7 +38,7 @@ export const Audio = ({
             className="cursor-pointer h-9 w-9 rounded-[14px] transition-all duration-300 border border-transparent bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 hover:border-black/5 dark:hover:border-white/5 text-foreground/80 hover:text-foreground hover:scale-105 active:scale-95 shrink-0"
             title="Toggle voice input"
           >
-            <MicIcon className="h-4.5 w-4.5" />
+            <AppIcons.Mic className="h-4.5 w-4.5" strokeWidth={1.7} />
           </Button>
         )}
       </PopoverTrigger>
@@ -59,7 +59,7 @@ export const Audio = ({
             {!speechProviderStatus ? (
               <>
                 <div className="mt-2 flex flex-row gap-1 items-center text-orange-600">
-                  <InfoIcon size={16} />
+                  <AppIcons.Info height={16} width={16} strokeWidth={1.7} />
                   {selectedSttProvider.provider ? null : (
                     <p>PROVIDER IS MISSING</p>
                   )}

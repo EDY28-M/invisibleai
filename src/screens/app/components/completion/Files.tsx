@@ -5,10 +5,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button, ScrollArea } from "@/components";
-import { PaperclipIcon, XIcon, PlusIcon, TrashIcon } from "lucide-react";
 import { UseCompletionReturn } from "@/types";
 import { MAX_FILES } from "@/config";
 import { useApp } from "@/contexts";
+import { AppIcons } from "../icons/AppIcons";
 
 export const Files = ({
   attachedFiles,
@@ -54,7 +54,7 @@ export const Files = ({
                 : "Image upload not supported by current AI provider"
             }
           >
-            <PaperclipIcon className="h-4.5 w-4.5" />
+            <AppIcons.Attachment className="h-4.5 w-4.5" strokeWidth={1.7} />
           </Button>
         </PopoverTrigger>
 
@@ -82,7 +82,7 @@ export const Files = ({
                 className="cursor-pointer"
                 title="Close"
               >
-                <XIcon className="h-4 w-4" />
+                <AppIcons.Close className="h-4 w-4" strokeWidth={1.8} />
               </Button>
             </div>
 
@@ -122,7 +122,7 @@ export const Files = ({
                       onClick={() => removeFile(file.id)}
                       title="Remove image"
                     >
-                      <XIcon className="h-3 w-3" />
+                      <AppIcons.Close className="h-3 w-3" strokeWidth={1.8} />
                     </Button>
                   </div>
                 ))}
@@ -137,7 +137,7 @@ export const Files = ({
                 className="w-2/4"
                 variant="outline"
               >
-                <PlusIcon className="h-4 w-4 mr-2" />
+                <AppIcons.New className="h-4 w-4 mr-2" strokeWidth={1.8} />
                 Add More Images {!canAddMore && `(${MAX_FILES} max)`}
               </Button>
               <Button
@@ -145,7 +145,7 @@ export const Files = ({
                 variant="destructive"
                 onClick={onRemoveAllFiles}
               >
-                <TrashIcon className="h-4 w-4 mr-2" />
+                <AppIcons.Trash className="h-4 w-4 mr-2" strokeWidth={1.8} />
                 Remove All Images
               </Button>
             </div>

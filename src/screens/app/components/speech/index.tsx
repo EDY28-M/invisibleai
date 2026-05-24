@@ -6,15 +6,6 @@ import {
   PopoverContent,
   ScrollArea,
 } from "@/components";
-import {
-  HeadphonesIcon,
-  AlertCircleIcon,
-  LoaderIcon,
-  AudioLinesIcon,
-  CameraIcon,
-  PlusIcon,
-  XIcon,
-} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { ModeSwitcher } from "./ModeSwitcher";
 import { RecordingPanel } from "./RecordingPanel";
@@ -26,6 +17,7 @@ import { Warning } from "./Warning";
 import { useSystemAudioType } from "@/hooks";
 import { useApp } from "@/contexts";
 import { cn } from "@/lib/utils";
+import { AppIcons } from "../icons/AppIcons";
 
 export const SystemAudio = (props: useSystemAudioType) => {
   const {
@@ -117,13 +109,13 @@ export const SystemAudio = (props: useSystemAudioType) => {
   };
 
   const getButtonIcon = () => {
-    if (setupRequired) return <AlertCircleIcon className="text-orange-500" />;
+    if (setupRequired) return <AppIcons.Warning className="text-orange-500" strokeWidth={1.7} />;
     if (error && !setupRequired)
-      return <AlertCircleIcon className="text-red-500" />;
-    if (isProcessing) return <LoaderIcon className="animate-spin text-foreground/70" />;
+      return <AppIcons.Warning className="text-red-500" strokeWidth={1.7} />;
+    if (isProcessing) return <AppIcons.Loader className="animate-spin text-foreground/70" strokeWidth={1.7} />;
     if (capturing)
-      return <AudioLinesIcon className="text-emerald-500 dark:text-emerald-400 animate-pulse" />;
-    return <HeadphonesIcon className="h-4.5 w-4.5" />;
+      return <AppIcons.Activity className="text-emerald-500 dark:text-emerald-400 animate-pulse" strokeWidth={1.7} />;
+    return <AppIcons.SystemAudio className="h-4.5 w-4.5" strokeWidth={1.7} />;
   };
 
   const getButtonTitle = () => {
@@ -210,9 +202,9 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       title="Capture screenshot to include with transcription"
                     >
                       {isCapturingScreenshot ? (
-                        <LoaderIcon className="w-3.5 h-3.5 animate-spin" />
+                        <AppIcons.Loader className="w-3.5 h-3.5 animate-spin" strokeWidth={1.7} />
                       ) : (
-                        <CameraIcon className={cn("w-3.5 h-3.5", screenshotImage ? "text-white" : "text-sky-500/80")} />
+                        <AppIcons.Camera className={cn("w-3.5 h-3.5", screenshotImage ? "text-white" : "text-sky-500/80")} strokeWidth={1.7} />
                       )}
                       <span className="max-[640px]:hidden">Screenshot</span>
                     </Button>
@@ -226,7 +218,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       className="h-9 rounded-[12px] text-[10px] font-black tracking-widest uppercase bg-neutral-200/40 dark:bg-neutral-800/40 text-muted-foreground/90 hover:text-foreground hover:bg-neutral-200/80 dark:hover:bg-neutral-800/80 border border-black/5 dark:border-white/5 shadow-xs transition-all duration-300 flex items-center gap-1.5 px-3 max-[640px]:px-2 select-none active:scale-95 cursor-pointer"
                       title="Start a new conversation"
                     >
-                      <PlusIcon className="w-3.5 h-3.5 text-emerald-500/80" />
+                      <AppIcons.New className="w-3.5 h-3.5 text-emerald-500/80" strokeWidth={1.8} />
                       New
                     </Button>
                   )}
@@ -243,7 +235,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                         resizeWindow(false);
                       }}
                     >
-                      <XIcon className="h-3.5 w-3.5" />
+                      <AppIcons.Close className="h-3.5 w-3.5" strokeWidth={1.8} />
                     </Button>
                   )}
                 </div>
@@ -274,7 +266,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       className="h-5 w-5"
                       onClick={handleRemoveScreenshot}
                     >
-                      <XIcon className="h-3 w-3" />
+                      <AppIcons.Close className="h-3 w-3" strokeWidth={1.8} />
                     </Button>
                   </div>
                 )}
@@ -283,7 +275,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                 {error && !setupRequired && (
                   <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-red-500/5 dark:bg-red-500/10 border border-red-500/15 backdrop-blur-md shadow-[0_4px_20px_rgba(239,68,68,0.06)] animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="p-1 rounded-lg bg-red-500/10 dark:bg-red-500/20 text-red-500 flex-shrink-0 mt-0.5">
-                      <AlertCircleIcon className="w-3.5 h-3.5 animate-pulse" />
+                      <AppIcons.Warning className="w-3.5 h-3.5 animate-pulse" strokeWidth={1.7} />
                     </div>
                     <div className="flex-1">
                       <p className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">

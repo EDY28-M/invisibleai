@@ -4,8 +4,8 @@ import { DeepgramStreamManager, fetchSTT, getMicrophoneStream } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
 import { UseCompletionReturn } from "@/types";
 import { MicVAD } from "@ricky0123/vad-web";
-import { LoaderCircleIcon, MicIcon, MicOffIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AppIcons } from "../icons/AppIcons";
 
 interface AutoSpeechVADProps {
   submit: UseCompletionReturn["submit"];
@@ -380,13 +380,13 @@ const AutoSpeechVADInternal = ({
         }
       >
         {loading || isTranscribing ? (
-          <LoaderCircleIcon className="h-4.5 w-4.5 animate-spin text-emerald-500" />
+          <AppIcons.Loader className="h-4.5 w-4.5 animate-spin text-emerald-500" strokeWidth={1.7} />
         ) : userSpeaking ? (
-          <LoaderCircleIcon className="h-4.5 w-4.5 animate-spin text-amber-500" />
+          <AppIcons.MicSpeaking className="h-4.5 w-4.5 text-amber-500" strokeWidth={1.7} />
         ) : listening ? (
-          <MicOffIcon className="h-4.5 w-4.5 animate-pulse text-emerald-600 dark:text-emerald-400" />
+          <AppIcons.MicMuted className="h-4.5 w-4.5 animate-pulse text-emerald-600 dark:text-emerald-400" strokeWidth={1.7} />
         ) : (
-          <MicIcon className="h-4.5 w-4.5" />
+          <AppIcons.Mic className="h-4.5 w-4.5" strokeWidth={1.7} />
         )}
       </Button>
     </>
