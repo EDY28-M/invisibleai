@@ -4,4 +4,4 @@ export * from "./common.function";
 export * from "./invisibleai.api";
 export * from "./memory-extractor.function";
 export * from "./deepgram-stream";
-
+export * from "./streaming-copilot";

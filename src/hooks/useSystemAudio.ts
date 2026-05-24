@@ -3,7 +3,15 @@ import { useWindowResize, useGlobalShortcuts } from ".";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useApp } from "@/contexts";
-import { fetchSTT, fetchAIResponse, DeepgramStreamManager } from "@/lib/functions";
+import {
+  appendStreamingCopilotContext,
+  buildStreamingCopilotDecision,
+  fetchSTT,
+  fetchAIResponse,
+  DeepgramStreamManager,
+  type StreamingChannel,
+  type StreamingCopilotBuffers,
+} from "@/lib/functions";
 import {
   getScreenCaptureErrorMessage,
   requestScreenRecordingPermissionIfNeeded,
@@ -126,9 +134,20 @@ export function useSystemAudio() {
   const isStreamingModeRef = useRef<boolean>(false);
   const streamingMicStreamRef = useRef<MediaStream | null>(null);
   const accumulatedSystemTextRef = useRef<string>("");
+  const streamingCopilotBuffersRef = useRef<StreamingCopilotBuffers>({
+    mic: [],
+    system: [],
+  });
 
   useEffect(() => { isStreamingModeRef.current = isStreamingMode; }, [isStreamingMode]);
   useEffect(() => { accumulatedSystemTextRef.current = accumulatedSystemText; }, [accumulatedSystemText]);
+
+  const resetStreamingCopilotBuffers = useCallback(() => {
+    streamingCopilotBuffersRef.current = {
+      mic: [],
+      system: [],
+    };
+  }, []);
 
   const handleCaptureScreenshot = useCallback(async () => {
     if (isCapturingScreenshot) return;
@@ -822,7 +841,8 @@ export function useSystemAudio() {
       transcription: string,
       prompt: string,
       previousMessages: Message[],
-      shouldSaveToDb: boolean = true
+      shouldSaveToDb: boolean = true,
+      persistedTranscription?: string
     ) => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -838,7 +858,8 @@ export function useSystemAudio() {
 
         // Only attach and clear the screenshot if this is a persistent user/mic message, 
         // to prevent background system streams from consuming it.
-        const isSystemStreamingMessage = !shouldSaveToDb && transcription.startsWith("[Sistema]:");
+        const visibleTranscription = persistedTranscription ?? transcription;
+        const isSystemStreamingMessage = !shouldSaveToDb && visibleTranscription.startsWith("[Sistema]:");
         const activeScreenshot = isSystemStreamingMessage ? null : screenshotImage;
         if (!isSystemStreamingMessage) {
           setScreenshotImage(null);
@@ -861,7 +882,7 @@ export function useSystemAudio() {
         }
 
         let effectivePrompt = prompt;
-        if (isDualChannel) {
+        if (isDualChannel && !isStreamingModeRef.current) {
           effectivePrompt += "\n\nNOTA: Esta es una reunión en tiempo real con doble canal. " +
             "Las transcripciones que comienzan con '[Tú]:' son lo que dice el usuario (tú). " +
             "Las transcripciones que comienzan con '[Sistema]:' son lo que dice la otra persona (el interlocutor o el sistema). " +
@@ -919,7 +940,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           const userMsg = {
             id: generateMessageId("user", timestamp),
             role: "user" as const,
-            content: transcription,
+            content: visibleTranscription,
             timestamp,
           };
           const assistantMsg = {
@@ -933,7 +954,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             ...conversationRef.current,
             messages: [...conversationRef.current.messages, userMsg, assistantMsg],
             updatedAt: timestamp,
-            title: conversationRef.current.title || generateConversationTitle(transcription),
+            title: conversationRef.current.title || generateConversationTitle(visibleTranscription),
           };
 
           setConversation(conversationRef.current);
@@ -948,10 +969,142 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     [selectedAIProvider, allAiProviders, isDualChannel, screenshotImage]
   );
 
+  const handleStreamingCopilotTranscription = useCallback(async (
+    channel: StreamingChannel,
+    text: string
+  ) => {
+    if (!capturingRef.current || !isStreamingModeRef.current) return;
+
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
+
+    setError("");
+
+    const now = Date.now();
+    const displayTranscription =
+      channel === "mic" ? `[Tú]: ${trimmedText}` : `[Sistema]: ${trimmedText}`;
+    const effectiveSystemPrompt = useSystemPromptRef.current
+      ? systemPromptRef.current || DEFAULT_SYSTEM_PROMPT
+      : contextContentRef.current || DEFAULT_SYSTEM_PROMPT;
+
+    const decision = buildStreamingCopilotDecision({
+      channel,
+      text: trimmedText,
+      userPreparationContext: effectiveSystemPrompt,
+      buffers: streamingCopilotBuffersRef.current,
+      now,
+    });
+
+    streamingCopilotBuffersRef.current = appendStreamingCopilotContext(
+      streamingCopilotBuffersRef.current,
+      {
+        channel,
+        text: trimmedText,
+        timestamp: now,
+      },
+      now
+    );
+
+    if (channel === "system") {
+      const prevAccumulated = accumulatedSystemTextRef.current;
+      const newAccumulated = prevAccumulated
+        ? `${prevAccumulated} ${trimmedText}`
+        : trimmedText;
+      setAccumulatedSystemText(newAccumulated);
+      accumulatedSystemTextRef.current = newAccumulated;
+    } else {
+      setAccumulatedSystemText("");
+      accumulatedSystemTextRef.current = "";
+    }
+
+    if (!decision.shouldRespond) {
+      return;
+    }
+
+    const prevTranscription = lastTranscriptionRef.current;
+    const prevAIResponse = lastAIResponseRef.current;
+    const hasPendingMicResponse =
+      channel === "system" &&
+      prevTranscription.startsWith("[Tú]:") &&
+      !isLastTranscriptionSavedRef.current;
+
+    if (hasPendingMicResponse) {
+      return;
+    }
+
+    let updatedMessages = [...conversationRef.current.messages];
+
+    if (prevTranscription && !isLastTranscriptionSavedRef.current) {
+      const timestamp = Date.now();
+      const userMsg = {
+        id: generateMessageId("user", timestamp),
+        role: "user" as const,
+        content: prevTranscription,
+        timestamp,
+      };
+      const assistantMsg = {
+        id: generateMessageId("assistant", timestamp + 1),
+        role: "assistant" as const,
+        content: prevAIResponse,
+        timestamp: timestamp + 1,
+      };
+      updatedMessages.push(userMsg, assistantMsg);
+
+      conversationRef.current = {
+        ...conversationRef.current,
+        messages: [...conversationRef.current.messages, userMsg, assistantMsg],
+        updatedAt: timestamp,
+        title: conversationRef.current.title || generateConversationTitle(prevTranscription),
+      };
+
+      setConversation(conversationRef.current);
+      isLastTranscriptionSavedRef.current = true;
+    }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    setLastTranscription(displayTranscription);
+    setLastAIResponse("");
+    isLastTranscriptionSavedRef.current = !decision.shouldSaveToDb;
+
+    const previousMessagesForAI = updatedMessages.map((msg) => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+
+    await processWithAI(
+      decision.aiUserMessage,
+      decision.aiSystemPrompt,
+      previousMessagesForAI,
+      decision.shouldSaveToDb,
+      displayTranscription
+    );
+  }, [processWithAI]);
+
   const handleNewTranscription = useCallback(async (formattedText: string) => {
     if (!capturingRef.current) return;
 
     setError("");
+
+    if (isStreamingModeRef.current) {
+      if (formattedText.startsWith("[Tú]: ")) {
+        await handleStreamingCopilotTranscription(
+          "mic",
+          formattedText.replace(/^\[Tú\]:\s*/, "")
+        );
+        return;
+      }
+
+      if (formattedText.startsWith("[Sistema]: ")) {
+        await handleStreamingCopilotTranscription(
+          "system",
+          formattedText.replace(/^\[Sistema\]:\s*/, "")
+        );
+        return;
+      }
+    }
 
     let updatedMessages = [...conversationRef.current.messages];
     const prevTranscription = lastTranscriptionRef.current;
@@ -1106,7 +1259,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       previousMessagesForAI,
       true // shouldSaveToDb = true
     );
-  }, [processWithAI]);
+  }, [handleStreamingCopilotTranscription, processWithAI]);
 
   const handleNewTranscriptionRef = useRef(handleNewTranscription);
   useEffect(() => {
@@ -1580,6 +1733,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       setError("");
       clearStreamingPendingTranscript("mic");
       clearStreamingPendingTranscript("system");
+      resetStreamingCopilotBuffers();
 
       if (!selectedSttProviderRef.current.provider && !invisibleaiApiEnabledRef.current) {
         setError("No speech provider selected.");
@@ -1658,6 +1812,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     }
   }, [
     clearStreamingPendingTranscript,
+    resetStreamingCopilotBuffers,
     vadConfig,
     selectedAudioDevices.output.id,
     stopFrontendMicRecording,
@@ -1676,6 +1831,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       isStreamingModeRef.current = false;
       clearStreamingPendingTranscript("mic");
       clearStreamingPendingTranscript("system");
+      resetStreamingCopilotBuffers();
       setInterimTranscription("");
       setSystemInterimTranscription("");
       streamingMicStreamRef.current = null;
@@ -1713,7 +1869,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       setError(`Failed to stop capture: ${errorMessage}`);
       console.error("Stop capture error:", err);
     }
-  }, [clearStreamingPendingTranscript, stopFrontendMicRecording]);
+  }, [clearStreamingPendingTranscript, resetStreamingCopilotBuffers, stopFrontendMicRecording]);
 
   const manualStopAndSend = useCallback(async () => {
     try {
@@ -1896,8 +2052,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     isLastTranscriptionSavedRef.current = true;
     setAccumulatedSystemText("");
     accumulatedSystemTextRef.current = "";
+    resetStreamingCopilotBuffers();
     setScreenshotImage(null);
-  }, []);
+  }, [resetStreamingCopilotBuffers]);
 
   const updateVadConfiguration = useCallback(async (config: VadConfig, overrideDualChannel?: boolean) => {
     const prevEnabled = vadConfig.enabled;
@@ -1925,6 +2082,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           isStreamingModeRef.current = false;
           clearStreamingPendingTranscript("mic");
           clearStreamingPendingTranscript("system");
+          resetStreamingCopilotBuffers();
           setInterimTranscription("");
           setSystemInterimTranscription("");
           if (streamingMicStreamRef.current) {
@@ -1963,6 +2121,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             isStreamingModeRef.current = true;
             clearStreamingPendingTranscript("mic");
             clearStreamingPendingTranscript("system");
+            resetStreamingCopilotBuffers();
             setInterimTranscription("");
             setSystemInterimTranscription("");
 
@@ -1988,6 +2147,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     }
   }, [
     clearStreamingPendingTranscript,
+    resetStreamingCopilotBuffers,
     vadConfig.enabled,
     selectedAudioDevices.output.id,
     selectedAudioDevices.input.id,
@@ -2124,6 +2284,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           isStreamingModeRef.current = true;
           clearStreamingPendingTranscript("mic");
           clearStreamingPendingTranscript("system");
+          resetStreamingCopilotBuffers();
           setInterimTranscription("");
           setSystemInterimTranscription("");
 
@@ -2144,6 +2305,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           isStreamingModeRef.current = false;
           clearStreamingPendingTranscript("mic");
           clearStreamingPendingTranscript("system");
+          resetStreamingCopilotBuffers();
           setInterimTranscription("");
           setSystemInterimTranscription("");
           setMicStream(null);
@@ -2170,6 +2332,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
           setIsStreamingMode(false);
           isStreamingModeRef.current = false;
+          resetStreamingCopilotBuffers();
           setInterimTranscription("");
           setSystemInterimTranscription("");
 
@@ -2204,6 +2367,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     initializeStreaming,
     isDualChannel,
     isStreamingMode,
+    resetStreamingCopilotBuffers,
     selectedAudioDevices.input.id,
     selectedAudioDevices.output.id,
     selectedSttProvider.provider,
