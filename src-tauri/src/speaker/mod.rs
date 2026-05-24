@@ -19,8 +19,10 @@ mod linux;
 use linux::{SpeakerInput as PlatformSpeakerInput, SpeakerStream as PlatformSpeakerStream};
 
 mod commands;
+mod deepgram_stream;
 
 pub use commands::*;
+pub use deepgram_stream::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioDevice {

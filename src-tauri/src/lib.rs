@@ -11,7 +11,7 @@ use tauri_plugin_posthog::{init as posthog_init, PostHogConfig, PostHogOptions};
 use tokio::task::JoinHandle;
 mod speaker;
 use capture::CaptureState;
-use speaker::VadConfig;
+use speaker::{DeepgramStreamState, VadConfig};
 
 #[cfg(target_os = "macos")]
 #[allow(deprecated)]
@@ -41,6 +41,7 @@ pub fn run() {
                 .build(),
         )
         .manage(AudioState::default())
+        .manage(DeepgramStreamState::default())
         .manage(CaptureState::default())
         .manage(shortcuts::WindowVisibility {
             is_hidden: Mutex::new(false),
@@ -117,6 +118,9 @@ pub fn run() {
             speaker::get_audio_sample_rate,
             speaker::get_input_devices,
             speaker::get_output_devices,
+            speaker::start_system_deepgram_stream,
+            speaker::stop_system_deepgram_stream,
+            speaker::get_system_stream_status,
         ])
         .setup(|app| {
 

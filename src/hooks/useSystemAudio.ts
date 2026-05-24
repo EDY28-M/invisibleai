@@ -110,7 +110,6 @@ export function useSystemAudio() {
   const [accumulatedSystemText, setAccumulatedSystemText] = useState<string>("");
 
   const deepgramManagerRef = useRef<DeepgramStreamManager | null>(null);
-  const systemDeepgramManagerRef = useRef<DeepgramStreamManager | null>(null);
   const isStreamingModeRef = useRef<boolean>(false);
   const streamingMicStreamRef = useRef<MediaStream | null>(null);
   const accumulatedSystemTextRef = useRef<string>("");
@@ -227,25 +226,42 @@ export function useSystemAudio() {
 
     const restartBackendCapture = async () => {
       try {
-        await invoke("stop_system_audio_capture");
+        if (isStreamingModeRef.current) {
+          // Restart Rust Deepgram stream with new device
+          const vars = selectedSttProviderRef.current.variables || {};
+          const apiKey = vars.api_key || vars.API_KEY || "";
+          const deviceId =
+            selectedAudioDevices.output.id !== "default"
+              ? selectedAudioDevices.output.id
+              : null;
 
-        if (cancelled || !capturingRef.current || (!vadConfig.enabled && !isStreamingModeRef.current)) {
-          return;
+          await invoke("stop_system_deepgram_stream");
+          if (cancelled || !capturingRef.current) return;
+
+          await invoke("start_system_deepgram_stream", {
+            apiKey,
+            model: vars.model || vars.MODEL || "nova-3",
+            language: vars.language || vars.LANGUAGE || "es-419",
+            deviceId,
+          });
+        } else {
+          // Restart classic VAD capture
+          await invoke("stop_system_audio_capture");
+
+          if (cancelled || !capturingRef.current || !vadConfig.enabled) {
+            return;
+          }
+
+          const deviceId =
+            selectedAudioDevices.output.id !== "default"
+              ? selectedAudioDevices.output.id
+              : null;
+
+          await invoke("start_system_audio_capture", {
+            vadConfig: vadConfig,
+            deviceId,
+          });
         }
-
-        const deviceId =
-          selectedAudioDevices.output.id !== "default"
-            ? selectedAudioDevices.output.id
-            : null;
-
-        const effectiveVadConfig = isStreamingModeRef.current
-          ? { ...vadConfig, enabled: false, max_recording_duration_secs: 86400 }
-          : vadConfig;
-
-        await invoke("start_system_audio_capture", {
-          vadConfig: effectiveVadConfig,
-          deviceId,
-        });
       } catch (err) {
         console.error(
           "Failed to dynamically restart system audio capture on device change:",
@@ -1086,33 +1102,35 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
   const dispatchStreamingTranscript = useCallback((channel: "mic" | "system", customText?: string) => {
     if (!capturingRef.current) return;
-    const manager = channel === "mic" ? deepgramManagerRef.current : systemDeepgramManagerRef.current;
+
+    if (channel === "system") {
+      // System channel is now handled by Rust stream events (system-stream-utterance-end)
+      return;
+    }
+
+    const manager = deepgramManagerRef.current;
     if (!manager) return;
     try {
       const finalText = customText ?? manager.getAccumulatedText();
       manager.reset();
-      if (channel === "mic") {
-        setInterimTranscription("");
-      } else {
-        setSystemInterimTranscription("");
-      }
+      setInterimTranscription("");
 
       if (isStreamingModeRef.current) {
         let utterance = activeSpeechUtterancesRef.current.find(
-          (u) => u.channel === channel && u.isRecording && !u.isDiscarded
+          (u) => u.channel === "mic" && u.isRecording && !u.isDiscarded
         );
 
         const trimmedText = finalText.trim();
 
         if (!utterance) {
           if (!trimmedText) {
-            console.log(`[Streaming] Duplicate or empty trigger with no active ${channel} utterance, skipping.`);
+            console.log(`[Streaming] Duplicate or empty trigger with no active mic utterance, skipping.`);
             return;
           }
           utterance = {
-            id: `${channel}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            id: `mic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             startTime: Date.now() - 1000,
-            channel: channel,
+            channel: "mic",
             isRecording: true,
             isProcessed: false,
             isDiscarded: false,
@@ -1122,11 +1140,11 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
         utterance.isRecording = false;
         utterance.sttPromise = Promise.resolve(trimmedText);
-        console.log(`[Queue] Streaming ${channel} utterance resolved with text: "${trimmedText}"`);
+        console.log(`[Queue] Streaming mic utterance resolved with text: "${trimmedText}"`);
         processSpeechQueueRef.current();
       }
     } catch (err) {
-      console.error(`[Streaming] Error dispatching ${channel} transcript:`, err);
+      console.error(`[Streaming] Error dispatching mic transcript:`, err);
       setError(`Streaming error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, []);
@@ -1158,10 +1176,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       deepgramManagerRef.current.destroy();
       deepgramManagerRef.current = null;
     }
-    if (systemDeepgramManagerRef.current) {
-      systemDeepgramManagerRef.current.destroy();
-      systemDeepgramManagerRef.current = null;
-    }
+
     const vars = selectedSttProviderRef.current.variables || {};
     const apiKey = vars.api_key || vars.API_KEY || "";
     if (!apiKey) {
@@ -1178,7 +1193,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     };
 
     // 1. Microphone Deepgram Stream (Only if micMediaStream is available and we are in Dual Channel / Multihilo mode)
-    let micManager: DeepgramStreamManager | null = null;
     if (micMediaStream && isDualChannelRef.current) {
       const micCallbacks = {
         onTranscript: (_text: string, _isFinal: boolean, fullAccumulated: string) => {
@@ -1196,47 +1210,38 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           setIsPopoverOpen(true);
         },
       };
-      micManager = new DeepgramStreamManager(config, micCallbacks);
+      const micManager = new DeepgramStreamManager(config, micCallbacks);
       deepgramManagerRef.current = micManager;
+      console.log("[Streaming] Starting microphone stream...");
+      await micManager.start(micMediaStream);
     }
 
-    // 2. System Audio Deepgram Stream
-    const systemCallbacks = {
-      onTranscript: (_text: string, _isFinal: boolean, fullAccumulated: string) => {
-        setSystemInterimTranscription(fullAccumulated);
-      },
-      onUtteranceEnd: (finalText: string) => {
-        if (finalText.trim() && capturingRef.current) {
-          console.log("[Streaming] Deepgram system utterance_end triggered:", finalText);
-          dispatchStreamingTranscript("system", finalText);
-        }
-      },
-      onError: (error: Error) => {
-        console.error("[Streaming] System Deepgram error:", error);
-        setError(`Deepgram Streaming (System): ${error.message}`);
-        setIsPopoverOpen(true);
-      },
-    };
-    const systemManager = new DeepgramStreamManager(config, systemCallbacks);
-    systemDeepgramManagerRef.current = systemManager;
+    // 2. System Audio Deepgram Stream (via Rust — handles capture + WebSocket internally)
+    const deviceId =
+      selectedAudioDevices.output.id !== "default"
+        ? selectedAudioDevices.output.id
+        : null;
 
     try {
-      const systemSampleRate = await invoke<number>("get_audio_sample_rate");
-      console.log(`[Streaming] System audio sample rate queried from backend: ${systemSampleRate}Hz`);
-
-      const startPromises: Promise<any>[] = [];
-      if (micManager && micMediaStream) {
-        console.log("[Streaming] Starting microphone stream...");
-        startPromises.push(micManager.start(micMediaStream));
-      }
-      console.log("[Streaming] Starting system audio stream...");
-      startPromises.push(systemManager.startManual(systemSampleRate));
-
-      await Promise.all(startPromises);
+      console.log("[Streaming] Starting system Deepgram stream via Rust...", {
+        apiKey: config.apiKey ? `${config.apiKey.substring(0, 8)}...` : "(empty)",
+        model: config.model,
+        language: config.language,
+        deviceId,
+      });
+      await invoke("start_system_deepgram_stream", {
+        apiKey: config.apiKey,
+        model: config.model,
+        language: config.language,
+        deviceId,
+      });
+      console.log("[Streaming] Rust system Deepgram stream started successfully");
     } catch (err) {
-      setError(`Failed to start Deepgram streaming: ${err}`);
+      console.error("[Streaming] Failed to start system Deepgram stream:", err);
+      setError(`Failed to start system stream: ${err}`);
+      setIsPopoverOpen(true);
     }
-  }, [dispatchStreamingTranscript]);
+  }, [dispatchStreamingTranscript, selectedAudioDevices.output.id]);
 
   const handleMicSpeechDetected = useCallback((audioBlob: Blob) => {
     if (!capturingRef.current) return;
@@ -1295,7 +1300,10 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     let speechUnlisten: (() => void) | undefined;
     let startUnlisten: (() => void) | undefined;
     let discardedUnlisten: (() => void) | undefined;
-    let chunkUnlisten: (() => void) | undefined;
+    let streamStateUnlisten: (() => void) | undefined;
+    let streamTranscriptUnlisten: (() => void) | undefined;
+    let streamUtteranceEndUnlisten: (() => void) | undefined;
+    let streamErrorUnlisten: (() => void) | undefined;
     let cancelled = false;
 
     const setupEventListeners = async () => {
@@ -1338,13 +1346,11 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           utterance.isRecording = false;
           utterance.base64Audio = base64Audio;
 
-          // Trigger the STT immediately in parallel!
           utterance.sttPromise = (async () => {
             let providerConfig = allSttProvidersRef.current.find(
               (p) => p.id === selectedSttProviderRef.current.provider
             );
 
-            // FALLBACK for system audio in deepgram-streaming mode
             if (providerConfig?.id === "deepgram-streaming") {
               const vars = selectedSttProviderRef.current.variables || {};
               const apiKey = vars.api_key || vars.API_KEY || "";
@@ -1398,14 +1404,65 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         if (cancelled) { uDiscarded(); return; }
         discardedUnlisten = uDiscarded;
 
-        const uChunk = await listen<number[]>("system-audio-chunk", (event) => {
-          if (!capturingRef.current || !isStreamingModeRef.current) return;
-          if (systemDeepgramManagerRef.current) {
-            systemDeepgramManagerRef.current.injectRawAudio(event.payload);
-          }
+        // Rust system Deepgram stream events
+        const uStreamState = await listen<string>("system-stream-state", (event) => {
+          console.log("[Streaming] System stream state changed:", event.payload);
         });
-        if (cancelled) { uChunk(); return; }
-        chunkUnlisten = uChunk;
+        if (cancelled) { uStreamState(); return; }
+        streamStateUnlisten = uStreamState;
+
+        const uStreamTranscript = await listen<{ text: string; is_final: boolean; accumulated: string }>(
+          "system-stream-transcript",
+          (event) => {
+            console.log("[Streaming] System stream transcript:", event.payload.text, "is_final:", event.payload.is_final, "accumulated:", event.payload.accumulated);
+            if (!capturingRef.current || !isStreamingModeRef.current) {
+              console.warn("[Streaming] Ignoring transcript: capturing=", capturingRef.current, "isStreamingMode=", isStreamingModeRef.current);
+              return;
+            }
+            setSystemInterimTranscription(event.payload.accumulated);
+          }
+        );
+        if (cancelled) { uStreamTranscript(); return; }
+        streamTranscriptUnlisten = uStreamTranscript;
+
+        const uStreamUtteranceEnd = await listen<{ text: string }>(
+          "system-stream-utterance-end",
+          (event) => {
+            console.log("[Streaming] System stream utterance_end:", event.payload);
+            if (!capturingRef.current || !isStreamingModeRef.current) {
+              console.warn("[Streaming] Ignoring utterance_end: capturing=", capturingRef.current, "isStreamingMode=", isStreamingModeRef.current);
+              return;
+            }
+            const { text } = event.payload;
+            if (!text.trim()) return;
+
+            console.log("[Streaming] Rust system utterance_end:", text);
+            setSystemInterimTranscription("");
+
+            const utterance: SpeechUtterance = {
+              id: `system_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              startTime: Date.now(),
+              channel: "system",
+              isRecording: false,
+              isProcessed: false,
+              isDiscarded: false,
+              sttPromise: Promise.resolve(text.trim()),
+            };
+            activeSpeechUtterancesRef.current.push(utterance);
+            processSpeechQueueRef.current();
+          }
+        );
+        if (cancelled) { uStreamUtteranceEnd(); return; }
+        streamUtteranceEndUnlisten = uStreamUtteranceEnd;
+
+        const uStreamError = await listen<string>("system-stream-error", (event) => {
+          console.error("[Streaming] System Deepgram error from Rust:", event.payload);
+          if (!capturingRef.current) return;
+          setError(`Deepgram Streaming (System): ${event.payload}`);
+          setIsPopoverOpen(true);
+        });
+        if (cancelled) { uStreamError(); return; }
+        streamErrorUnlisten = uStreamError;
 
       } catch (err) {
         setError("Failed to setup speech listeners");
@@ -1419,7 +1476,10 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       if (speechUnlisten) speechUnlisten();
       if (startUnlisten) startUnlisten();
       if (discardedUnlisten) discardedUnlisten();
-      if (chunkUnlisten) chunkUnlisten();
+      if (streamStateUnlisten) streamStateUnlisten();
+      if (streamTranscriptUnlisten) streamTranscriptUnlisten();
+      if (streamUtteranceEndUnlisten) streamUtteranceEndUnlisten();
+      if (streamErrorUnlisten) streamErrorUnlisten();
     };
   }, []);
 
@@ -1461,6 +1521,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         (p) => p.id === selectedSttProviderRef.current.provider
       );
       const streamingEnabled = currentSttProvider?.streaming === true;
+      console.log("[StartCapture] Provider:", currentSttProvider?.id, "streaming:", streamingEnabled, "isContinuous:", isContinuous, "isDualChannel:", isDualChannel, "vadConfig.enabled:", vadConfig.enabled);
       setIsStreamingMode(streamingEnabled);
       isStreamingModeRef.current = streamingEnabled;
       setInterimTranscription("");
@@ -1472,24 +1533,29 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
       await stopFrontendMicRecording(false);
       await invoke<string>("stop_system_audio_capture");
+      try { await invoke("stop_system_deepgram_stream"); } catch {}
 
-      const deviceId =
-        selectedAudioDevices.output.id !== "default"
-          ? selectedAudioDevices.output.id
-          : null;
+      if (streamingEnabled) {
+        // Streaming mode: Rust handles system audio capture + Deepgram WebSocket directly
+        if (isDualChannel) {
+          const micStream = await getMicrophoneStream(selectedAudioDevices.input.id);
+          setMicStream(micStream);
+          streamingMicStreamRef.current = micStream;
+          await initializeStreaming(micStream);
+        } else {
+          await initializeStreaming(null);
+        }
+      } else {
+        // Non-streaming mode: classic VAD capture
+        const deviceId =
+          selectedAudioDevices.output.id !== "default"
+            ? selectedAudioDevices.output.id
+            : null;
 
-      const effectiveVadConfig = streamingEnabled
-        ? { ...vadConfig, enabled: false, max_recording_duration_secs: 86400 }
-        : vadConfig;
-
-      await invoke<string>("start_system_audio_capture", {
-        vadConfig: effectiveVadConfig,
-        deviceId: deviceId,
-      });
-
-      if (streamingEnabled && !isDualChannel) {
-        console.log("[Streaming] Starting system audio stream immediately in Auto mode");
-        await initializeStreaming(null);
+        await invoke<string>("start_system_audio_capture", {
+          vadConfig: vadConfig,
+          deviceId: deviceId,
+        });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -1504,10 +1570,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         deepgramManagerRef.current.destroy();
         deepgramManagerRef.current = null;
       }
-      if (systemDeepgramManagerRef.current) {
-        systemDeepgramManagerRef.current.destroy();
-        systemDeepgramManagerRef.current = null;
-      }
+      try { await invoke("stop_system_deepgram_stream"); } catch {}
       setIsStreamingMode(false);
       isStreamingModeRef.current = false;
       setInterimTranscription("");
@@ -1765,10 +1828,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             deepgramManagerRef.current.destroy();
             deepgramManagerRef.current = null;
           }
-          if (systemDeepgramManagerRef.current) {
-            systemDeepgramManagerRef.current.destroy();
-            systemDeepgramManagerRef.current = null;
-          }
+          try { await invoke("stop_system_deepgram_stream"); } catch {}
           setIsStreamingMode(false);
           isStreamingModeRef.current = false;
           setInterimTranscription("");
@@ -1809,14 +1869,13 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             isStreamingModeRef.current = true;
             setInterimTranscription("");
 
-            const effectiveVadConfig = { ...config, enabled: false, max_recording_duration_secs: 86400 };
-            await invoke("start_system_audio_capture", {
-              vadConfig: effectiveVadConfig,
-              deviceId: deviceId,
-            });
-
-            if (!activeDualChannel) {
-              console.log("[Streaming] Switched to Auto mode, starting system audio stream immediately");
+            if (activeDualChannel) {
+              const micStream = await getMicrophoneStream(selectedAudioDevices.input.id);
+              setMicStream(micStream);
+              streamingMicStreamRef.current = micStream;
+              await initializeStreaming(micStream);
+            } else {
+              console.log("[Streaming] Switched to Auto mode, starting system stream via Rust");
               await initializeStreaming(null);
             }
           } else {
@@ -1830,11 +1889,57 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     } catch (error) {
       console.error("Failed to update VAD config:", error);
     }
-  }, [vadConfig.enabled, selectedAudioDevices.output.id, isDualChannel, initializeStreaming]);
-  // Dynamically cleanup microphone stream if the user switches from Multihilo to Auto on-the-fly while streaming is active
+  }, [vadConfig.enabled, selectedAudioDevices.output.id, selectedAudioDevices.input.id, isDualChannel, initializeStreaming]);
+  // Dynamically add/remove microphone stream when switching between Auto and Multihilo during active streaming
   useEffect(() => {
     if (capturing && isStreamingMode) {
-      if (!isDualChannel) {
+      if (isDualChannel) {
+        // Switched to Multihilo: add mic stream (system stream stays in Rust)
+        if (!deepgramManagerRef.current) {
+          (async () => {
+            try {
+              const micStream = await getMicrophoneStream(selectedAudioDevices.input.id);
+              setMicStream(micStream);
+              streamingMicStreamRef.current = micStream;
+
+              const vars = selectedSttProviderRef.current.variables || {};
+              const apiKey = vars.api_key || vars.API_KEY || "";
+              if (!apiKey) return;
+
+              const config = {
+                apiKey,
+                model: vars.model || vars.MODEL || "nova-3",
+                language: vars.language || vars.LANGUAGE || "es-419",
+                utteranceEndMs: 1000,
+                endpointing: 10,
+              };
+
+              const micCallbacks = {
+                onTranscript: (_text: string, _isFinal: boolean, fullAccumulated: string) => {
+                  setInterimTranscription(fullAccumulated);
+                },
+                onUtteranceEnd: (finalText: string) => {
+                  if (finalText.trim() && capturingRef.current) {
+                    dispatchStreamingTranscript("mic", finalText);
+                  }
+                },
+                onError: (error: Error) => {
+                  console.error("[Streaming] Mic Deepgram error:", error);
+                  setError(`Deepgram Streaming (Mic): ${error.message}`);
+                },
+              };
+
+              const micManager = new DeepgramStreamManager(config, micCallbacks);
+              deepgramManagerRef.current = micManager;
+              await micManager.start(micStream);
+              console.log("[Streaming] Added mic stream on-the-fly (switched to Multihilo)");
+            } catch (err) {
+              console.error("Failed to add mic stream for Multihilo:", err);
+            }
+          })();
+        }
+      } else {
+        // Switched to Auto: destroy mic manager (system stream stays in Rust)
         if (deepgramManagerRef.current) {
           console.log("[Streaming] Stopping microphone stream on-the-fly (switched to Auto mode)");
           deepgramManagerRef.current.destroy();
@@ -1853,7 +1958,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         }
       }
     }
-  }, [isDualChannel, isStreamingMode, capturing]);
+  }, [isDualChannel, isStreamingMode, capturing, dispatchStreamingTranscript, selectedAudioDevices.input.id]);
 
   // React to STT provider changes during active capture:
   // Transition between streaming and non-streaming modes when the user switches providers.
@@ -1886,13 +1991,15 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           isStreamingModeRef.current = true;
           setInterimTranscription("");
 
-          const effectiveVadConfig = { ...vadConfig, enabled: false, max_recording_duration_secs: 86400 };
-          await invoke("start_system_audio_capture", {
-            vadConfig: effectiveVadConfig,
-            deviceId,
-          });
-
-          if (!isDualChannel) {
+          if (isDualChannel) {
+            const micStream = await navigator.mediaDevices.getUserMedia({
+              audio: selectedAudioDevices.input.id !== "default"
+                ? { deviceId: { exact: selectedAudioDevices.input.id } }
+                : true,
+            });
+            streamingMicStreamRef.current = micStream;
+            await initializeStreaming(micStream);
+          } else {
             await initializeStreaming(null);
           }
         } catch (err) {
@@ -1903,15 +2010,14 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         // Transition: streaming → non-streaming (classic VAD)
         console.log("[Provider Switch] Transitioning to non-streaming (classic VAD) mode");
         try {
-          // Tear down Deepgram managers
+          // Tear down mic Deepgram manager
           if (deepgramManagerRef.current) {
             deepgramManagerRef.current.destroy();
             deepgramManagerRef.current = null;
           }
-          if (systemDeepgramManagerRef.current) {
-            systemDeepgramManagerRef.current.destroy();
-            systemDeepgramManagerRef.current = null;
-          }
+          // Stop Rust-side system Deepgram stream
+          await invoke("stop_system_deepgram_stream");
+
           setIsStreamingMode(false);
           isStreamingModeRef.current = false;
           setInterimTranscription("");
@@ -1929,7 +2035,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           }
 
           // Restart backend with classic VAD config
-          await invoke("stop_system_audio_capture");
           await invoke("start_system_audio_capture", {
             vadConfig,
             deviceId,
