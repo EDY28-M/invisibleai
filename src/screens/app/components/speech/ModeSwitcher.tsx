@@ -30,7 +30,7 @@ export const ModeSwitcher = ({
   return (
     <div
       className={cn(
-        "h-11 flex bg-neutral-200/40 dark:bg-neutral-900/30 backdrop-blur-xl rounded-2xl p-1 gap-1 border border-black/5 dark:border-white/5 shadow-inner items-center transition-all duration-300 shrink-0",
+        "min-h-11 h-auto max-w-full flex flex-wrap bg-neutral-200/40 dark:bg-neutral-900/30 backdrop-blur-xl rounded-2xl p-1 gap-1 border border-black/5 dark:border-white/5 shadow-inner items-center transition-all duration-300 shrink-0",
         disabled && "opacity-50 pointer-events-none"
       )}
     >
@@ -101,7 +101,7 @@ export const ModeSwitcher = ({
       {isStreamingMode && onStreamingSmartModeChange && (
         <label
           className={cn(
-            "h-9 px-3 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 text-xs font-semibold whitespace-nowrap",
+            "h-9 px-3 max-[640px]:px-2 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 text-xs font-semibold whitespace-nowrap",
             streamingSmartMode
               ? "bg-emerald-500/[0.08] dark:bg-emerald-400/[0.08] border border-emerald-500/20 dark:border-emerald-400/15 text-emerald-800 dark:text-emerald-300"
               : "text-muted-foreground/80 hover:text-foreground hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30"
@@ -114,7 +114,9 @@ export const ModeSwitcher = ({
               streamingSmartMode ? "text-emerald-500 dark:text-emerald-400 scale-105" : "opacity-70"
             )}
           />
-          <span className="font-semibold tracking-wide">Modo inteligente</span>
+          <span className="font-semibold tracking-wide">
+            <span className="max-[640px]:hidden">Modo </span>inteligente
+          </span>
           <Switch
             checked={streamingSmartMode}
             onCheckedChange={onStreamingSmartModeChange}

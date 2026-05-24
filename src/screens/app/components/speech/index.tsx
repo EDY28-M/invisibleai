@@ -173,7 +173,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
           <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
             { }
             <div className="flex-shrink-0 p-3.5 border-b border-black/5 dark:border-white/5">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 { }
                 {!setupRequired && (
                   <ModeSwitcher
@@ -194,7 +194,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                   <h2 className="font-semibold text-sm">Setup Required</h2>
                 )}
 
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="ml-auto flex items-center gap-2 flex-shrink-0 max-w-full">
                   {/* Screenshot Capture Button */}
                   {hasActiveLicense && !setupRequired && supportsImages && (
                     <Button
@@ -202,7 +202,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       onClick={handleCaptureScreenshot}
                       disabled={isCapturingScreenshot}
                       className={cn(
-                        "h-9 rounded-[12px] text-[10px] font-black tracking-widest uppercase transition-all duration-300 flex items-center gap-1.5 px-3 select-none active:scale-95 border cursor-pointer",
+                        "h-9 rounded-[12px] text-[10px] font-black tracking-widest uppercase transition-all duration-300 flex items-center gap-1.5 px-3 max-[640px]:px-2 select-none active:scale-95 border cursor-pointer",
                         screenshotImage
                           ? "bg-gradient-to-b from-sky-500 to-sky-600 border-sky-400/30 text-white shadow-[0_4px_16px_rgba(14,165,233,0.22)]"
                           : "bg-neutral-200/40 dark:bg-neutral-800/40 text-muted-foreground/90 hover:text-foreground hover:bg-neutral-200/80 dark:hover:bg-neutral-800/80 border-black/5 dark:border-white/5 shadow-xs"
@@ -214,7 +214,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       ) : (
                         <CameraIcon className={cn("w-3.5 h-3.5", screenshotImage ? "text-white" : "text-sky-500/80")} />
                       )}
-                      Screenshot
+                      <span className="max-[640px]:hidden">Screenshot</span>
                     </Button>
                   )}
 
@@ -223,7 +223,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                     <Button
                       size="sm"
                       onClick={startNewConversation}
-                      className="h-9 rounded-[12px] text-[10px] font-black tracking-widest uppercase bg-neutral-200/40 dark:bg-neutral-800/40 text-muted-foreground/90 hover:text-foreground hover:bg-neutral-200/80 dark:hover:bg-neutral-800/80 border border-black/5 dark:border-white/5 shadow-xs transition-all duration-300 flex items-center gap-1.5 px-3 select-none active:scale-95 cursor-pointer"
+                      className="h-9 rounded-[12px] text-[10px] font-black tracking-widest uppercase bg-neutral-200/40 dark:bg-neutral-800/40 text-muted-foreground/90 hover:text-foreground hover:bg-neutral-200/80 dark:hover:bg-neutral-800/80 border border-black/5 dark:border-white/5 shadow-xs transition-all duration-300 flex items-center gap-1.5 px-3 max-[640px]:px-2 select-none active:scale-95 cursor-pointer"
                       title="Start a new conversation"
                     >
                       <PlusIcon className="w-3.5 h-3.5 text-emerald-500/80" />
