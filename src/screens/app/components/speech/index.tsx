@@ -68,6 +68,8 @@ export const SystemAudio = (props: useSystemAudioType) => {
     useConversationalMemory,
     setUseConversationalMemory,
     isStreamingMode,
+    streamingSmartMode,
+    setStreamingSmartMode,
     interimTranscription,
     systemInterimTranscription,
     screenshotImage,
@@ -177,7 +179,10 @@ export const SystemAudio = (props: useSystemAudioType) => {
                   <ModeSwitcher
                     isVadMode={isVadMode}
                     isDualChannel={isDualChannel}
+                    isStreamingMode={isStreamingMode}
+                    streamingSmartMode={streamingSmartMode}
                     onModeChange={handleModeChange}
+                    onStreamingSmartModeChange={setStreamingSmartMode}
                     disabled={
                       isRecordingInContinuousMode ||
                       isProcessing ||

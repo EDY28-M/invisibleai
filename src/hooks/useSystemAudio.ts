@@ -6,11 +6,13 @@ import { useApp } from "@/contexts";
 import {
   appendStreamingCopilotContext,
   buildStreamingCopilotDecision,
+  shouldSuppressSmartSystemResponse,
   fetchSTT,
   fetchAIResponse,
   DeepgramStreamManager,
   type StreamingChannel,
   type StreamingCopilotBuffers,
+  type StreamingSmartSystemResponseRecord,
 } from "@/lib/functions";
 import {
   getScreenCaptureErrorMessage,
@@ -126,20 +128,24 @@ export function useSystemAudio() {
   const [isStreamingMode, setIsStreamingMode] = useState<boolean>(false);
   const [interimTranscription, setInterimTranscription] = useState<string>("");
   const [systemInterimTranscription, setSystemInterimTranscription] = useState<string>("");
+  const [streamingSmartMode, setStreamingSmartMode] = useState<boolean>(false);
   const [screenshotImage, setScreenshotImage] = useState<string | null>(null);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState<boolean>(false);
   const [accumulatedSystemText, setAccumulatedSystemText] = useState<string>("");
 
   const deepgramManagerRef = useRef<DeepgramStreamManager | null>(null);
   const isStreamingModeRef = useRef<boolean>(false);
+  const streamingSmartModeRef = useRef<boolean>(false);
   const streamingMicStreamRef = useRef<MediaStream | null>(null);
   const accumulatedSystemTextRef = useRef<string>("");
   const streamingCopilotBuffersRef = useRef<StreamingCopilotBuffers>({
     mic: [],
     system: [],
   });
+  const streamingLastSmartSystemResponseRef = useRef<StreamingSmartSystemResponseRecord | null>(null);
 
   useEffect(() => { isStreamingModeRef.current = isStreamingMode; }, [isStreamingMode]);
+  useEffect(() => { streamingSmartModeRef.current = streamingSmartMode; }, [streamingSmartMode]);
   useEffect(() => { accumulatedSystemTextRef.current = accumulatedSystemText; }, [accumulatedSystemText]);
 
   const resetStreamingCopilotBuffers = useCallback(() => {
@@ -147,6 +153,7 @@ export function useSystemAudio() {
       mic: [],
       system: [],
     };
+    streamingLastSmartSystemResponseRef.current = null;
   }, []);
 
   const handleCaptureScreenshot = useCallback(async () => {
@@ -327,6 +334,13 @@ export function useSystemAudio() {
     safeLocalStorage.setItem("system_audio_use_memory", String(value));
   }, []);
 
+  const updateStreamingSmartMode = useCallback((value: boolean) => {
+    setStreamingSmartMode(value);
+    streamingSmartModeRef.current = value;
+    streamingLastSmartSystemResponseRef.current = null;
+    safeLocalStorage.setItem("system_audio_streaming_smart_mode", String(value));
+  }, []);
+
   useEffect(() => {
     const savedContext = safeLocalStorage.getItem(
       STORAGE_KEYS.SYSTEM_AUDIO_CONTEXT
@@ -344,6 +358,11 @@ export function useSystemAudio() {
     const savedMemory = safeLocalStorage.getItem("system_audio_use_memory");
     if (savedMemory) {
       setUseConversationalMemory(savedMemory === "true");
+    }
+
+    const savedStreamingSmartMode = safeLocalStorage.getItem("system_audio_streaming_smart_mode");
+    if (savedStreamingSmartMode) {
+      setStreamingSmartMode(savedStreamingSmartMode === "true");
     }
 
     const savedVadConfig = safeLocalStorage.getItem("vad_config");
@@ -992,6 +1011,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       text: trimmedText,
       userPreparationContext: effectiveSystemPrompt,
       buffers: streamingCopilotBuffersRef.current,
+      systemDetectionMode: streamingSmartModeRef.current ? "smart" : "standard",
       now,
     });
 
@@ -1019,6 +1039,27 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
     if (!decision.shouldRespond) {
       return;
+    }
+
+    if (channel === "system" && streamingSmartModeRef.current) {
+      const shouldSuppress = shouldSuppressSmartSystemResponse({
+        currentText: trimmedText,
+        decision,
+        previous: streamingLastSmartSystemResponseRef.current,
+        now,
+      });
+
+      if (shouldSuppress) {
+        return;
+      }
+
+      streamingLastSmartSystemResponseRef.current = {
+        text: trimmedText,
+        timestamp: now,
+        currentEventKind: decision.currentEventKind,
+        triggerScore: decision.triggerScore,
+        confidence: decision.confidence,
+      };
     }
 
     const prevTranscription = lastTranscriptionRef.current;
@@ -2514,6 +2555,8 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     setUseConversationalMemory: updateConversationalMemory,
 
     isStreamingMode,
+    streamingSmartMode,
+    setStreamingSmartMode: updateStreamingSmartMode,
     interimTranscription,
     systemInterimTranscription,
     initializeStreaming,
