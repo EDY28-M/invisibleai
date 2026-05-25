@@ -62,10 +62,9 @@ export const ResultsSection = ({
 
   return (
     <div className="rounded-[18px] border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 p-4 space-y-4 shadow-inner">
-      {}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <SparklesIcon className="w-3.5 h-3.5 text-amber-500" />
+          <SparklesIcon className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
           <h4 className="text-xs font-semibold text-foreground/90">
             {conversationMode ? "Conversation" : "AI Response"}
           </h4>
@@ -83,10 +82,8 @@ export const ResultsSection = ({
         </div>
       </div>
 
-      {}
       {!conversationMode && (
         <div className="space-y-3">
-          {}
           {lastTranscription && (() => {
             const { roleLabel, text, roleType } = parseMessage(lastTranscription);
             if (isStreamingMode && roleType === "system-loopback") return null;
@@ -94,7 +91,7 @@ export const ResultsSection = ({
               <p className="text-[11px] text-muted-foreground bg-black/5 dark:bg-white/5 px-3 py-2 rounded-lg border border-black/5 dark:border-white/5">
                 <span className={cn(
                   "font-bold uppercase tracking-wider text-[9px] mr-1.5",
-                  roleType === "user-mic" && "text-emerald-500 dark:text-emerald-400",
+                  roleType === "user-mic" && "text-zinc-600 dark:text-zinc-400",
                   roleType === "system-loopback" && "text-primary"
                 )}>
                   {roleLabel}:
@@ -104,29 +101,27 @@ export const ResultsSection = ({
             );
           })()}
 
-          {/* Interim Transcription for Streaming mode (Mic & System Audio) */}
           {interimTranscription && (
-            <p className="text-[11px] text-muted-foreground bg-emerald-500/5 dark:bg-emerald-500/5 px-3 py-2 rounded-lg border border-emerald-500/10 dark:border-emerald-500/10 animate-pulse">
-              <span className="font-bold uppercase tracking-wider text-[9px] mr-1.5 text-emerald-500 dark:text-emerald-400">
+            <p className="text-[11px] text-muted-foreground bg-zinc-500/5 px-3 py-2 rounded-lg border border-zinc-500/10 animate-pulse">
+              <span className="font-bold uppercase tracking-wider text-[9px] mr-1.5 text-zinc-600 dark:text-zinc-400">
                 Tú (hablando...):
               </span>{" "}
               {interimTranscription}
-              <span className="inline-block w-1.5 h-3 bg-emerald-500 animate-ping ml-1 align-middle" />
+              <span className="inline-block w-1.5 h-3 bg-zinc-500 animate-ping ml-1 align-middle" />
             </p>
           )}
 
           {(accumulatedSystemText || systemInterimTranscription) && (
-            <p className="text-[11px] text-muted-foreground bg-amber-500/5 dark:bg-amber-500/5 px-3 py-2 rounded-lg border border-amber-500/10 dark:border-amber-500/10 animate-pulse">
-              <span className="font-bold uppercase tracking-wider text-[9px] mr-1.5 text-amber-500 dark:text-amber-400">
+            <p className="text-[11px] text-muted-foreground bg-zinc-500/5 px-3 py-2 rounded-lg border border-zinc-500/10 animate-pulse">
+              <span className="font-bold uppercase tracking-wider text-[9px] mr-1.5 text-zinc-500 dark:text-zinc-400">
                 Sistema (escuchando...):
               </span>{" "}
               {accumulatedSystemText}
               {systemInterimTranscription ? ` ${systemInterimTranscription}` : ""}
-              <span className="inline-block w-1.5 h-3 bg-amber-500 animate-ping ml-1 align-middle" />
+              <span className="inline-block w-1.5 h-3 bg-zinc-400 animate-ping ml-1 align-middle" />
             </p>
           )}
 
-          {}
           {hasResponse && (
             <div>
               {isAIProcessing && !lastAIResponse ? (
@@ -149,10 +144,8 @@ export const ResultsSection = ({
         </div>
       )}
 
-      {}
       {conversationMode && (
         <div className="space-y-3">
-          {}
           {hasResponse && (
             <div className="rounded-[18px] rounded-bl-[4px] bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 p-3.5 mr-6 shadow-xs transition-all">
               <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
@@ -187,18 +180,18 @@ export const ResultsSection = ({
               <div className={cn(
                 "rounded-[18px] rounded-br-[4px] border p-3.5 shadow-xs ml-6 transition-all",
                 isUserMic
-                  ? "border-emerald-500/10 bg-emerald-500/5 text-foreground"
+                  ? "border-zinc-500/10 bg-zinc-500/5 text-foreground"
                   : "border-primary/10 bg-primary/5 text-foreground"
               )}>
                 <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
                   {isUserMic ? (
-                    <MicIcon className="h-3 w-3 text-emerald-500" />
+                    <MicIcon className="h-3 w-3 text-zinc-500" />
                   ) : (
                     <HeadphonesIcon className="h-3 w-3 text-primary" />
                   )}
                   <span className={cn(
                     "text-[9px] font-bold uppercase tracking-wide",
-                    isUserMic ? "text-emerald-500" : "text-primary"
+                    isUserMic ? "text-zinc-600 dark:text-zinc-400" : "text-primary"
                   )}>
                     {roleLabel}
                   </span>
@@ -208,34 +201,33 @@ export const ResultsSection = ({
             );
           })()}
 
-          {/* Interim Speech Bubbles for Streaming mode (Mic & System Audio) */}
           {interimTranscription && (
-            <div className="rounded-[18px] rounded-br-[4px] border border-emerald-500/15 bg-emerald-500/5 text-foreground p-3.5 ml-6 animate-pulse transition-all">
+            <div className="rounded-[18px] rounded-br-[4px] border border-zinc-500/15 bg-zinc-500/5 text-foreground p-3.5 ml-6 animate-pulse transition-all">
               <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
-                <MicIcon className="h-3 w-3 text-emerald-500" />
-                <span className="text-[9px] font-bold uppercase tracking-wide text-emerald-500">
+                <MicIcon className="h-3 w-3 text-zinc-500" />
+                <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
                   Tú (hablando...)
                 </span>
               </div>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {interimTranscription}
-                <span className="inline-block w-1.5 h-3.5 bg-emerald-500 animate-ping ml-1 align-middle" />
+                <span className="inline-block w-1.5 h-3.5 bg-zinc-500 animate-ping ml-1 align-middle" />
               </p>
             </div>
           )}
 
           {(accumulatedSystemText || systemInterimTranscription) && (
-            <div className="rounded-[18px] rounded-br-[4px] border border-amber-500/15 bg-amber-500/5 text-foreground p-3.5 ml-6 animate-pulse transition-all">
+            <div className="rounded-[18px] rounded-br-[4px] border border-zinc-500/15 bg-zinc-500/5 text-foreground p-3.5 ml-6 animate-pulse transition-all">
               <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
-                <HeadphonesIcon className="h-3 w-3 text-amber-500" />
-                <span className="text-[9px] font-bold uppercase tracking-wide text-amber-500">
+                <HeadphonesIcon className="h-3 w-3 text-zinc-400" />
+                <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                   Sistema (escuchando...)
                 </span>
               </div>
               <p className="text-sm leading-relaxed text-muted-foreground">
                 {accumulatedSystemText}
                 {systemInterimTranscription ? ` ${systemInterimTranscription}` : ""}
-                <span className="inline-block w-1.5 h-3.5 bg-amber-500 animate-ping ml-1 align-middle" />
+                <span className="inline-block w-1.5 h-3.5 bg-zinc-400 animate-ping ml-1 align-middle" />
               </p>
             </div>
           )}
@@ -265,7 +257,7 @@ export const ResultsSection = ({
                           "p-2.5 text-[11px] transition-all border",
                           isUserRole
                             ? isUserMic
-                              ? "bg-emerald-500/5 border-emerald-500/10 rounded-[12px] rounded-br-[2px] ml-4"
+                              ? "bg-zinc-500/5 border-zinc-500/10 rounded-[12px] rounded-br-[2px] ml-4"
                               : "bg-primary/5 border-primary/10 rounded-[12px] rounded-br-[2px] ml-4"
                             : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 rounded-[12px] rounded-bl-[2px] mr-4"
                         )}
@@ -273,7 +265,7 @@ export const ResultsSection = ({
                         <div className="flex items-center justify-between gap-2 mb-1 opacity-60">
                           <span className={cn(
                             "text-[8px] font-bold uppercase tracking-wider",
-                            isUserMic && "text-emerald-500",
+                            isUserMic && "text-zinc-600 dark:text-zinc-400",
                             isSystemLoopback && "text-primary",
                             (!isUserMic && !isSystemLoopback) && "text-muted-foreground"
                           )}>

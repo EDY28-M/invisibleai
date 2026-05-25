@@ -19,6 +19,7 @@ import {
 import {
   AudioLines,
   AudioWaveform,
+  Brain,
   Layers2,
   Mic,
   Plus,
@@ -28,6 +29,7 @@ import {
 export const AppIcons = {
   Activity: AudioLines,
   Attachment,
+  BrainToggle: Brain,
   Auto: AudioLines,
   Camera,
   Check: CheckCircle,

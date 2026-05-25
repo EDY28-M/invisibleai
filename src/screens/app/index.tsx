@@ -19,11 +19,11 @@ const App = () => {
   const { customizable, selectedAudioDevices } = useAppContext();
   const platform = getPlatform();
 
-  const openDashboard = async () => {
+  const toggleDashboard = async () => {
     try {
-      await invoke("open_dashboard");
+      await invoke("toggle_dashboard");
     } catch (error) {
-      console.error("Failed to open dashboard:", error);
+      console.error("Failed to toggle dashboard:", error);
     }
   };
 
@@ -81,17 +81,17 @@ const App = () => {
           {!systemAudio?.capturing ? (
             <div className="w-full flex flex-row gap-2 items-center">
               <Completion isHidden={isHidden} />
-              <Button
-                size="icon"
-                className="cursor-pointer h-9 w-9 rounded-[14px] border border-amber-500/10 dark:border-amber-400/5 bg-amber-500/5 dark:bg-amber-400/5 hover:bg-amber-500/15 dark:hover:bg-amber-400/15 text-amber-600 dark:text-amber-400 shadow-xs transition-all duration-300 hover:scale-105 active:scale-95 shrink-0"
-                title="Open Dev Space"
-                onClick={openDashboard}
-              >
-                <AppIcons.Dashboard className="h-4 w-4" strokeWidth={1.7} />
-              </Button>
             </div>
           ) : null}
 
+          <Button
+            size="icon"
+            className="cursor-pointer h-9 w-9 rounded-[14px] border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-foreground/60 hover:text-foreground shadow-xs transition-all duration-300 hover:scale-105 active:scale-95 shrink-0"
+            title="Toggle dashboard"
+            onClick={toggleDashboard}
+          >
+            <AppIcons.BrainToggle className="h-4 w-4" strokeWidth={1.7} />
+          </Button>
           <Updater />
           <DragButton />
         </Card>
