@@ -13,6 +13,7 @@ import curl2Json from "@bany/curl-to-json";
 import { CHUNK_POLL_INTERVAL_MS } from "../chat-constants";
 import { getResponseSettings, RESPONSE_LENGTHS, LANGUAGES } from "@/lib";
 import { MARKDOWN_FORMATTING_INSTRUCTIONS } from "@/config/constants";
+import { serverApi } from "@/lib/server-api";
 
 const curlJsonCache = new Map<string, any>();
 function getCachedCurlJson(curl: string) {
@@ -22,6 +23,41 @@ function getCachedCurlJson(curl: string) {
     curlJsonCache.set(curl, cached);
   }
   return cached;
+}
+
+/** Builds a messages array compatible with the InvisibleAI server /api/chat endpoint. */
+function buildServerMessages(
+  systemPrompt: string | undefined,
+  history: Message[],
+  userMessage: string,
+  imagesBase64: string[]
+): Array<{ role: string; content: any }> {
+  const messages: Array<{ role: string; content: any }> = [];
+
+  if (systemPrompt?.trim()) {
+    messages.push({ role: "system", content: systemPrompt });
+  }
+
+  for (const msg of history) {
+    messages.push({ role: msg.role, content: msg.content });
+  }
+
+  if (imagesBase64.length > 0) {
+    messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: userMessage },
+        ...imagesBase64.map((b64) => ({
+          type: "image_url",
+          image_url: { url: `data:image/jpeg;base64,${b64}` },
+        })),
+      ],
+    });
+  } else {
+    messages.push({ role: "user", content: userMessage });
+  }
+
+  return messages;
 }
 
 function buildEnhancedSystemPrompt(baseSystemPrompt?: string): string {
@@ -199,7 +235,23 @@ export async function* fetchAIResponse(params: {
       return;
     }
     if (!provider) {
-      throw new Error(`Provider not provided`);
+      // No custom provider configured → route through InvisibleAI server (Groq)
+      try {
+        const messages = buildServerMessages(
+          enhancedSystemPrompt,
+          history,
+          userMessage,
+          imagesBase64
+        );
+        const text = await serverApi.chat({
+          model: "meta-llama/llama-4-scout-17b-16e-instruct",
+          messages,
+        });
+        if (text) yield text;
+      } catch (serverError) {
+        yield `Error: ${serverError instanceof Error ? serverError.message : String(serverError)}`;
+      }
+      return;
     }
     if (!selectedProvider) {
       throw new Error(`Selected provider not provided`);

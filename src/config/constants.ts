@@ -19,6 +19,7 @@ export const STORAGE_KEYS = {
   SELECTED_AUDIO_DEVICES: "selected_audio_devices",
   RESPONSE_SETTINGS: "response_settings",
   SUPPORTS_IMAGES: "supports_images",
+  INVISIBLEAI_SERVER_URL: "invisibleai_server_url",
 } as const;
 
 export const MAX_FILES = 6;

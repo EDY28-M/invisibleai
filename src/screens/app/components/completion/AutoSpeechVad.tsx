@@ -162,29 +162,9 @@ const AutoSpeechVADInternal = ({
         } = sttConfigRef.current;
         const useInvisibleAIAPI = invisibleaiApiEnabled;
 
-        if (!selectedSttProvider.provider && !useInvisibleAIAPI) {
-          console.warn("No speech provider selected");
-          callbacksRef.current.setState((prev: any) => ({
-            ...prev,
-            error:
-              "No speech provider selected. Please select one in settings.",
-          }));
-          return;
-        }
-
         const providerConfig = allSttProviders.find(
           (p) => p.id === selectedSttProvider.provider
         );
-
-        if (!providerConfig && !useInvisibleAIAPI) {
-          console.warn("Selected speech provider configuration not found");
-          callbacksRef.current.setState((prev: any) => ({
-            ...prev,
-            error:
-              "Speech provider configuration not found. Please check your settings.",
-          }));
-          return;
-        }
 
         setIsTranscribing(true);
 

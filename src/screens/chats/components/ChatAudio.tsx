@@ -1,6 +1,5 @@
-import { InfoIcon, MicIcon } from "lucide-react";
+import { MicIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger, Button } from "@/components";
-import { useApp } from "@/contexts";
 
 interface ChatAudioProps {
   micOpen: boolean;
@@ -17,15 +16,8 @@ export const ChatAudio = ({
   setIsRecording,
   disabled,
 }: ChatAudioProps) => {
-  const { selectedSttProvider, invisibleaiApiEnabled } = useApp();
-  const isProviderConfigured = invisibleaiApiEnabled || selectedSttProvider.provider;
-
+  // Server is always the fallback — mic is always available
   const handleMicClick = () => {
-    if (!isProviderConfigured) {
-      setMicOpen(!micOpen);
-      return;
-    }
-
     setIsRecording(!isRecording);
   };
 
@@ -51,24 +43,9 @@ export const ChatAudio = ({
       <PopoverContent
         align="start"
         side="top"
-        className={`w-80 p-3 ${isProviderConfigured ? "hidden" : ""}`}
+        className="hidden"
         sideOffset={8}
-      >
-        <div className="text-sm">
-          <div className="font-semibold text-orange-600 mb-1">
-            Speech Provider Required
-          </div>
-          <div className="text-muted-foreground">
-            <div className="mt-2 flex items-center gap-1 text-orange-600">
-              <InfoIcon size={16} />
-              <span>Provider not configured</span>
-            </div>
-            <span className="block mt-2">
-              Configure a speech provider in settings to enable voice input.
-            </span>
-          </div>
-        </div>
-      </PopoverContent>
+      />
     </Popover>
   );
 };

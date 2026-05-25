@@ -12,15 +12,13 @@ export const Audio = ({
   submit,
   setState,
 }: UseCompletionReturn) => {
-  const { selectedSttProvider, invisibleaiApiEnabled, selectedAudioDevices } =
-    useApp();
-
-  const speechProviderStatus = selectedSttProvider.provider;
+  const { selectedAudioDevices } = useApp();
 
   return (
     <Popover open={micOpen} onOpenChange={setMicOpen}>
       <PopoverTrigger asChild>
-        {(invisibleaiApiEnabled || speechProviderStatus) && enableVAD ? (
+        {enableVAD ? (
+          // VAD active — server handles STT when no custom provider is configured
           <AutoSpeechVAD
             key={selectedAudioDevices.input.id}
             submit={submit}
@@ -43,37 +41,13 @@ export const Audio = ({
         )}
       </PopoverTrigger>
 
+      {/* PopoverContent kept for Popover API completeness; hidden since server is always available as fallback */}
       <PopoverContent
         align="end"
         side="bottom"
-        className={`w-80 p-3 ${
-          invisibleaiApiEnabled || speechProviderStatus ? "hidden" : ""
-        }`}
+        className="hidden"
         sideOffset={8}
-      >
-        <div className="text-sm select-none">
-          <div className="font-semibold text-orange-600 mb-1">
-            Speech Provider Configuration Required
-          </div>
-          <div className="text-muted-foreground">
-            {!speechProviderStatus ? (
-              <>
-                <div className="mt-2 flex flex-row gap-1 items-center text-orange-600">
-                  <AppIcons.Info height={16} width={16} strokeWidth={1.7} />
-                  {selectedSttProvider.provider ? null : (
-                    <p>PROVIDER IS MISSING</p>
-                  )}
-                </div>
-
-                <span className="block mt-2">
-                  Please go to settings and configure your speech provider to
-                  enable voice input.
-                </span>
-              </>
-            ) : null}
-          </div>
-        </div>
-      </PopoverContent>
+      />
     </Popover>
   );
 };

@@ -14,6 +14,7 @@ import {
   type StreamingCopilotBuffers,
   type StreamingSmartSystemResponseRecord,
 } from "@/lib/functions";
+import { serverApi, type DeepgramTokenResponse } from "@/lib/server-api";
 import {
   getScreenCaptureErrorMessage,
   requestScreenRecordingPermissionIfNeeded,
@@ -134,6 +135,7 @@ export function useSystemAudio() {
   const [accumulatedSystemText, setAccumulatedSystemText] = useState<string>("");
 
   const deepgramManagerRef = useRef<DeepgramStreamManager | null>(null);
+  const deepgramTokenCacheRef = useRef<{ token: DeepgramTokenResponse; fetchedAt: number } | null>(null);
   const isStreamingModeRef = useRef<boolean>(false);
   const streamingSmartModeRef = useRef<boolean>(false);
   const streamingMicStreamRef = useRef<MediaStream | null>(null);
@@ -290,9 +292,9 @@ export function useSystemAudio() {
     const restartBackendCapture = async () => {
       try {
         if (isStreamingModeRef.current) {
-          // Restart Rust Deepgram stream with new device
-          const vars = selectedSttProviderRef.current.variables || {};
-          const apiKey = vars.api_key || vars.API_KEY || "";
+          // Restart Rust Deepgram stream with new device — usar credenciales cacheadas (local key o server token)
+          const cached = deepgramTokenCacheRef.current;
+          if (!cached) return;
           const deviceId =
             selectedAudioDevices.output.id !== "default"
               ? selectedAudioDevices.output.id
@@ -302,9 +304,9 @@ export function useSystemAudio() {
           if (cancelled || !capturingRef.current) return;
 
           await invoke("start_system_deepgram_stream", {
-            apiKey,
-            model: vars.model || vars.MODEL || "nova-3",
-            language: vars.language || vars.LANGUAGE || "es-419",
+            apiKey: cached.token.token,
+            model: cached.token.model,
+            language: cached.token.language,
             deviceId,
           });
         } else {
@@ -693,11 +695,6 @@ export function useSystemAudio() {
       setRecordingProgress(0);
       setError("");
 
-      if (!selectedSttProviderRef.current.provider && !invisibleaiApiEnabledRef.current) {
-        setError("No speech provider selected.");
-        return;
-      }
-
       await startFrontendMicRecording();
 
       const deviceId =
@@ -895,18 +892,10 @@ export function useSystemAudio() {
         let fullResponse = "";
 
         const useInvisibleAIAPI = invisibleaiApiEnabled;
-        if (!selectedAIProvider.provider && !useInvisibleAIAPI) {
-          setError("No AI provider selected.");
-          return;
-        }
 
-        const provider = allAiProviders.find(
-          (p) => p.id === selectedAIProvider.provider
-        );
-        if (!provider && !useInvisibleAIAPI) {
-          setError("AI provider config not found.");
-          return;
-        }
+        const provider = useInvisibleAIAPI
+          ? undefined
+          : allAiProviders.find((p) => p.id === selectedAIProvider.provider);
 
         let effectivePrompt = prompt;
         if (isDualChannel && !isStreamingModeRef.current) {
@@ -1477,17 +1466,60 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       deepgramManagerRef.current = null;
     }
 
-    const vars = selectedSttProviderRef.current.variables || {};
-    const apiKey = vars.api_key || vars.API_KEY || "";
-    if (!apiKey) {
-      setError("Deepgram Streaming requires an API Key.");
-      setIsPopoverOpen(true);
-      return;
+    // ── Obtener credenciales de Deepgram ────────────────────────────────────
+    // Prioridad:
+    //   1. API key local configurada por el usuario en STT Settings → usarla directamente
+    //   2. Sin key local y server disponible → solicitar token efímero al servidor (licencia)
+    //   3. Sin key local y server caído → mostrar error con instrucciones
+    let tokenData: DeepgramTokenResponse;
+
+    const sttVars = selectedSttProviderRef.current.variables || {};
+    const localApiKey = sttVars.api_key || sttVars.API_KEY || "";
+
+    if (localApiKey) {
+      // El usuario configuró su propia API key → usarla sin pasar por el servidor
+      tokenData = {
+        token: localApiKey,
+        model: sttVars.model || sttVars.MODEL || "nova-3",
+        language: sttVars.language || sttVars.LANGUAGE || "es-419",
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      };
+      deepgramTokenCacheRef.current = { token: tokenData, fetchedAt: Date.now() };
+    } else {
+      // Sin key local → intentar obtener token efímero del servidor InvisibleAI
+      try {
+        const now = Date.now();
+        const cached = deepgramTokenCacheRef.current;
+        const TOKEN_MARGIN_MS = 5 * 60 * 1000; // renovar 5 min antes de expirar
+
+        if (cached && (now - cached.fetchedAt) < (55 * 60 * 1000 - TOKEN_MARGIN_MS)) {
+          tokenData = cached.token;
+        } else {
+          const storage = await invoke<{ license_key?: string; instance_id?: string }>("secure_storage_get");
+          const licenseKey = storage.license_key ?? "";
+          const instanceId = storage.instance_id ?? "";
+
+          if (!licenseKey || !instanceId) {
+            setError("Streaming requiere una licencia activa o configura tu API key de Deepgram en Settings.");
+            setIsPopoverOpen(true);
+            return;
+          }
+
+          tokenData = await serverApi.getDeepgramToken(licenseKey, instanceId);
+          deepgramTokenCacheRef.current = { token: tokenData, fetchedAt: now };
+        }
+      } catch (err) {
+        // Servidor no disponible — guiar al usuario
+        setError("No se pudo obtener acceso a Deepgram. Configura tu API key en Deepgram Streaming Settings o verifica tu conexión al servidor.");
+        setIsPopoverOpen(true);
+        return;
+      }
     }
+
     const config = {
-      apiKey,
-      model: vars.model || vars.MODEL || "nova-3",
-      language: vars.language || vars.LANGUAGE || "es-419",
+      apiKey: tokenData.token,
+      model: tokenData.model,
+      language: tokenData.language,
       utteranceEndMs: 1000,
       endpointing: 10,
     };
@@ -1828,12 +1860,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       clearStreamingPendingTranscript("mic");
       clearStreamingPendingTranscript("system");
       resetStreamingCopilotBuffers();
-
-      if (!selectedSttProviderRef.current.provider && !invisibleaiApiEnabledRef.current) {
-        setError("No speech provider selected.");
-        setIsPopoverOpen(true);
-        return;
-      }
 
       const hasAccess = await invoke<boolean>("check_system_audio_access");
       if (!hasAccess) {
@@ -2290,14 +2316,14 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             setMicStream(micStream);
             streamingMicStreamRef.current = micStream;
 
-            const vars = selectedSttProviderRef.current.variables || {};
-            const apiKey = vars.api_key || vars.API_KEY || "";
-            if (!apiKey || cancelled) return;
+            // Usar credenciales cacheadas (key local o token del servidor, ya obtenido en initializeStreaming)
+            const cached = deepgramTokenCacheRef.current;
+            if (!cached || cancelled) return;
 
             const config = {
-              apiKey,
-              model: vars.model || vars.MODEL || "nova-3",
-              language: vars.language || vars.LANGUAGE || "es-419",
+              apiKey: cached.token.token,
+              model: cached.token.model,
+              language: cached.token.language,
               utteranceEndMs: 1000,
               endpointing: 10,
             };

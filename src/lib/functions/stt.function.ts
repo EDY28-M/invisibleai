@@ -8,6 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { TYPE_PROVIDER } from "@/types";
 import curl2Json from "@bany/curl-to-json";
+import { serverApi } from "@/lib/server-api";
 
 const curlJsonCache = new Map<string, any>();
 function getCachedCurlJson(curl: string) {
@@ -64,9 +65,14 @@ export async function fetchSTT(params: STTParams): Promise<string> {
       return await fetchInvisibleAISTT(audio);
     }
 
-    if (!provider) throw new Error("Provider not provided");
-    if (!selectedProvider) throw new Error("Selected provider not provided");
     if (!audio) throw new Error("Audio file is required");
+
+    // No custom provider configured → route through InvisibleAI server (Groq Whisper)
+    if (!provider) {
+      return await serverApi.transcribe(audio);
+    }
+
+    if (!selectedProvider) throw new Error("Selected provider not provided");
 
     let curlJson: any;
     try {

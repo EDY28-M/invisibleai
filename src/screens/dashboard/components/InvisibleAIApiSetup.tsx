@@ -350,8 +350,12 @@ export const InvisibleAIApiSetup = () => {
             </h2>
             <p className="text-xs text-muted-foreground/60 leading-relaxed max-w-sm">
               {hasActiveLicense
-                ? (language === "spanish" ? "Tienes acceso completo a todas las funciones premium activas." : "Full access to all active premium core features.")
-                : (language === "spanish" ? "Activa tu licencia para desbloquear el máximo rendimiento." : "Activate your license to unlock maximum performance.")}
+                ? (language === "spanish"
+                    ? "Tienes acceso completo a todas las funciones premium activas."
+                    : "Full access to all active premium core features.")
+                : (language === "spanish"
+                    ? "Accedes a los servidores de InvisibleAI en modo gratuito. Activa tu licencia para funciones premium sin límites."
+                    : "You have access to InvisibleAI servers in free mode. Activate your license for unlimited premium features.")}
             </p>
           </div>
 
@@ -359,17 +363,19 @@ export const InvisibleAIApiSetup = () => {
             <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${
               hasActiveLicense
                 ? "border-zinc-500/20 bg-zinc-500/10 text-zinc-500"
-                : "border-border/20 bg-muted/30 text-muted-foreground/60"
+                : "border-blue-500/20 bg-blue-500/8 text-blue-500 dark:text-blue-400"
             }`}>
-              <span className={`mr-1.5 size-1.5 rounded-full ${hasActiveLicense ? "bg-zinc-500 animate-pulse" : "bg-muted-foreground/40"}`} />
-              {hasActiveLicense ? t("active") : t("inactive")}
+              <span className={`mr-1.5 size-1.5 rounded-full ${hasActiveLicense ? "bg-zinc-500 animate-pulse" : "bg-blue-400 animate-pulse"}`} />
+              {hasActiveLicense
+                ? t("active")
+                : (language === "spanish" ? "Gratuito" : "Free")}
             </span>
             <label className="flex items-center gap-2.5 text-xs font-bold text-foreground/70 cursor-pointer">
               {invisibleaiApiEnabled ? t("api_setup_disable_api") : t("api_setup_enable_api")}
               <Switch
                 checked={invisibleaiApiEnabled}
                 onCheckedChange={setInvisibleAIApiEnabled}
-                disabled={!storedLicenseKey || !hasActiveLicense}
+                disabled={false}
               />
             </label>
           </div>

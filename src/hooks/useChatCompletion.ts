@@ -178,24 +178,9 @@ export const useChatCompletion = (
 
         const useInvisibleAIAPI = invisibleaiApiEnabled;
 
-        if (!selectedAIProvider.provider && !useInvisibleAIAPI) {
-          setState((prev) => ({
-            ...prev,
-            error: "Please select an AI provider in settings",
-          }));
-          return;
-        }
-
-        const provider = allAiProviders.find(
-          (p) => p.id === selectedAIProvider.provider
-        );
-        if (!provider && !useInvisibleAIAPI) {
-          setState((prev) => ({
-            ...prev,
-            error: "Invalid provider selected",
-          }));
-          return;
-        }
+        const provider = useInvisibleAIAPI
+          ? undefined
+          : allAiProviders.find((p) => p.id === selectedAIProvider.provider);
 
         const timestamp = Date.now();
         const userMsg: ChatMessage = {

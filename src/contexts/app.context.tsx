@@ -131,8 +131,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     safeLocalStorage.setItem(STORAGE_KEYS.SUPPORTS_IMAGES, String(value));
   };
 
+  // Default ON so every new user connects to the server out of the box.
+  // Stored as "false" explicitly when the user turns it off; anything else = ON.
   const [invisibleaiApiEnabled, setInvisibleAIApiEnabledState] = useState<boolean>(
-    safeLocalStorage.getItem(STORAGE_KEYS.INVISIBLEAI_API_ENABLED) === "true"
+    safeLocalStorage.getItem(STORAGE_KEYS.INVISIBLEAI_API_ENABLED) !== "false"
   );
 
   const getActiveLicenseStatus = async () => {
@@ -140,9 +142,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       await invoke("validate_license_api");
     setHasActiveLicense(response.is_active);
 
-    if (!response.is_active || response?.is_dev_license) {
+    // Dev licenses are internal-only — always force server API off so devs
+    // use their own providers and don't consume server quota accidentally.
+    if (response?.is_dev_license) {
       setInvisibleAIApiEnabled(false);
     }
+    // Free users (no active license) can still use the server in free-tier mode —
+    // do NOT force the toggle off for them.
 
     const autoConfigsEnabled = localStorage.getItem("auto-configs-enabled");
     if (response.is_active && !autoConfigsEnabled) {
@@ -525,8 +531,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     ...customAiProviders,
   ];
 
+  // Free users don't see streaming STT providers (e.g. deepgram-streaming).
+  // Licensed users see all providers. Custom providers are always shown.
   const allSttProviders: TYPE_PROVIDER[] = [
-    ...SPEECH_TO_TEXT_PROVIDERS,
+    ...SPEECH_TO_TEXT_PROVIDERS.filter((p) => !p.streaming || hasActiveLicense),
     ...customSttProviders,
   ];
 
