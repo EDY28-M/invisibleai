@@ -51,12 +51,12 @@ export interface VadConfig {
 const DEFAULT_VAD_CONFIG: VadConfig = {
   enabled: true,
   hop_size: 1024,
-  sensitivity_rms: 0.005,
-  peak_threshold: 0.015,
-  silence_chunks: 35,
-  min_speech_chunks: 4,
+  sensitivity_rms: 0.002,
+  peak_threshold: 0.008,
+  silence_chunks: 12,
+  min_speech_chunks: 2,
   pre_speech_chunks: 15,
-  noise_gate_threshold: 0.001,
+  noise_gate_threshold: 0.0005,
   max_recording_duration_secs: 180,
 };
 
@@ -790,18 +790,11 @@ export function useSystemAudio() {
 
         let readyUtterance: SpeechUtterance | undefined;
 
-        if (isStreamingModeRef.current) {
-          // In streaming mode, find the earliest utterance that has finished recording and has an STT promise
-          readyUtterance = activeUtterances.find(
-            (u) => !u.isRecording && u.sttPromise
-          );
-        } else {
-          // In standard mode, enforce strict chronological ordering by blocking on the earliest utterance
-          const firstUtterance = activeUtterances[0];
-          if (!firstUtterance.isRecording && firstUtterance.sttPromise) {
-            readyUtterance = firstUtterance;
-          }
-        }
+        // Find the earliest utterance that is ready (finished recording and has STT promise)
+        // Don't block on still-recording utterances — process whatever is ready
+        readyUtterance = activeUtterances.find(
+          (u) => !u.isRecording && u.sttPromise
+        );
 
         if (!readyUtterance) {
           console.log("[Queue] No ready utterances to process.");
@@ -838,9 +831,7 @@ export function useSystemAudio() {
           const formattedTranscription =
             readyUtterance.channel === "mic"
               ? `[Tú]: ${trimmed}`
-              : (isDualChannelRef.current || isStreamingModeRef.current)
-                ? `[Sistema]: ${trimmed}`
-                : trimmed;
+              : `[Sistema]: ${trimmed}`;
 
           if (isStreamingModeRef.current) {
             handleNewTranscriptionRef.current(formattedTranscription).catch((err) => {
@@ -1554,7 +1545,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
     if (isStreamingModeRef.current) {
       // In streaming mode, Deepgram handles utterance detection and dispatching.
-      // We return early to prevent the local VAD from triggering duplicate/premature dispatches.
       return;
     }
 
@@ -1696,9 +1686,10 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
               };
             }
 
-            const response = await fetch(`data:audio/wav;base64,${base64Audio}`);
-            const audioBlob = await response.blob();
-            console.log(`[ClassicSystemAudio] WAV Blob size=${audioBlob.size}, provider=${providerConfig?.id || 'invisibleai-api'}`);
+            const binaryStr = atob(base64Audio);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+            const audioBlob = new Blob([bytes], { type: "audio/wav" });
 
             try {
               const result = await fetchSTT({

@@ -31,12 +31,12 @@ impl Default for VadConfig {
         Self {
             enabled: true,
             hop_size: 1024,
-            sensitivity_rms: 0.005,
-            peak_threshold: 0.015,
-            silence_chunks: 35,
-            min_speech_chunks: 4,
+            sensitivity_rms: 0.002,
+            peak_threshold: 0.008,
+            silence_chunks: 12,
+            min_speech_chunks: 2,
             pre_speech_chunks: 15,
-            noise_gate_threshold: 0.001,
+            noise_gate_threshold: 0.0005,
             max_recording_duration_secs: 180,
         }
     }
@@ -162,6 +162,10 @@ async fn run_vad_capture(
     let max_samples = sr as usize * 30;
     let mut last_debug_emit = Instant::now();
     let debug_interval = Duration::from_millis(500);
+    // Track last time strong audio was seen — flush if stale to avoid waiting forever on noise
+    let strong_speech_rms: f32 = config.sensitivity_rms * 4.0;
+    let mut last_strong_audio = Instant::now();
+    let flush_timeout = Duration::from_millis(900);
 
     info!(
         "[ClassicVAD] Started: sr={}, sensitivity_rms={}, peak_threshold={}, noise_gate={}, silence_chunks={}, min_speech_chunks={}",
@@ -189,9 +193,32 @@ async fn run_vad_capture(
             let is_speech =
                 raw_rms > config.sensitivity_rms || raw_peak > config.peak_threshold;
 
+            // Update last strong audio timestamp to detect real audio vs background noise
+            if raw_rms > strong_speech_rms {
+                last_strong_audio = Instant::now();
+            }
+
             let mut emitted_event = "none".to_string();
 
-            if is_speech {
+            // Flush timeout: if we've been in_speech but haven't seen strong audio for flush_timeout,
+            // treat it as silence and send what we have — avoids waiting forever on background noise
+            if in_speech && last_strong_audio.elapsed() >= flush_timeout {
+                if speech_chunks >= config.min_speech_chunks && !speech_buffer.is_empty() {
+                    let normalized_buffer = normalize_audio_level(&speech_buffer, 0.1);
+                    let resampled = resample_to_16k(&normalized_buffer, sr);
+                    if let Ok(b64) = samples_to_wav_b64(16000, &resampled) {
+                        let _ = app.emit("speech-detected", b64);
+                        emitted_event = "speech-detected (timeout)".to_string();
+                    }
+                } else {
+                    let _ = app.emit("speech-discarded", "Flushed — no strong audio");
+                }
+                speech_buffer.clear();
+                in_speech = false;
+                silence_chunks = 0;
+                speech_chunks = 0;
+                last_strong_audio = Instant::now();
+            } else if is_speech {
                 if !in_speech {
                     in_speech = true;
                     speech_chunks = 0;
@@ -207,7 +234,8 @@ async fn run_vad_capture(
                 if speech_buffer.len() > max_samples {
                     // Normalize raw audio for STT — no noise gate destruction
                     let normalized_buffer = normalize_audio_level(&speech_buffer, 0.1);
-                    if let Ok(b64) = samples_to_wav_b64(sr, &normalized_buffer) {
+                    let resampled = resample_to_16k(&normalized_buffer, sr);
+                    if let Ok(b64) = samples_to_wav_b64(16000, &resampled) {
                         let _ = app.emit("speech-detected", b64);
                         emitted_event = "speech-detected".to_string();
                     }
@@ -232,7 +260,8 @@ async fn run_vad_capture(
 
                         // Send raw/normalized audio to STT — no noise gate
                         let normalized_buffer = normalize_audio_level(&speech_buffer, 0.1);
-                        if let Ok(b64) = samples_to_wav_b64(sr, &normalized_buffer) {
+                        let resampled = resample_to_16k(&normalized_buffer, sr);
+                        if let Ok(b64) = samples_to_wav_b64(16000, &resampled) {
                             let _ = app.emit("speech-detected", b64);
                             emitted_event = "speech-detected".to_string();
                         } else {
@@ -389,6 +418,27 @@ fn calculate_audio_metrics(chunk: &[f32]) -> (f32, f32) {
 
     let rms = (sumsq / chunk.len() as f32).sqrt();
     (rms, peak)
+}
+
+fn resample_to_16k(samples: &[f32], src_sr: u32) -> Vec<f32> {
+    const TARGET_SR: u32 = 16000;
+    if src_sr == TARGET_SR {
+        return samples.to_vec();
+    }
+    let ratio = src_sr as f64 / TARGET_SR as f64;
+    let output_len = (samples.len() as f64 / ratio).ceil() as usize;
+    (0..output_len)
+        .map(|i| {
+            let src_pos = i as f64 * ratio;
+            let idx = src_pos as usize;
+            let frac = (src_pos - idx as f64) as f32;
+            if idx + 1 < samples.len() {
+                samples[idx] * (1.0 - frac) + samples[idx + 1] * frac
+            } else {
+                samples[idx.min(samples.len() - 1)]
+            }
+        })
+        .collect()
 }
 
 fn normalize_audio_level(samples: &[f32], target_rms: f32) -> Vec<f32> {
