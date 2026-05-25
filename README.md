@@ -12,7 +12,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![Rust](https://img.shields.io/badge/Core-Rust-brown)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.2-green)](https://github.com/EDY28-M/invisibleai/releases)
+[![Version](https://img.shields.io/badge/version-1.2.3-green)](https://github.com/EDY28-M/invisibleai/releases)
 
 > Proyecto en construcción. InvisibleAI es una app de escritorio multiplataforma para asistencia con IA en reuniones, entrevistas, clases, auditorías, videos y conversaciones en tiempo real.
 
@@ -24,6 +24,47 @@ La aplicación permite trabajar en dos caminos separados:
 
 - **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
 - **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
+
+## Novedades en v1.2.3
+
+### Cliente API del servidor InvisibleAI (`server-api.ts`)
+- Nuevo módulo centralizado para todas las llamadas HTTP al servidor propio de InvisibleAI.
+- Resuelve la URL del servidor desde variable de entorno `VITE_INVISIBLEAI_SERVER`, `localStorage` o fallback a `localhost:3000`.
+- Soporte para obtener configuración remota, tokens de Deepgram, completions de chat y transcripción STT desde el servidor.
+- Caché de tokens de Deepgram en `deepgramTokenCacheRef` para evitar solicitudes repetidas al servidor.
+
+### Modo servidor para streaming y STT
+- El hook `useSystemAudio` ahora obtiene credenciales de Deepgram desde el servidor de InvisibleAI cuando la API está activa, en lugar de usar la API key local del usuario.
+- `STREAMING_DISPATCH_IDLE_MS` reducido de 1000ms a 500ms para despacho más rápido del copiloto streaming.
+- Cuando la API de InvisibleAI está habilitada, las secciones de proveedores AI y STT se bloquean con un banner informativo que indica que los servidores de InvisibleAI están gestionando la configuración.
+
+### Proveedores bloqueados con API de InvisibleAI
+- Pantalla de Dev Space (`dev/index.tsx`) muestra un banner "API de InvisibleAI activa" con candado cuando el modo servidor está habilitado.
+- El banner bloquea la edición de proveedores AI y STT e incluye un botón para desactivar la API y volver a configuración manual.
+
+### Panel de licencia y estado del sistema mejorado
+- Texto del estado del sistema actualizado para usuarios en modo gratuito: indica que acceden a los servidores de InvisibleAI sin licencia.
+- Colores de éxito migrados de emerald a zinc para mantener la paleta neutral.
+- Badge de estado usa azul para modo gratuito activo y zinc para licencia premium.
+
+### Eliminación total de colores de acento restantes
+- Eliminados los últimos usos de emerald y amber en `ResultsSection`, `StatusIndicator`, `Warning`, `ChatAudio`, `AudioSelection` y `ScreenshotConfigs`.
+- Etiquetas de transcripción interim (Tú/Sistema) ahora usan zinc en lugar de emerald/amber.
+- Todos los componentes de la UI usan exclusivamente escala zinc/neutral.
+
+### Workflow de GitHub Actions simplificado
+- El workflow `publish.yml` ya no compila ejecutables multiplataforma.
+- Ahora crea un release en GitHub y sube únicamente archivos `.txt` como assets.
+- La compilación de Tauri (macOS ARM, macOS x86, Ubuntu, Windows) queda comentada y disponible para reactivarse.
+- Se ejecuta en un solo runner `ubuntu-22.04` sin matrix de plataformas.
+- La versión del release se extrae automáticamente de `package.json`.
+
+### Bugs corregidos
+- **Colores inconsistentes**: componentes que aún usaban emerald/amber para estados activos, transcripciones interim y badges — unificados a zinc.
+- **Comentarios innecesarios en JSX**: eliminados comentarios vacíos `{}` y comentarios redundantes en múltiples componentes.
+- **Proveedores editables con servidor activo**: antes se podían modificar API keys locales mientras el servidor de InvisibleAI gestionaba la configuración, causando conflictos. Ahora se bloquea la edición con feedback visual.
+
+---
 
 ## Novedades en v1.2.2
 
@@ -148,7 +189,7 @@ graph TD;
     UI --> Mic["Captura de micrófono"];
     Core --> STT["STT clásico / Deepgram Streaming"];
     STT --> Router["Flujo de chat o copiloto streaming"];
-    Router --> AI["Proveedor IA"];
+    Router --> AI["Proveedor IA / Servidor InvisibleAI"];
     AI --> UI;
     Core --> DB["SQLite local"];
     UI --> DB;
@@ -190,7 +231,7 @@ Para usar IA local:
 
 ## Release y despliegue
 
-La versión actual es **1.2.2**.
+La versión actual es **1.2.3**.
 
 Los archivos que deben mantenerse sincronizados para release son:
 
@@ -200,16 +241,16 @@ Los archivos que deben mantenerse sincronizados para release son:
 - `src-tauri/Cargo.lock`
 - `src-tauri/tauri.conf.json`
 
-El workflow `.github/workflows/publish.yml` publica builds multiplataforma con `tauri-apps/tauri-action` al hacer push a `main`. El release usa el formato de tag:
+El workflow `.github/workflows/publish.yml` crea un release en GitHub y sube archivos `.txt` como assets al hacer push a `main`. La compilación de ejecutables multiplataforma está comentada y puede reactivarse. El release usa el formato de tag:
 
 ```text
-app-v__VERSION__
+app-v<VERSION>
 ```
 
 Para esta versión, GitHub Actions generará el release como:
 
 ```text
-app-v1.2.2
+app-v1.2.3
 ```
 
 ## Estructura del proyecto
@@ -220,7 +261,7 @@ InvisibleAI/
 │   ├── components/         # Componentes reutilizables
 │   ├── contexts/           # Contextos globales
 │   ├── hooks/              # Hooks de captura, audio y estado
-│   ├── lib/                # Funciones de IA, STT, storage y copiloto
+│   ├── lib/                # Funciones de IA, STT, storage, copiloto y server-api
 │   ├── screens/            # Pantallas principales de la app
 │   └── types/              # Tipos TypeScript
 ├── src-tauri/              # Backend Rust + Tauri

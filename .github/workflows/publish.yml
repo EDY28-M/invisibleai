@@ -37,14 +37,12 @@ jobs:
           body: |
             ### InvisibleAI v${{ steps.version.outputs.VERSION }}
 
-            Esta versión estabiliza el trabajo de captura y copiloto en tiempo real para reuniones, entrevistas, clases, auditorías, videos y conversaciones.
-
-            * **Deepgram Streaming real-time:** Auto captura audio del sistema y Multihilo captura sistema + micrófono en paralelo.
-            * **Copiloto multicanal streaming:** separa `[Sistema]` y `[Tú]`, usa contexto reciente y prioriza la voz del usuario.
-            * **Modo inteligente streaming:** detector local para preguntas, solicitudes, objeciones, debates, opiniones fuertes, propuestas y decisiones.
-            * **Respuestas más directas:** el copiloto streaming evita cierres tipo "¿quieres que profundice?" y entrega sugerencias listas para decir.
-            * **No-streaming más estable:** VAD clásico ajustado para capturar audio del sistema, generar WAV válido y enviarlo al STT configurado.
-            * **UI ajustada:** controles de streaming más claros, Manual reservado para proveedores no-streaming e iconografía actualizada.
+            * **Cliente API servidor InvisibleAI:** nuevo módulo `server-api.ts` centraliza llamadas al servidor propio, tokens de Deepgram cacheados y configuración remota.
+            * **Modo servidor para streaming/STT:** credenciales de Deepgram obtenidas desde el servidor cuando la API está activa, despacho del copiloto reducido a 500ms.
+            * **Proveedores bloqueados con API activa:** pantalla Dev Space muestra banner con candado cuando el servidor gestiona la configuración.
+            * **Panel de licencia mejorado:** estado actualizado para modo gratuito, colores migrados a zinc neutral.
+            * **Paleta 100% neutral:** eliminados los últimos usos de emerald y amber en transcripciones, badges y componentes de UI.
+            * **GitHub Actions simplificado:** release sube solo archivos `.txt`, sin compilación de ejecutables.
 
             ---
 
