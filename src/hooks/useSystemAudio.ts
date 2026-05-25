@@ -1208,6 +1208,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
         setLastTranscription(fullSystemTranscription);
         setLastAIResponse("");
+        setAccumulatedSystemText("");
+        accumulatedSystemTextRef.current = "";
+        setSystemInterimTranscription("");
         isLastTranscriptionSavedRef.current = true; // Set to true so we don't accidentally save it later
 
         const effectiveSystemPrompt = useSystemPromptRef.current
@@ -2148,6 +2151,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
   }, [resetStreamingCopilotBuffers]);
 
   const updateVadConfiguration = useCallback(async (config: VadConfig, overrideDualChannel?: boolean) => {
+    // Clear any stuck utterances from the previous mode before switching
+    resetSpeechQueue();
+
     const prevEnabled = vadConfig.enabled;
     vadConfigRef.current = config;
     setVadConfig(config);
@@ -2257,6 +2263,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
   }, [
     clearStreamingPendingTranscript,
     discardQueuedSpeechUtterances,
+    resetSpeechQueue,
     resetStreamingCopilotBuffers,
     vadConfig.enabled,
     selectedAudioDevices.output.id,
@@ -2266,77 +2273,88 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
   ]);
   // Dynamically add/remove microphone stream when switching between Auto and Multihilo during active streaming
   useEffect(() => {
-    if (capturing && isStreamingMode) {
-      if (isDualChannel) {
-        // Switched to Multihilo: add mic stream (system stream stays in Rust)
-        if (!deepgramManagerRef.current) {
-          (async () => {
-            try {
-              const micStream = await getMicrophoneStream(selectedAudioDevices.input.id);
-              setMicStream(micStream);
-              streamingMicStreamRef.current = micStream;
+    if (!capturing || !isStreamingMode) return;
 
-              const vars = selectedSttProviderRef.current.variables || {};
-              const apiKey = vars.api_key || vars.API_KEY || "";
-              if (!apiKey) return;
+    let cancelled = false;
 
-              const config = {
-                apiKey,
-                model: vars.model || vars.MODEL || "nova-3",
-                language: vars.language || vars.LANGUAGE || "es-419",
-                utteranceEndMs: 1000,
-                endpointing: 10,
-              };
-
-              const micCallbacks = {
-                onTranscript: (_text: string, _isFinal: boolean, fullAccumulated: string) => {
-                  setInterimTranscription(fullAccumulated);
-                  markStreamingAudioActivity("mic");
-                },
-                onUtteranceEnd: (finalText: string) => {
-                  if (finalText.trim() && capturingRef.current) {
-                    queueStreamingPendingTranscript("mic", finalText);
-                  }
-                },
-                onError: (error: Error) => {
-                  console.error("[Streaming] Mic Deepgram error:", error);
-                  setError(`Deepgram Streaming (Mic): ${error.message}`);
-                },
-                onAudioActivity: () => {
-                  markStreamingAudioActivity("mic");
-                },
-              };
-
-              const micManager = new DeepgramStreamManager(config, micCallbacks);
-              deepgramManagerRef.current = micManager;
-              await micManager.start(micStream);
-              console.log("[Streaming] Added mic stream on-the-fly (switched to Multihilo)");
-            } catch (err) {
-              console.error("Failed to add mic stream for Multihilo:", err);
-            }
-          })();
-        }
-      } else {
-        // Switched to Auto: destroy mic manager (system stream stays in Rust)
-        if (deepgramManagerRef.current) {
-          console.log("[Streaming] Stopping microphone stream on-the-fly (switched to Auto mode)");
-          deepgramManagerRef.current.destroy();
-          deepgramManagerRef.current = null;
-        }
-        clearStreamingPendingTranscript("mic");
-        setInterimTranscription("");
-        setMicStream(null);
-        if (streamingMicStreamRef.current) {
+    if (isDualChannel) {
+      // Switched to Multihilo: add mic stream (system stream stays in Rust)
+      if (!deepgramManagerRef.current) {
+        (async () => {
           try {
-            streamingMicStreamRef.current.getTracks().forEach((track) => {
-              track.stop();
-              track.enabled = false;
-            });
-          } catch { }
-          streamingMicStreamRef.current = null;
-        }
+            const micStream = await getMicrophoneStream(selectedAudioDevices.input.id);
+            if (cancelled) {
+              micStream.getTracks().forEach((t) => { t.stop(); t.enabled = false; });
+              return;
+            }
+            setMicStream(micStream);
+            streamingMicStreamRef.current = micStream;
+
+            const vars = selectedSttProviderRef.current.variables || {};
+            const apiKey = vars.api_key || vars.API_KEY || "";
+            if (!apiKey || cancelled) return;
+
+            const config = {
+              apiKey,
+              model: vars.model || vars.MODEL || "nova-3",
+              language: vars.language || vars.LANGUAGE || "es-419",
+              utteranceEndMs: 1000,
+              endpointing: 10,
+            };
+
+            const micCallbacks = {
+              onTranscript: (_text: string, _isFinal: boolean, fullAccumulated: string) => {
+                setInterimTranscription(fullAccumulated);
+                markStreamingAudioActivity("mic");
+              },
+              onUtteranceEnd: (finalText: string) => {
+                if (finalText.trim() && capturingRef.current) {
+                  queueStreamingPendingTranscript("mic", finalText);
+                }
+              },
+              onError: (error: Error) => {
+                console.error("[Streaming] Mic Deepgram error:", error);
+                setError(`Deepgram Streaming (Mic): ${error.message}`);
+              },
+              onAudioActivity: () => {
+                markStreamingAudioActivity("mic");
+              },
+            };
+
+            if (cancelled) return;
+            const micManager = new DeepgramStreamManager(config, micCallbacks);
+            deepgramManagerRef.current = micManager;
+            await micManager.start(micStream);
+            if (cancelled) {
+              micManager.destroy();
+              deepgramManagerRef.current = null;
+            }
+          } catch (err) {
+            if (!cancelled) console.error("Failed to add mic stream for Multihilo:", err);
+          }
+        })();
+      }
+    } else {
+      // Switched to Auto: destroy mic manager (system stream stays in Rust)
+      if (deepgramManagerRef.current) {
+        deepgramManagerRef.current.destroy();
+        deepgramManagerRef.current = null;
+      }
+      clearStreamingPendingTranscript("mic");
+      setInterimTranscription("");
+      setMicStream(null);
+      if (streamingMicStreamRef.current) {
+        try {
+          streamingMicStreamRef.current.getTracks().forEach((track) => {
+            track.stop();
+            track.enabled = false;
+          });
+        } catch { }
+        streamingMicStreamRef.current = null;
       }
     }
+
+    return () => { cancelled = true; };
   }, [
     capturing,
     clearStreamingPendingTranscript,

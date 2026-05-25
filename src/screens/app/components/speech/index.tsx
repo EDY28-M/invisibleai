@@ -74,6 +74,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
   const { hasActiveLicense, supportsImages } = useApp();
 
   const [conversationMode, setConversationMode] = useState(false);
+  const [isSwitchingMode, setIsSwitchingMode] = useState(false);
 
   const isVadMode = vadConfig.enabled;
   const hasResponse = lastAIResponse || isAIProcessing;
@@ -100,12 +101,15 @@ export const SystemAudio = (props: useSystemAudioType) => {
     }
   };
 
-  const handleModeChange = (vadEnabled: boolean, dualChannelEnabled: boolean) => {
-    updateVadConfiguration({
-      ...vadConfig,
-      enabled: vadEnabled,
-    }, dualChannelEnabled);
-    setIsDualChannel(dualChannelEnabled);
+  const handleModeChange = async (vadEnabled: boolean, dualChannelEnabled: boolean) => {
+    if (isSwitchingMode) return;
+    setIsSwitchingMode(true);
+    try {
+      await updateVadConfiguration({ ...vadConfig, enabled: vadEnabled }, dualChannelEnabled);
+      setIsDualChannel(dualChannelEnabled);
+    } finally {
+      setIsSwitchingMode(false);
+    }
   };
 
   const getButtonIcon = () => {
@@ -114,7 +118,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
       return <AppIcons.Warning className="text-red-500" strokeWidth={1.7} />;
     if (isProcessing) return <AppIcons.Loader className="animate-spin text-foreground/70" strokeWidth={1.7} />;
     if (capturing)
-      return <AppIcons.Activity className="text-emerald-500 dark:text-emerald-400 animate-pulse" strokeWidth={1.7} />;
+      return <AppIcons.Activity className="text-zinc-700 dark:text-zinc-300 animate-pulse" strokeWidth={1.7} />;
     return <AppIcons.SystemAudio className="h-4.5 w-4.5" strokeWidth={1.7} />;
   };
 
@@ -145,7 +149,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
           className={cn(
             "cursor-pointer h-9 w-9 rounded-[14px] transition-all duration-300 border border-transparent hover:scale-105 active:scale-95 shrink-0",
             capturing
-              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.12)]"
+              ? "bg-black/[0.06] dark:bg-white/[0.08] border-black/[0.08] dark:border-white/[0.10] text-zinc-800 dark:text-zinc-200 shadow-[0_0_10px_rgba(0,0,0,0.06)]"
               : error
                 ? "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400"
                 : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 hover:border-black/5 dark:hover:border-white/5 text-foreground/80 hover:text-foreground"
@@ -176,6 +180,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                     onModeChange={handleModeChange}
                     onStreamingSmartModeChange={setStreamingSmartMode}
                     disabled={
+                      isSwitchingMode ||
                       isRecordingInContinuousMode ||
                       isProcessing ||
                       isAIProcessing
@@ -218,7 +223,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       className="h-9 rounded-[12px] text-[10px] font-black tracking-widest uppercase bg-neutral-200/40 dark:bg-neutral-800/40 text-muted-foreground/90 hover:text-foreground hover:bg-neutral-200/80 dark:hover:bg-neutral-800/80 border border-black/5 dark:border-white/5 shadow-xs transition-all duration-300 flex items-center gap-1.5 px-3 max-[640px]:px-2 select-none active:scale-95 cursor-pointer"
                       title="Start a new conversation"
                     >
-                      <AppIcons.New className="w-3.5 h-3.5 text-emerald-500/80" strokeWidth={1.8} />
+                      <AppIcons.New className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" strokeWidth={1.8} />
                       New
                     </Button>
                   )}

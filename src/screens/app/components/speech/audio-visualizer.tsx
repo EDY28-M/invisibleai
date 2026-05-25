@@ -1,18 +1,17 @@
 import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 
-const AUDIO_CONFIG = {
-  FFT_SIZE: 512,
-  SMOOTHING: 0.8,
-  MIN_BAR_HEIGHT: 2,
-  MIN_BAR_WIDTH: 2,
-  BAR_SPACING: 4,
-  COLOR: {
-    MIN_INTENSITY: 100,
-    MAX_INTENSITY: 255,
-    INTENSITY_RANGE: 155,
-  },
-} as const;
+const NUM_BARS = 32;
+const BAR_WIDTH = 2;
+const BAR_GAP = 2;
+const MIN_HEIGHT = 2;
+
+// Per-bar variation seeds (deterministic, computed once)
+const barVariants = Array.from({ length: NUM_BARS }, (_, i) => ({
+  speed: 1.2 + Math.sin(i * 1.9) * 0.6,
+  phase: (i / NUM_BARS) * Math.PI * 2 + Math.cos(i * 0.7),
+  envelope: Math.pow(Math.sin((i / (NUM_BARS - 1)) * Math.PI), 0.6), // center taller
+}));
 
 interface AudioVisualizerProps {
   isRecording: boolean;
@@ -20,287 +19,157 @@ interface AudioVisualizerProps {
 }
 
 export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
-
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animFrameRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationFrameRef = useRef<number>(0);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const oscillatorsRef = useRef<OscillatorNode[]>([]);
-  const gainNodesRef = useRef<GainNode[]>([]);
-  const latestLevelRef = useRef<number>(0);
-  const phasesRef = useRef<number[]>([0, 0, 0, 0]);
-  const smoothLevel = useRef<number>(0);
+  const systemLevelRef = useRef(0);
+  const smoothLevelRef = useRef(0);
+  const timeRef = useRef(0);
 
+  // Listen to system audio level from Rust
   useEffect(() => {
-    if (!isRecording) {
-      latestLevelRef.current = 0;
-      return;
-    }
-
-    let unlistenFn: (() => void) | undefined;
-
-    const setupListener = async () => {
-      try {
-        unlistenFn = await listen<number>("audio-level", (event) => {
-          latestLevelRef.current = event.payload;
-        });
-      } catch (err) {
-        console.error("Failed to subscribe to audio-level event:", err);
-      }
-    };
-
-    setupListener();
-
-    return () => {
-      if (unlistenFn) {
-        unlistenFn();
-      }
-    };
+    if (!isRecording) { systemLevelRef.current = 0; return; }
+    let unlisten: (() => void) | undefined;
+    listen<number>("audio-level", (e) => { systemLevelRef.current = e.payload; })
+      .then((fn) => { unlisten = fn; });
+    return () => { unlisten?.(); };
   }, [isRecording]);
 
-  const cleanup = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-
-    oscillatorsRef.current.forEach((osc) => {
-      try {
-        osc.stop();
-      } catch {
-
-      }
-    });
-    oscillatorsRef.current = [];
-    gainNodesRef.current = [];
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-  };
-
+  // Resize canvas on container change
   useEffect(() => {
-    return cleanup;
+    const resize = () => {
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return;
+      const dpr = window.devicePixelRatio || 1;
+      const { width, height } = container.getBoundingClientRect();
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
   }, []);
 
+  // Setup mic analyser
   useEffect(() => {
-    if (isRecording) {
-      startVisualization();
-    } else {
-      cleanup();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!isRecording) { cleanup(); return; }
+    startViz();
+    return cleanup;
   }, [stream, isRecording]);
 
-  useEffect(() => {
-    const handleResize = () => {
-      if (canvasRef.current && containerRef.current) {
-        const container = containerRef.current;
-        const canvas = canvasRef.current;
-        const dpr = window.devicePixelRatio || 1;
+  const cleanup = () => {
+    cancelAnimationFrame(animFrameRef.current);
+    audioContextRef.current?.close();
+    audioContextRef.current = null;
+    analyserRef.current = null;
+  };
 
-        const rect = container.getBoundingClientRect();
-
-        canvas.width = (rect.width - 2) * dpr;
-        canvas.height = (rect.height - 2) * dpr;
-
-        canvas.style.width = `${rect.width - 2}px`;
-        canvas.style.height = `${rect.height - 2}px`;
-      }
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    handleResize();
-
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  const startVisualization = async () => {
+  const startViz = async () => {
     cleanup();
-    try {
-      if (stream) {
-        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        audioContextRef.current = audioContext;
-
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = AUDIO_CONFIG.FFT_SIZE;
-        analyser.smoothingTimeConstant = AUDIO_CONFIG.SMOOTHING;
+    if (stream) {
+      try {
+        const ctx = new AudioContext();
+        audioContextRef.current = ctx;
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.8;
         analyserRef.current = analyser;
-
-        const source = audioContext.createMediaStreamSource(stream);
-        source.connect(analyser);
-
-        if (audioContext.state === "suspended") {
-          await audioContext.resume().catch((e) => console.error("Failed to resume context in startVisualization:", e));
-        }
-      }
-
-      draw();
-    } catch (error) {
-      console.error("Error starting visualization:", error);
+        ctx.createMediaStreamSource(stream).connect(analyser);
+        if (ctx.state === "suspended") await ctx.resume();
+      } catch { /* mic not available */ }
     }
+    drawLoop();
   };
 
-  const drawWave = (
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    phase: number,
-    amplitude: number,
-    frequency: number,
-    color: string,
-    lineWidth: number
-  ) => {
-    ctx.beginPath();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = lineWidth;
-    ctx.lineCap = "round";
-
-    const centerY = height / 2;
-    
-    for (let x = 0; x < width; x++) {
-      // Gaussian-like tapering envelope to pinch the ends of the wave
-      const envelope = Math.sin((x / width) * Math.PI);
-      
-      // Combine base frequency with a second harmonic for more visual detail
-      const sineVal = Math.sin(x * frequency + phase) * 0.8 + Math.sin(x * frequency * 2.2 - phase) * 0.2;
-      const y = centerY + sineVal * amplitude * envelope;
-      
-      if (x === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-    }
-    ctx.stroke();
-  };
-
-  const draw = () => {
-    if (!isRecording) return;
-
+  const drawLoop = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
 
-    if (stream && !analyserRef.current) return;
-
     const dpr = window.devicePixelRatio || 1;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Dynamic, colorful translucent overlapping waves configuration
-    const WAVES = [
-      {
-        frequency: 0.022,
-        phaseSpeed: 0.045,
-        amplitudeFactor: 1.0,
-        color: "rgba(16, 185, 129, 0.45)", // Emerald
-        lineWidth: 1.3,
-      },
-      {
-        frequency: 0.015,
-        phaseSpeed: -0.03,
-        amplitudeFactor: 0.8,
-        color: "rgba(245, 158, 11, 0.35)", // Amber
-        lineWidth: 1.0,
-      },
-      {
-        frequency: 0.032,
-        phaseSpeed: 0.06,
-        amplitudeFactor: 0.6,
-        color: "rgba(6, 182, 212, 0.4)", // Cyan
-        lineWidth: 1.0,
-      },
-      {
-        frequency: 0.048,
-        phaseSpeed: -0.045,
-        amplitudeFactor: 0.4,
-        color: "rgba(168, 85, 247, 0.3)", // Violet
-        lineWidth: 0.8,
-      },
-    ];
+    const frame = () => {
+      animFrameRef.current = requestAnimationFrame(frame);
+      if (!isRecording) return;
 
-    const drawFrame = () => {
-      animationFrameRef.current = requestAnimationFrame(drawFrame);
+      timeRef.current += 0.016;
+      const t = timeRef.current;
 
-      if (audioContextRef.current && audioContextRef.current.state === "suspended") {
-        audioContextRef.current.resume().catch(() => {});
-      }
+      const W = canvas.width / dpr;
+      const H = canvas.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
 
-      const width = canvas.width / dpr;
-      const height = canvas.height / dpr;
-      ctx.clearRect(0, 0, width, height);
-
-      // Compute microphone input volume via Time Domain RMS
+      // Mic level
       let micLevel = 0;
-      if (stream && analyserRef.current) {
-        const timeData = new Uint8Array(analyserRef.current.fftSize);
-        analyserRef.current.getByteTimeDomainData(timeData);
-
-        let sumSquares = 0;
-        for (let j = 0; j < timeData.length; j++) {
-          const normalized = (timeData[j] - 128) / 128;
-          sumSquares += normalized * normalized;
+      if (analyserRef.current) {
+        const data = new Uint8Array(analyserRef.current.fftSize);
+        analyserRef.current.getByteTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+          const v = (data[i] - 128) / 128;
+          sum += v * v;
         }
-        const rms = Math.sqrt(sumSquares / timeData.length);
-        
-        // Hyper-responsive sensitivity and gate
-        const gate = 0.0005;
-        if (rms > gate) {
-          micLevel = (rms - gate) * 25.0;
-        } else {
-          micLevel = 0;
-        }
+        const rms = Math.sqrt(sum / data.length);
+        micLevel = rms > 0.001 ? Math.min(1, rms * 18) : 0;
       }
 
-      // Compute loopback system audio level
-      const systemLevel = latestLevelRef.current;
-      
-      // Select the maximum active level between mic and loopback system audio
-      const targetLevel = Math.max(micLevel, systemLevel);
-      
-      // Boost quiet audio using power compression (pow 0.5) and clamp to 1.0
-      const boostedLevel = Math.min(1.0, Math.pow(targetLevel, 0.5) * 3.5);
-      
-      // Smooth linear interpolation for transitions (faster response to rise, gentle fall)
-      const isRising = boostedLevel > smoothLevel.current;
-      const smoothingFactor = isRising ? 0.22 : 0.12;
-      smoothLevel.current += (boostedLevel - smoothLevel.current) * smoothingFactor;
+      const systemLevel = Math.min(1, Math.pow(systemLevelRef.current, 0.45) * 4.5);
+      const target = Math.max(micLevel, systemLevel);
 
-      // Keep a very tiny breathing baseline so the console always feels alive and responsive
-      const activeLevel = Math.max(0.06, smoothLevel.current);
-      const centerY = height / 2;
-      const baseAmplitude = activeLevel * (centerY - 2);
+      // Smooth: fast attack, slow decay
+      const alpha = target > smoothLevelRef.current ? 0.25 : 0.08;
+      smoothLevelRef.current += (target - smoothLevelRef.current) * alpha;
 
-      // Render wave layers
-      for (let i = 0; i < WAVES.length; i++) {
-        if (phasesRef.current[i] === undefined) {
-          phasesRef.current[i] = 0;
-        }
-        phasesRef.current[i] += WAVES[i].phaseSpeed;
+      const level = smoothLevelRef.current;
+      const idle = level < 0.04;
 
-        const wave = WAVES[i];
-        const amplitude = baseAmplitude * wave.amplitudeFactor;
-        
-        drawWave(
-          ctx,
-          width,
-          height,
-          phasesRef.current[i],
-          amplitude,
-          wave.frequency,
-          wave.color,
-          wave.lineWidth
-        );
+      const totalW = NUM_BARS * BAR_WIDTH + (NUM_BARS - 1) * BAR_GAP;
+      const startX = (W - totalW) / 2;
+      const maxH = H - 4;
+      const centerY = H / 2;
+
+      for (let i = 0; i < NUM_BARS; i++) {
+        const v = barVariants[i];
+        const wave = idle
+          ? Math.sin(t * v.speed + v.phase) * 0.5 + 0.5  // gentle breathing idle
+          : Math.abs(Math.sin(t * v.speed * 1.4 + v.phase));
+
+        const activeH = idle
+          ? MIN_HEIGHT + wave * 4 * v.envelope
+          : MIN_HEIGHT + wave * level * maxH * v.envelope;
+
+        const barH = Math.max(MIN_HEIGHT, activeH);
+        const x = startX + i * (BAR_WIDTH + BAR_GAP);
+        const y = centerY - barH / 2;
+
+        // Color: adapt to theme — white/dark neutral, no chroma
+        const isDark = document.documentElement.classList.contains("dark");
+        const opacity = idle ? (isDark ? 0.18 : 0.20) : (isDark ? 0.55 + level * 0.40 : 0.60 + level * 0.35);
+        const [cr, cg, cb] = isDark ? [230, 230, 235] : [30, 30, 35];
+        ctx.fillStyle = idle
+          ? isDark ? `rgba(120,120,128,0.22)` : `rgba(160,160,168,0.28)`
+          : `rgba(${cr},${cg},${cb},${opacity})`;
+
+        // Rounded bar
+        const r = Math.min(BAR_WIDTH / 2, barH / 2);
+        ctx.beginPath();
+        ctx.roundRect(x, y, BAR_WIDTH, barH, r);
+        ctx.fill();
       }
     };
 
-    drawFrame();
+    frame();
   };
 
   return (
-    <div ref={containerRef} className="!h-[32px] !w-full pl-4 pt-1">
-      <canvas ref={canvasRef} className="h-full !w-full" />
+    <div ref={containerRef} className="h-8 w-full">
+      <canvas ref={canvasRef} className="h-full w-full" />
     </div>
   );
 }

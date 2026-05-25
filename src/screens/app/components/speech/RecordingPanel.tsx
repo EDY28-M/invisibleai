@@ -48,7 +48,7 @@ export const RecordingPanel = ({
                 {!isRecording ? (
                   <Button
                     onClick={onStartRecording}
-                    className="flex-1 gap-1.5 h-9 rounded-xl border border-transparent bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-xs transition-all cursor-pointer"
+                    className="flex-1 gap-1.5 h-9 rounded-xl border border-black/10 dark:border-white/10 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-semibold shadow-xs transition-all cursor-pointer"
                     size="sm"
                   >
                     <MicIcon className="w-3.5 h-3.5" />
@@ -68,7 +68,7 @@ export const RecordingPanel = ({
                     <Button
                       onClick={onStopAndSend}
                       size="sm"
-                      className="flex-1 gap-1 h-9 rounded-xl border border-transparent bg-amber-500 hover:bg-amber-600 text-white font-semibold shadow-xs transition-all cursor-pointer"
+                      className="flex-1 gap-1 h-9 rounded-xl border border-black/10 dark:border-white/10 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 text-white dark:text-zinc-900 font-semibold shadow-xs transition-all cursor-pointer"
                     >
                       <StopCircleIcon className="w-3 h-3" />
                       Stop & Send

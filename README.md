@@ -12,7 +12,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![Rust](https://img.shields.io/badge/Core-Rust-brown)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.1-green)](https://github.com/EDY28-M/invisibleai/releases)
+[![Version](https://img.shields.io/badge/version-1.2.2-green)](https://github.com/EDY28-M/invisibleai/releases)
 
 > Proyecto en construcción. InvisibleAI es una app de escritorio multiplataforma para asistencia con IA en reuniones, entrevistas, clases, auditorías, videos y conversaciones en tiempo real.
 
@@ -24,6 +24,45 @@ La aplicación permite trabajar en dos caminos separados:
 
 - **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
 - **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
+
+## Novedades en v1.2.2
+
+### Visualizador de audio profesional
+- Reemplazado el visualizador de ondas sinusoidales por barras verticales estilo Apple Voice Memos / Spotify.
+- 32 barras con distribución de altura en curva bell (centro más alto), variación de velocidad y fase por barra.
+- Suavizado fast-attack / slow-decay para movimiento natural sin lag visual.
+- Adapta color al tema: barras blancas/claras en modo oscuro, grises oscuras en modo claro.
+- Sin impacto en latencia — canvas nativo con `requestAnimationFrame`.
+
+### Iconografía migrada a Lucide React
+- `AudioLines` para modo Auto y estado activo del botón principal.
+- `Layers2` para Multihilo (dos capas = dos canales).
+- `Sparkles` para Modo inteligente.
+- `AudioWaveform` para el trigger principal en estado inactivo.
+- `Mic` para Manual.
+- Familia consistente con el resto de la app, strokes uniformes.
+
+### Paleta de colores neutral (sin chroma)
+- Eliminados todos los colores de acento: amber, emerald, teal y green.
+- Todos los estados activos (tabs, botón principal, dot Listening, iconos) usan escala zinc/neutral.
+- Botones de acción (Start Recording, Stop & Send) en `zinc-900 / zinc-100` adaptable a modo oscuro.
+- Color único de acento por toda la interfaz — sin mezcla de colores.
+
+### Corrección de bugs en cambio de modos (Auto / Multihilo / Manual)
+- **Cola bloqueada**: utterances del modo anterior quedaban con `isRecording: true` y bloqueaban el procesamiento indefinidamente. Ahora se limpia la cola antes de cada cambio.
+- **Race condition**: `setIsDualChannel` disparaba el `useEffect` de streaming antes de que terminaran los invokes de Rust. Ahora `handleModeChange` es `async/await` y el estado se actualiza en el orden correcto.
+- **Doble mic stream**: al hacer click rápido entre Auto y Multihilo se podían crear dos streams de micrófono simultáneos. Añadido flag `cancelled` que aborta el setup si el efecto se limpia antes de terminar.
+- **Guard de clicks dobles**: los tabs se deshabilitan durante la transición de modo para evitar cambios concurrentes.
+
+### Mejoras de audio no-streaming (heredadas de v1.2.1 y refinadas)
+- Downsampling de 48kHz a 16kHz en Rust antes de codificar WAV — reduce el tamaño del payload a 1/3.
+- Decode base64 directo con `atob()` en lugar de `fetch(data:url)` — transcripción del sistema igual de rápida que el micrófono.
+- Flush timeout de 900ms: si no llega audio fuerte durante 900ms, el VAD envía lo que tiene sin esperar al umbral de silencio.
+- Cola procesada sin bloqueo: procesa cualquier utterance lista en vez de esperar estrictamente orden cronológico.
+- Etiquetas `[Sistema]:` y `[Tú]:` siempre correctas independientemente del modo (Auto/Multihilo).
+- Eliminado el accumulated text duplicado que mostraba el mismo mensaje dos veces.
+
+---
 
 ## Novedades en v1.2.1
 
@@ -151,7 +190,7 @@ Para usar IA local:
 
 ## Release y despliegue
 
-La versión actual es **1.2.1**.
+La versión actual es **1.2.2**.
 
 Los archivos que deben mantenerse sincronizados para release son:
 
@@ -170,7 +209,7 @@ app-v__VERSION__
 Para esta versión, GitHub Actions generará el release como:
 
 ```text
-app-v1.2.1
+app-v1.2.2
 ```
 
 ## Estructura del proyecto
