@@ -69,20 +69,20 @@ jobs:
           tagName: app-v__VERSION__
           releaseName: "InvisibleAI v__VERSION__"
           releaseBody: |
-            ### 🎉 Lanzamiento Oficial: InvisibleAI v1.0.0
+            ### InvisibleAI v1.2.1
             
-            ¡Bienvenido a la primera versión oficial de InvisibleAI! Esta actualización establece la arquitectura principal e introduce todas las funciones core que hacen a este asistente único.
+            Esta versión estabiliza el trabajo de captura y copiloto en tiempo real para reuniones, entrevistas, clases, auditorías, videos y conversaciones.
             
-            * **🛡️ Modo Sigilo (Stealth Mode):** La aplicación se vuelve completamente invisible para grabaciones de pantalla, capturas y software de monitoreo (requiere licencia).
-            * **🎙️ Reconocimiento de Voz Avanzado:** Transcripción en tiempo real (STT) ultra rápida y privada.
-            * **🧠 Asistente de IA Oculto:** Integración nativa con los mejores modelos (OpenAI, Claude) para generar respuestas y analizar contexto en tiempo real.
-            * **🔐 Privacidad Primero:** Base de datos local (SQLite) integrada. Tus chats, prompts y configuración nunca salen de tu PC.
-            * **🎨 Diseño Premium:** Interfaz oscura, elegante, con tipografía Inter y animaciones fluidas, diseñada para no distraer.
-            * **🌐 Bilingüe:** Soporte completo en español e inglés.
+            * **Deepgram Streaming real-time:** Auto captura audio del sistema y Multihilo captura sistema + micrófono en paralelo.
+            * **Copiloto multicanal streaming:** separa `[Sistema]` y `[Tú]`, usa contexto reciente y prioriza la voz del usuario.
+            * **Modo inteligente streaming:** detector local para preguntas, solicitudes, objeciones, debates, opiniones fuertes, propuestas y decisiones.
+            * **Respuestas más directas:** el copiloto streaming evita cierres tipo "¿quieres que profundice?" y entrega sugerencias listas para decir.
+            * **No-streaming más estable:** VAD clásico ajustado para capturar audio del sistema, generar WAV válido y enviarlo al STT configurado.
+            * **UI ajustada:** controles de streaming más claros, Manual reservado para proveedores no-streaming e iconografía actualizada.
             
             ---
             
-            **🍏 macOS users:** If the app is blocked from opening, go to `System Settings` > `Privacy & Security` > `Security` section, find the message saying *'invisibleai was blocked'*, click **'Allow Anyway'**, and then reopen the app.
+            **macOS:** If the app is blocked from opening, go to `System Settings` > `Privacy & Security` > `Security` section, find the message saying *'invisibleai was blocked'*, click **'Allow Anyway'**, and then reopen the app.
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

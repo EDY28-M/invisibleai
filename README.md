@@ -1,8 +1,8 @@
-# InvisibleAI 🚀
+# InvisibleAI
 
 <div align="center">
   <a href="https://invisibleai.com/">
-    <img src="/images/app-image.png" alt="invisibleai banner" width="100%" />
+    <img src="/images/app-image.png" alt="InvisibleAI banner" width="100%" />
   </a>
 </div>
 
@@ -10,122 +10,196 @@
 
 [![Tauri](https://img.shields.io/badge/Built%20with-Tauri-orange)](https://tauri.app/)
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
+[![Rust](https://img.shields.io/badge/Core-Rust-brown)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-green)](https://github.com/EDY28-M/InvisibleAI)
+[![Version](https://img.shields.io/badge/version-1.2.1-green)](https://github.com/EDY28-M/invisibleai/releases)
 
-> ⚠️ **PROYECTO EN CONSTRUCCIÓN**
+> Proyecto en construcción. InvisibleAI es una app de escritorio multiplataforma para asistencia con IA en reuniones, entrevistas, clases, auditorías, videos y conversaciones en tiempo real.
 
-## 📖 Descripción General
-InvisibleAI es una aplicación de escritorio multiplataforma rápida y privada para la interacción con modelos de IA. Esta herramienta te permite experimentar una asistencia en tiempo real con privacidad y control total.
+## Descripción
 
-## ✨ Características en v1.0.0
+InvisibleAI combina una interfaz flotante hecha en React/TypeScript con un núcleo Tauri/Rust para captura de audio, transcripción, proveedores de IA, persistencia local y publicación multiplataforma.
 
-### 🎨 Diseño y UI
-- **Nuevo logotipo personalizado** en la barra lateral y en el ícono de la aplicación (dock de macOS).
-- **Tipografía premium** con Google Fonts (Inter) aplicada globalmente: `letter-spacing` ajustado, renderizado `antialiased` y `line-height` refinado.
-- **Tema oscuro mejorado** con paleta de colores profundos (fondos casi negros, alto contraste).
-- **Logotipo con fondo transparente** para una apariencia profesional en el dock de macOS.
+La aplicación permite trabajar en dos caminos separados:
 
-### 🛡️ Modo Sigilo (Stealth Mode)
-- **Nueva función premium**: Controla dinámicamente si la app es invisible en capturas de pantalla y grabaciones.
-- Toggle integrado en **Ajustes → Comportamiento de Ventana**.
-- Activado por defecto (la app es invisible en capturas).
-- Los usuarios con licencia activa pueden desactivarlo para permitir capturas de pantalla.
-- Funciona en tiempo real sin necesidad de reiniciar la app.
+- **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
+- **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
 
-### 🌐 Internacionalización
-- Soporte completo bilingüe (Español / English) para todas las nuevas funciones.
-- Traducciones del Modo Sigilo en ambos idiomas.
+## Novedades en v1.2.1
 
-### 🔧 Mejoras Técnicas
-- Ajustes de ventana reorganizados: interfaz más limpia con toggles alineados al lado derecho.
-- Identificador de paquete actualizado a `com.edy28.invisibleai`.
-- Configuraciones de ventana optimizadas para macOS.
+- **Deepgram Streaming real-time** para audio del sistema en modo Auto.
+- **Multihilo streaming** con audio del sistema y micrófono en paralelo.
+- **Copiloto multicanal para streaming**:
+  - `[Sistema]` representa audio externo: reunión, llamada, entrevista, clase, video o live.
+  - `[Tú]` representa la voz del usuario por micrófono.
+  - El micrófono tiene prioridad cuando el usuario habla.
+  - El contexto reciente del sistema ayuda a responder preguntas del usuario.
+- **Modo inteligente para streaming**:
+  - Checkbox opcional visible solo con proveedores streaming.
+  - Detección local de preguntas, solicitudes, objeciones, debates, opiniones fuertes, propuestas y decisiones.
+  - Evita responder a ruido, fillers o contexto narrativo sin intención clara.
+- **Respuestas streaming sin cierres innecesarios**:
+  - No termina con frases tipo "¿quieres que profundice?" o "¿te gustaría que...?".
+  - Prioriza respuestas cortas, accionables y listas para decir.
+- **Captura clásica no-streaming corregida**:
+  - VAD local en Rust menos agresivo para audio del sistema.
+  - El audio enviado al STT se conserva crudo/normalizado, sin destruirlo con noise gate.
+  - Migración de presets antiguos de VAD para evitar configuraciones guardadas demasiado restrictivas.
+  - Logs temporales `ClassicSystemAudio` para diagnosticar captura, Blob WAV, STT y envío al chat.
+- **UI de streaming ajustada**:
+  - En streaming se muestran Auto, Multihilo y Modo inteligente.
+  - Manual se mantiene para proveedores no-streaming.
+  - Iconografía actualizada con `iconoir-react` en la zona de controles.
 
-## 🏗️ Arquitectura del Sistema
+## Modos de audio
+
+### Streaming
+
+Disponible cuando el proveedor STT activo es Deepgram Streaming y existe una API key válida.
+
+- **Auto**: captura audio del sistema en tiempo real y usa el copiloto streaming.
+- **Multihilo**: captura audio del sistema y micrófono en paralelo.
+- **Modo inteligente**: mejora la detección de eventos accionables del audio del sistema.
+
+El System Prompt del usuario se usa como preparación de contexto, por ejemplo: entrevista técnica, auditoría, reunión comercial, asesoría o debate. Las reglas internas de separación entre `[Sistema]` y `[Tú]` no dependen del prompt editable.
+
+### No-streaming
+
+Disponible para proveedores STT tradicionales.
+
+- **Auto**: captura audio del sistema, segmenta por VAD local, transcribe y envía al chat.
+- **Multihilo**: mantiene el flujo actual de sistema + micrófono.
+- **Manual**: mantiene el comportamiento clásico sin cambios.
+
+Este flujo no usa el copiloto streaming ni el Modo inteligente. Su objetivo es ser simple y estable: capturar audio, transcribirlo con el proveedor elegido y enviarlo al chat.
+
+## Proveedores soportados
+
+### IA / LLM
+
+Configura tus propias API keys desde ajustes:
+
+- OpenAI
+- Anthropic Claude
+- Google Gemini
+- Proveedores compatibles con API personalizada
+- Modelos locales vía Ollama o LM Studio
+
+### STT
+
+- Deepgram Streaming real-time
+- Deepgram clásico
+- Groq Whisper
+- OpenAI Whisper / STT
+- Proveedores STT personalizados
+
+### TTS
+
+- ElevenLabs
+- OpenAI TTS
+- Voces integradas de Windows/macOS cuando estén disponibles
+
+## Arquitectura
 
 ```mermaid
 graph TD;
-    UI[Interfaz React/TS] -->|Comandos IPC| Core[Tauri Core / Rust];
-    Core -->|Captura de Audio| Sistema[Sistema Operativo];
-    Core -->|Llamadas API| Modelos[Proveedores de IA];
-    Modelos -->|Respuestas| Core;
-    Core -->|Estado UI| UI;
+    UI["React + TypeScript UI"] --> IPC["Tauri IPC"];
+    IPC --> Core["Rust Core"];
+    Core --> Capture["Captura de audio del sistema"];
+    UI --> Mic["Captura de micrófono"];
+    Core --> STT["STT clásico / Deepgram Streaming"];
+    STT --> Router["Flujo de chat o copiloto streaming"];
+    Router --> AI["Proveedor IA"];
+    AI --> UI;
+    Core --> DB["SQLite local"];
+    UI --> DB;
 ```
 
-## 🧠 Modelos Disponibles y Configuración
+## Configuración local
 
-El sistema es flexible y soporta múltiples proveedores de nube, así como ejecución local para mayor privacidad.
+Requisitos:
 
-### ☁️ Modelos en la Nube
-Necesitarás añadir tus propias API Keys desde los ajustes internos:
-*   **OpenAI:** (GPT-4o, GPT-3.5)
-*   **Anthropic:** (Claude 3.5 Sonnet, Opus)
-*   **Google Gemini:** (Gemini 1.5 Pro, Flash)
-
-### 💻 Configuración de Modelos Locales (Paso a Paso)
-Si prefieres máxima privacidad (sin necesidad de internet), sigue estos pasos:
-1. **Instala [Ollama](https://ollama.com/) o [LM Studio](https://lmstudio.ai/)** en tu computadora.
-2. **Descarga un modelo compatible**. Los más recomendados son: `llama3`, `mistral`, `phi3` o `qwen`.
-   * *Ejemplo en Ollama:* Abre tu terminal y ejecuta `ollama run llama3`.
-3. **Abre InvisibleAI** y dirígete a la pestaña de "Configuración de Modelos".
-4. Selecciona **Proveedor Local**.
-5. Ingresa la URL base de tu servidor local (ej. `http://localhost:11434` para Ollama o `http://localhost:1234` para LM Studio).
-6. Guarda los cambios. ¡Listo! Todo el procesamiento ocurrirá en tu computadora.
-
-## 🎙️ Configuración de Audio (STT y TTS)
-
-InvisibleAI está diseñado para escucharte y hablarte sin necesidad de tocar el teclado:
-*   **Reconocimiento de Voz (STT - Speech to Text):** Puedes configurarlo para transcribir tu voz al instante usando Whisper (OpenAI), Deepgram o reconocimiento del sistema. *Nota: Deberás aceptar los permisos de micrófono del sistema operativo en el primer uso.*
-*   **Texto a Voz (TTS - Text to Speech):** Permite que la IA te responda con voz fluida y natural. Puedes usar ElevenLabs, OpenAI TTS, o las voces integradas de Windows/macOS.
-
-## 💳 Suscripción y Limitaciones
-Ten en cuenta que el acceso está estructurado mediante suscripción:
-*   **Cuenta Gratuita:** Funcionalidades básicas y uso limitado a modelos estándar.
-*   **Cuenta Premium:** Acceso total, máxima velocidad, modelos avanzados sin límite de cuota, y funciones exclusivas como el Modo Sigilo y personalización de tema.
-
-## 🚀 Comandos para Levantar el Proyecto
-
-Asegúrate de tener Node.js y Rust instalados.
+- Node.js LTS
+- Rust estable
+- Dependencias nativas de Tauri según el sistema operativo
 
 ```bash
-# Instalar todas las dependencias
+# Instalar dependencias
 npm install
 
-# Levantar la aplicación en modo de desarrollo
+# Ejecutar frontend en desarrollo
+npm run dev
+
+# Ejecutar app Tauri en desarrollo
 npm run tauri dev
 
-# Compilar los ejecutables de producción
+# Build web
+npm run build
+
+# Build instaladores de escritorio
 npm run tauri build
-
-# Regenerar íconos de la app (requiere imagen PNG 1024x1024)
-npm run tauri icon logo/stich_logo_transparent.png
 ```
 
-## 📂 Estructura del Proyecto
+## Modelos locales
 
+Para usar IA local:
+
+1. Instala [Ollama](https://ollama.com/) o [LM Studio](https://lmstudio.ai/).
+2. Descarga un modelo compatible, por ejemplo `llama3`, `mistral`, `phi3` o `qwen`.
+3. Abre InvisibleAI y configura un proveedor local.
+4. Usa una URL base como `http://localhost:11434` para Ollama o `http://localhost:1234` para LM Studio.
+
+## Release y despliegue
+
+La versión actual es **1.2.1**.
+
+Los archivos que deben mantenerse sincronizados para release son:
+
+- `package.json`
+- `package-lock.json`
+- `src-tauri/Cargo.toml`
+- `src-tauri/Cargo.lock`
+- `src-tauri/tauri.conf.json`
+
+El workflow `.github/workflows/publish.yml` publica builds multiplataforma con `tauri-apps/tauri-action` al hacer push a `main`. El release usa el formato de tag:
+
+```text
+app-v__VERSION__
 ```
+
+Para esta versión, GitHub Actions generará el release como:
+
+```text
+app-v1.2.1
+```
+
+## Estructura del proyecto
+
+```text
 InvisibleAI/
-├── src/                    # Frontend (React + TypeScript)
-│   ├── components/         # Componentes reutilizables (Header, Sidebar, Switch...)
-│   ├── contexts/           # Contextos globales (App, Theme, Language)
-│   ├── hooks/              # Custom hooks
-│   ├── pages/              # Páginas de la app (Dashboard, Settings, Chats...)
-│   ├── lib/                # Utilidades, storage, funciones de IA
-│   └── types/              # Definiciones TypeScript
-├── src-tauri/              # Backend (Rust + Tauri)
-│   ├── src/                # Comandos Rust (window, capture, shortcuts...)
-│   ├── icons/              # Íconos generados para todas las plataformas
+├── src/                    # Frontend React + TypeScript
+│   ├── components/         # Componentes reutilizables
+│   ├── contexts/           # Contextos globales
+│   ├── hooks/              # Hooks de captura, audio y estado
+│   ├── lib/                # Funciones de IA, STT, storage y copiloto
+│   ├── screens/            # Pantallas principales de la app
+│   └── types/              # Tipos TypeScript
+├── src-tauri/              # Backend Rust + Tauri
+│   ├── src/                # Comandos Rust, captura, STT, updater
+│   ├── icons/              # Iconos para plataformas
+│   ├── capabilities/       # Permisos Tauri
 │   └── tauri.conf.json     # Configuración de Tauri
+├── .github/workflows/      # GitHub Actions
 ├── logo/                   # Logotipos fuente
-└── images/                 # Imágenes para el README
+└── images/                 # Imágenes del README
 ```
 
-## 📄 Licencia / License
+## Licencia
 
-Este proyecto utiliza una **Licencia Comercial de Código Disponible (Source-Available)**. 
-- Puedes usar la versión gratuita libremente.
+Este proyecto utiliza una licencia comercial de código disponible.
+
+- Puedes usar la versión gratuita según las condiciones del producto.
 - Puedes leer y auditar el código fuente.
-- **ESTÁ ESTRICTAMENTE PROHIBIDO** modificar el código para saltarse el sistema de licencias, o redistribuir versiones modificadas (cracks/clones) que desbloqueen las funciones premium gratis.
+- Está prohibido modificar el código para saltarse licencias, redistribuir cracks o publicar clones que desbloqueen funciones premium.
 
-Para ver los términos completos, lee el archivo [LICENSE](LICENSE) en este repositorio.
+Lee los términos completos en [LICENSE](LICENSE).
