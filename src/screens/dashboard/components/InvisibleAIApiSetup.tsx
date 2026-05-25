@@ -202,9 +202,7 @@ export const InvisibleAIApiSetup = () => {
   return (
     <div className="space-y-5 w-full max-w-5xl mx-auto p-1">
 
-      {/* Licencia y Modelos card */}
       <div className="relative rounded-3xl border border-border/20 bg-card/40 backdrop-blur-xl p-6 overflow-hidden">
-        {/* Orbs that match the primary (dark) button and destructive (red) button */}
         <div className="absolute -top-10 -right-10 w-52 h-52 rounded-full bg-primary/8 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-destructive/6 blur-3xl pointer-events-none" />
 
@@ -220,7 +218,6 @@ export const InvisibleAIApiSetup = () => {
             </p>
           </div>
 
-          {/* Model selector */}
           <Popover modal={true} open={isPopoverOpen} onOpenChange={handlePopoverOpenChange}>
             <PopoverTrigger asChild disabled={isModelsLoading} className="flex cursor-pointer justify-start">
               <Button
@@ -289,19 +286,17 @@ export const InvisibleAIApiSetup = () => {
             </PopoverContent>
           </Popover>
 
-          {/* Error / success feedback */}
           {error && (
             <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3">
               <p className="text-xs text-destructive">{error}</p>
             </div>
           )}
           {success && (
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-              <p className="text-xs text-emerald-600 dark:text-emerald-400">{success}</p>
+            <div className="rounded-2xl border border-zinc-500/20 bg-zinc-500/5 px-4 py-3">
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">{success}</p>
             </div>
           )}
 
-          {/* License key input + action */}
           {!storedLicenseKey ? (
             <div className="flex flex-col items-stretch gap-3 sm:flex-row">
               <Input
@@ -344,9 +339,7 @@ export const InvisibleAIApiSetup = () => {
         </div>
       </div>
 
-      {/* Estado del Sistema card */}
       <div className="relative rounded-3xl border border-border/20 bg-card/40 backdrop-blur-xl p-6 overflow-hidden">
-        {/* Orbs — neutral indigo/blue */}
         <div className="absolute -top-10 -right-10 w-52 h-52 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-8 -left-8 w-32 h-32 rounded-full bg-blue-500/8 blur-3xl pointer-events-none" />
 
@@ -365,10 +358,10 @@ export const InvisibleAIApiSetup = () => {
           <div className="flex flex-col items-start sm:items-end gap-3">
             <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${
               hasActiveLicense
-                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-500"
+                ? "border-zinc-500/20 bg-zinc-500/10 text-zinc-500"
                 : "border-border/20 bg-muted/30 text-muted-foreground/60"
             }`}>
-              <span className={`mr-1.5 size-1.5 rounded-full ${hasActiveLicense ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40"}`} />
+              <span className={`mr-1.5 size-1.5 rounded-full ${hasActiveLicense ? "bg-zinc-500 animate-pulse" : "bg-muted-foreground/40"}`} />
               {hasActiveLicense ? t("active") : t("inactive")}
             </span>
             <label className="flex items-center gap-2.5 text-xs font-bold text-foreground/70 cursor-pointer">

@@ -39,7 +39,7 @@ export const Providers = ({
             description={t("dev_select_stt_provider_desc")}
           />
           {allSttProviders?.find((p) => p?.id === selectedSttProvider?.provider)?.streaming && (
-            <span className="px-2.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-400/5 border border-emerald-500/20 rounded-full animate-pulse select-none shrink-0">
+            <span className="px-2.5 py-0.5 text-[10px] font-semibold text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 dark:bg-zinc-400/5 border border-zinc-500/20 rounded-full animate-pulse select-none shrink-0">
               ⚡ Streaming
             </span>
           )}

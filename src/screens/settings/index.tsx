@@ -19,7 +19,6 @@ const Settings = () => {
     <PageLayout title={t("settings_title")} description={t("settings_desc")}>
       <div id="settings" className="space-y-5 w-full max-w-5xl mx-auto p-1">
 
-        {/* Appearance */}
         <div className={cardClass}>
           <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-10 -left-10 w-36 h-36 rounded-full bg-violet-500/8 blur-3xl pointer-events-none" />
@@ -36,7 +35,6 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* Window Behavior — 2-col grid */}
         <div className="grid gap-4 md:grid-cols-2">
           <div className={cardClass}>
             <div className="absolute -top-8 -right-8 w-28 h-28 rounded-full bg-blue-500/10 blur-2xl pointer-events-none" />
@@ -57,7 +55,7 @@ const Settings = () => {
             </div>
           </div>
           <div className={cardClass}>
-            <div className="absolute -bottom-8 -left-8 w-28 h-28 rounded-full bg-emerald-500/8 blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-8 -left-8 w-28 h-28 rounded-full bg-zinc-500/8 blur-2xl pointer-events-none" />
             <div className="relative z-10">
               <StealthModeToggle />
             </div>

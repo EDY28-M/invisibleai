@@ -151,7 +151,7 @@ export const SettingsPanel = ({
 
           <div className="space-y-3">
             <div className="flex items-center gap-1.5 pl-0.5">
-              <span className="w-1.5 h-3 rounded-full bg-emerald-500" />
+              <span className="w-1.5 h-3 rounded-full bg-zinc-400" />
               <h4 className="text-[10px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider">
                 Recording Settings
               </h4>

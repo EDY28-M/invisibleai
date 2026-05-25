@@ -45,7 +45,7 @@ export const Files = ({
             disabled={isLoading || !supportsImages}
             className={`cursor-pointer h-9 w-9 rounded-[14px] transition-all duration-300 border border-transparent hover:scale-105 active:scale-95 disabled:opacity-40 disabled:pointer-events-none shrink-0 ${
               attachedFiles.length > 0
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
+                ? "bg-zinc-500/10 border-zinc-500/20 text-zinc-600 dark:text-zinc-400 shadow-[0_0_15px_rgba(113,113,122,0.1)]"
                 : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 hover:border-black/5 dark:hover:border-white/5 text-foreground/80 hover:text-foreground"
             }`}
             title={
@@ -59,7 +59,7 @@ export const Files = ({
         </PopoverTrigger>
 
         {attachedFiles.length > 0 && (
-          <div className="absolute -top-1.5 -right-1.5 bg-emerald-500 text-white rounded-full h-4 w-4 flex items-center justify-center text-[9px] font-bold shadow-sm pointer-events-none">
+          <div className="absolute -top-1.5 -right-1.5 bg-zinc-500 text-white rounded-full h-4 w-4 flex items-center justify-center text-[9px] font-bold shadow-sm pointer-events-none">
             {attachedFiles.length}
           </div>
         )}
@@ -87,7 +87,6 @@ export const Files = ({
             </div>
 
             <ScrollArea className="p-4 h-[calc(100vh-11rem)]">
-              {}
               <div
                 className={`gap-3 ${
                   attachedFiles.length <= 2
@@ -106,7 +105,6 @@ export const Files = ({
                       className={`w-full object-cover h-full`}
                     />
 
-                    {}
                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2 text-xs">
                       <div className="truncate font-medium">{file.name}</div>
                       <div className="text-gray-300">
@@ -114,7 +112,6 @@ export const Files = ({
                       </div>
                     </div>
 
-                    {}
                     <Button
                       size="icon"
                       variant="default"
@@ -129,7 +126,6 @@ export const Files = ({
               </div>
             </ScrollArea>
 
-            {}
             <div className="sticky bottom-0 border-t bg-background p-3 flex flex-row gap-2">
               <Button
                 onClick={handleAddMoreClick}

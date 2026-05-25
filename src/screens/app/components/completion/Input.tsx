@@ -58,14 +58,13 @@ export const Input = ({
               onKeyPress={handleKeyPress}
               onPaste={handlePaste}
               disabled={isLoading || isHidden}
-              className={`border-none! bg-black/5! dark:bg-white/5! focus-visible:bg-black/[0.08]! dark:focus-visible:bg-white/[0.08]! focus-visible:ring-2! focus-visible:ring-amber-500/20! dark:focus-visible:ring-amber-400/20! h-9 rounded-[14px] px-3.5 shadow-inner! transition-all duration-300 ${
+              className={`border-none! bg-black/5! dark:bg-white/5! focus-visible:bg-black/[0.08]! dark:focus-visible:bg-white/[0.08]! focus-visible:ring-2! focus-visible:ring-zinc-500/20! dark:focus-visible:ring-zinc-400/20! h-9 rounded-[14px] px-3.5 shadow-inner! transition-all duration-300 ${
                 currentConversationId && conversationHistory.length > 0
                   ? "pr-14"
                   : "pr-2"
               }`}
             />
 
-            {}
             {currentConversationId &&
               conversationHistory.length > 0 &&
               !isLoading && (
@@ -80,7 +79,6 @@ export const Input = ({
                 </div>
               )}
 
-            {}
             {isLoading && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2 animate-pulse">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -89,7 +87,6 @@ export const Input = ({
           </div>
         </PopoverTrigger>
 
-        {}
         <PopoverContent
           align="end"
           side="bottom"
@@ -189,12 +186,12 @@ export const Input = ({
                           key={message.id}
                           className={`p-3.5 text-sm transition-all border ${
                             isUser
-                              ? "bg-amber-500/5 border-amber-500/10 rounded-[18px] rounded-br-[4px] ml-6"
+                              ? "bg-zinc-500/5 border-zinc-500/10 rounded-[18px] rounded-br-[4px] ml-6"
                               : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 rounded-[18px] rounded-bl-[4px] mr-6"
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2 mb-1.5 opacity-60">
-                            <span className={`text-[10px] font-bold uppercase tracking-wider ${isUser ? "text-amber-600 dark:text-amber-400" : "text-foreground/80"}`}>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider ${isUser ? "text-zinc-600 dark:text-zinc-400" : "text-foreground/80"}`}>
                               {isUser ? t("chat_role_user") : t("chat_role_ai")}
                             </span>
                             <span className="text-[9px] font-mono">

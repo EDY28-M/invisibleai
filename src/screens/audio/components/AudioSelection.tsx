@@ -235,14 +235,14 @@ export const AudioSelection = () => {
         frequency: 0.022,
         phaseSpeed: 0.04,
         amplitudeFactor: 1.0,
-        color: "rgba(16, 185, 129, 0.55)", // emerald green
+        color: "rgba(99, 102, 241, 0.55)",
         lineWidth: 1.3,
       },
       {
         frequency: 0.015,
         phaseSpeed: -0.025,
         amplitudeFactor: 0.8,
-        color: "rgba(245, 158, 11, 0.45)", // amber orange
+        color: "rgba(168, 85, 247, 0.45)",
         lineWidth: 1.0,
       },
       {
@@ -413,7 +413,6 @@ export const AudioSelection = () => {
 
   return (
     <div id="audio" className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-5xl mx-auto p-1">
-      {/* INPUT CAPTURE / MICROPHONE CARD */}
       <div className="group relative rounded-3xl border border-border/20 bg-card/40 backdrop-blur-xl p-6 transition-all duration-500 overflow-hidden flex flex-col justify-between min-h-[360px]">
         <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-sky-500/12 blur-3xl pointer-events-none transition-all duration-700 group-hover:bg-sky-500/18" />
         <div className="absolute -bottom-8 -left-8 w-36 h-36 rounded-full bg-indigo-500/8 blur-3xl pointer-events-none" />
@@ -443,7 +442,6 @@ export const AudioSelection = () => {
             </Button>
           </div>
 
-          {/* Selector Dropdown with custom aesthetic styling */}
           <div className="relative space-y-2">
             <Select
               value={selectedAudioDevices.input.id}
@@ -486,7 +484,7 @@ export const AudioSelection = () => {
             </Select>
 
             {showSuccess.input && (
-              <div className="text-[11px] text-emerald-400 bg-emerald-500/5 border border-emerald-500/20 px-3.5 py-2 rounded-xl backdrop-blur-sm shadow-sm animate-in fade-in slide-in-from-top-1 duration-300">
+              <div className="text-[11px] text-zinc-400 bg-zinc-500/5 border border-zinc-500/20 px-3.5 py-2 rounded-xl backdrop-blur-sm shadow-sm animate-in fade-in slide-in-from-top-1 duration-300">
                 <span className="font-semibold">{t("audio_mic_success")}</span>
                 <span className="ml-1.5 opacity-80">{t("audio_using_prefix")} {selectedAudioDevices.input.name || "Unknown device"}</span>
               </div>
@@ -494,7 +492,6 @@ export const AudioSelection = () => {
           </div>
         </div>
 
-        {/* WAVEFORM — Beautiful Live Interactive Canvas Visualizer */}
         <div className="relative z-10 mt-5 pt-4 border-t border-border/10">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-xs uppercase font-bold tracking-wider text-muted-foreground/50">
@@ -503,13 +500,13 @@ export const AudioSelection = () => {
             <div className="flex items-center gap-1.5">
               {isSystemCapturing ? (
                 <>
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                  <span className="text-xs font-semibold text-amber-400/80 tracking-wider">CAPTURING</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
+                  <span className="text-xs font-semibold text-zinc-400/80 tracking-wider">CAPTURING</span>
                 </>
               ) : (
                 <>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="text-xs font-semibold text-emerald-400/80 tracking-wider">LIVE</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 animate-pulse" />
+                  <span className="text-xs font-semibold text-zinc-400/80 tracking-wider">LIVE</span>
                 </>
               )}
             </div>
@@ -521,7 +518,6 @@ export const AudioSelection = () => {
         </div>
       </div>
 
-      {/* SYSTEM PLAYBACK / OUTPUT CARD */}
       <div className="group relative rounded-3xl border border-border/20 bg-card/40 backdrop-blur-xl p-6 transition-all duration-500 overflow-hidden flex flex-col justify-between min-h-[360px]">
         <div className="absolute -top-10 -left-10 w-48 h-48 rounded-full bg-blue-500/12 blur-3xl pointer-events-none transition-all duration-700 group-hover:bg-blue-500/18" />
         <div className="absolute -bottom-8 -right-8 w-36 h-36 rounded-full bg-violet-500/8 blur-3xl pointer-events-none" />
@@ -551,7 +547,6 @@ export const AudioSelection = () => {
             </Button>
           </div>
 
-          {/* Selector Dropdown with custom aesthetic styling */}
           <div className="relative space-y-2">
             <Select
               value={selectedAudioDevices.output.id}
@@ -594,7 +589,7 @@ export const AudioSelection = () => {
             </Select>
 
             {showSuccess.output && (
-              <div className="text-[11px] text-emerald-400 bg-emerald-500/5 border border-emerald-500/20 px-3.5 py-2 rounded-xl backdrop-blur-sm shadow-sm animate-in fade-in slide-in-from-top-1 duration-300">
+              <div className="text-[11px] text-zinc-400 bg-zinc-500/5 border border-zinc-500/20 px-3.5 py-2 rounded-xl backdrop-blur-sm shadow-sm animate-in fade-in slide-in-from-top-1 duration-300">
                 <span className="font-semibold">{t("audio_sys_success")}</span>
                 <span className="ml-1.5 opacity-80">{t("audio_using_prefix")} {selectedAudioDevices.output.name || "Unknown device"}</span>
               </div>
@@ -602,7 +597,6 @@ export const AudioSelection = () => {
           </div>
         </div>
 
-        {/* CHANNEL STEREO BALANCE - Interactive Slider */}
         <div className="relative z-10 mt-6 pt-5 border-t border-border/10">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs uppercase font-bold tracking-wider text-muted-foreground/60 flex items-center gap-1.5">
@@ -625,7 +619,6 @@ export const AudioSelection = () => {
               </span>
               
               <div className="relative flex-1 h-3 flex items-center select-none">
-                {/* Gradient balance track */}
                 <div className="absolute inset-x-0 h-1 rounded-full bg-border/25" />
                 <div 
                   className="absolute h-1 rounded-full bg-gradient-to-r from-sky-500 to-blue-400"
@@ -635,7 +628,6 @@ export const AudioSelection = () => {
                   }}
                 />
                 
-                {/* Drag range input element */}
                 <input
                   type="range"
                   min="-50"
@@ -645,8 +637,7 @@ export const AudioSelection = () => {
                   className="absolute inset-x-0 w-full h-full opacity-0 cursor-pointer z-20"
                 />
 
-                {/* Styled slider thumb */}
-                <div 
+                <div
                   className="absolute w-4 h-4 rounded-full bg-background border-2 border-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.5)] z-10 transition-transform duration-150 active:scale-125"
                   style={{
                     left: `calc(50% + ${(stereoBalance / 50) * 44}% - 8px)`
@@ -659,7 +650,6 @@ export const AudioSelection = () => {
               </span>
             </div>
             
-            {/* Decibels level markers */}
             <div className="flex justify-between px-6 text-[9px] text-muted-foreground/30 font-semibold tracking-wider mt-2.5">
               <span>-6dB</span>
               <span>-3dB</span>

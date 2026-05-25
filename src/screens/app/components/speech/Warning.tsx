@@ -40,21 +40,20 @@ export const Warning = ({ isVadMode }: WarningProps) => {
 
       {isExpanded && (
         <div className="px-4 pb-4 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-          {/* Mode Info */}
           <div
             className={cn(
               "flex items-start gap-3 p-3 rounded-xl border transition-all duration-300",
               isVadMode
-                ? "bg-emerald-500/5 dark:bg-emerald-500/10 border-emerald-500/20 text-emerald-950 dark:text-emerald-50"
-                : "bg-amber-500/5 dark:bg-amber-500/10 border-amber-500/20 text-amber-950 dark:text-amber-50"
+                ? "bg-zinc-500/5 dark:bg-zinc-500/10 border-zinc-500/20 text-foreground"
+                : "bg-zinc-500/5 dark:bg-zinc-500/10 border-zinc-500/20 text-foreground"
             )}
           >
             {isVadMode ? (
-              <div className="p-1 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-500">
+              <div className="p-1 rounded-lg bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-500">
                 <AudioWaveformIcon className="w-4 h-4 animate-pulse" />
               </div>
             ) : (
-              <div className="p-1 rounded-lg bg-amber-500/10 dark:bg-amber-500/20 text-amber-500">
+              <div className="p-1 rounded-lg bg-zinc-500/10 dark:bg-zinc-500/20 text-zinc-500">
                 <MicIcon className="w-4 h-4" />
               </div>
             )}
@@ -70,7 +69,6 @@ export const Warning = ({ isVadMode }: WarningProps) => {
             </div>
           </div>
 
-          {/* Shortcuts Grid */}
           <div className="space-y-2">
             <div className="flex items-center gap-1.5 pl-0.5">
               <KeyboardIcon className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" />
@@ -122,7 +120,6 @@ export const Warning = ({ isVadMode }: WarningProps) => {
             </div>
           </div>
 
-          {/* Screenshot tips */}
           <div className="space-y-2">
             <div className="flex items-center gap-1.5 pl-0.5">
               <CameraIcon className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" />
@@ -143,7 +140,6 @@ export const Warning = ({ isVadMode }: WarningProps) => {
             </div>
           </div>
 
-          {/* Tips Section */}
           <div className="text-[10px] text-muted-foreground/80 space-y-2 pt-3 border-t border-black/5 dark:border-white/5 leading-normal">
             <div className="flex items-start gap-1.5">
               <span className="text-primary font-bold">•</span>

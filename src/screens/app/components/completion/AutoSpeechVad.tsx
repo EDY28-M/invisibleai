@@ -363,8 +363,8 @@ const AutoSpeechVADInternal = ({
         }}
         className={`cursor-pointer h-9 w-9 rounded-[14px] transition-all duration-300 border border-transparent hover:scale-105 active:scale-95 shrink-0 ${listening
           ? userSpeaking
-            ? "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.12)]"
-            : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.12)]"
+            ? "bg-zinc-500/10 border-zinc-500/20 text-zinc-600 dark:text-zinc-400 shadow-[0_0_15px_rgba(113,113,122,0.12)]"
+            : "bg-zinc-500/10 border-zinc-500/20 text-zinc-600 dark:text-zinc-400 shadow-[0_0_15px_rgba(113,113,122,0.12)]"
           : "bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 hover:border-black/5 dark:hover:border-white/5 text-foreground/80 hover:text-foreground"
           }`}
         title={
@@ -380,11 +380,11 @@ const AutoSpeechVADInternal = ({
         }
       >
         {loading || isTranscribing ? (
-          <AppIcons.Loader className="h-4.5 w-4.5 animate-spin text-emerald-500" strokeWidth={1.7} />
+          <AppIcons.Loader className="h-4.5 w-4.5 animate-spin text-zinc-500" strokeWidth={1.7} />
         ) : userSpeaking ? (
-          <AppIcons.MicSpeaking className="h-4.5 w-4.5 text-amber-500" strokeWidth={1.7} />
+          <AppIcons.MicSpeaking className="h-4.5 w-4.5 text-zinc-500" strokeWidth={1.7} />
         ) : listening ? (
-          <AppIcons.MicMuted className="h-4.5 w-4.5 animate-pulse text-emerald-600 dark:text-emerald-400" strokeWidth={1.7} />
+          <AppIcons.MicMuted className="h-4.5 w-4.5 animate-pulse text-zinc-600 dark:text-zinc-400" strokeWidth={1.7} />
         ) : (
           <AppIcons.Mic className="h-4.5 w-4.5" strokeWidth={1.7} />
         )}

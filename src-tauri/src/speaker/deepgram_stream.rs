@@ -273,6 +273,8 @@ async fn run_deepgram_stream(
 
             if accumulator.len() >= samples_per_frame {
                 if let Some((rms, peak)) = audio_activity_level(&accumulator) {
+                    let _ = app_capture.emit("audio-level", rms);
+
                     if last_audio_activity_emit.elapsed()
                         >= Duration::from_millis(AUDIO_ACTIVITY_NOTIFY_INTERVAL_MS)
                     {

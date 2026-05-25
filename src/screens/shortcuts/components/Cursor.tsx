@@ -70,7 +70,6 @@ export const CursorSelection = ({ className }: CursorSelectionProps) => {
                   : "border-border/15 bg-card/20 text-muted-foreground hover:border-border/30 hover:bg-card/40 cursor-pointer"
               }`}
             >
-              {/* Gradient orb — only visible when active */}
               {isActive && (
                 <div
                   className={`absolute -top-8 -right-8 w-28 h-28 rounded-full pointer-events-none ${detail.orb}`}
@@ -87,7 +86,7 @@ export const CursorSelection = ({ className }: CursorSelectionProps) => {
                 </div>
 
                 {isDisabled ? (
-                  <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-zinc-500/10 text-zinc-500 border border-zinc-500/20">
                     {t("shortcuts_cursor_linux_not_supported")}
                   </span>
                 ) : (

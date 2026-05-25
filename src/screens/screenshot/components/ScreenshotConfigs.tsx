@@ -25,7 +25,6 @@ export const ScreenshotConfigs = ({
   return (
     <div id="screenshot" className="space-y-6 w-full max-w-5xl mx-auto p-1">
 
-      {/* 1. MÉTODO DE CAPTURA */}
       <div className="space-y-4">
         <div>
           <h3 className="text-[15px] font-bold text-foreground/95 tracking-wide">
@@ -39,7 +38,6 @@ export const ScreenshotConfigs = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* REGION SELECTION CARD */}
           <div
             onClick={() => { if (hasActiveLicense) handleScreenshotEnabledChange(false); }}
             className={`group relative rounded-2xl border p-5 transition-all duration-300 flex flex-col justify-between min-h-[140px] overflow-hidden ${
@@ -64,7 +62,7 @@ export const ScreenshotConfigs = ({
               </div>
 
               {!hasActiveLicense ? (
-                <div className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <div className="flex items-center gap-1 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-zinc-500/10 text-zinc-500 border border-zinc-500/20">
                   <ShieldAlertIcon className="size-3" />
                   {t("screenshot_method_license_required")}
                 </div>
@@ -89,7 +87,6 @@ export const ScreenshotConfigs = ({
             </div>
           </div>
 
-          {/* FULL SCREEN CARD */}
           <div
             onClick={() => handleScreenshotEnabledChange(true)}
             className={`group relative rounded-2xl border p-5 transition-all duration-300 flex flex-col justify-between min-h-[140px] overflow-hidden cursor-pointer ${
@@ -132,7 +129,6 @@ export const ScreenshotConfigs = ({
         </div>
       </div>
 
-      {/* 2. MODO DE PROCESAMIENTO */}
       <div className="space-y-4 pt-2 border-t border-border/10">
         <div>
           <h3 className="text-[15px] font-bold text-foreground/95 tracking-wide">
@@ -146,7 +142,6 @@ export const ScreenshotConfigs = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {/* MANUAL MODE CARD */}
           <div
             onClick={() => handleScreenshotModeChange("manual")}
             className={`group relative rounded-2xl border p-5 transition-all duration-300 flex flex-col justify-between min-h-[130px] overflow-hidden cursor-pointer ${
@@ -186,7 +181,6 @@ export const ScreenshotConfigs = ({
             </div>
           </div>
 
-          {/* AUTOMATIC AI MODE CARD */}
           <div
             onClick={() => handleScreenshotModeChange("auto")}
             className={`group relative rounded-2xl border p-5 transition-all duration-300 flex flex-col justify-between min-h-[130px] overflow-hidden cursor-pointer ${
@@ -196,7 +190,7 @@ export const ScreenshotConfigs = ({
             }`}
           >
             {screenshotConfiguration.mode === "auto" && (
-              <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full bg-emerald-500/20 blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-8 -left-8 w-24 h-24 rounded-full bg-zinc-500/20 blur-2xl pointer-events-none" />
             )}
 
             <div className="relative z-10 flex items-start justify-between">
@@ -228,7 +222,6 @@ export const ScreenshotConfigs = ({
         </div>
       </div>
 
-      {/* 3. AUTO PROMPT */}
       {screenshotConfiguration.mode === "auto" && (
         <div className="space-y-4 p-5 rounded-2xl border border-border/20 bg-card/30 backdrop-blur-md animate-in fade-in slide-in-from-top-3 duration-400">
           <div className="flex flex-col gap-1">
@@ -277,7 +270,6 @@ export const ScreenshotConfigs = ({
         </div>
       )}
 
-      {/* 4. FOOTER */}
       <div className="text-xs text-muted-foreground/40 border-t border-border/10 pt-4 mt-2">
         <p className="leading-relaxed">{t("screenshot_tip")}</p>
       </div>
