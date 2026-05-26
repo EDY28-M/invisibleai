@@ -39,9 +39,16 @@ let _instanceId:    string = "";
 let _licenseKey:    string = "";
 let _onUsageUpdate: ((balance: UsageBalanceInfo) => void) | null = null;
 const LICENSE_STATE_UPDATED_EVENT = "license-state-updated";
-const SERVER_CREDENTIAL_KEYS = [
+
+// Nota: el conjunto completo de claves del storage es:
+// ["invisibleai_license_key","invisibleai_instance_id","groq_api_key","groq_model",
+//  "deepgram_api_key","deepgram_model","deepgram_language","license_expires_at"]
+
+// Solo las claves de licencia premium — el instance_id NO se incluye aquí.
+// Al revocar una licencia, el usuario pasa al tier free y conserva su instance_id
+// para que el servidor pueda seguir trackeando su uso gratuito.
+const PREMIUM_LICENSE_KEYS = [
   "invisibleai_license_key",
-  "invisibleai_instance_id",
   "groq_api_key",
   "groq_model",
   "deepgram_api_key",
@@ -184,10 +191,12 @@ function isLicenseInvalidError(error: unknown): boolean {
 }
 
 async function clearServerCredentials(reason: string): Promise<void> {
+  // Solo eliminamos las credenciales PREMIUM. El instance_id se conserva
+  // para que el usuario pueda seguir usando el servidor en tier free.
   await invoke("secure_storage_remove", {
-    keys: [...SERVER_CREDENTIAL_KEYS],
+    keys: [...PREMIUM_LICENSE_KEYS],
   }).catch(() => {});
-  _instanceId = "";
+  // Limpiar solo la licencia en memoria — el instanceId se mantiene para el tier free
   _licenseKey = "";
   emit(LICENSE_STATE_UPDATED_EVENT, { active: false, reason }).catch(() => {});
 }

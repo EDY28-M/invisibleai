@@ -395,7 +395,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const licenseKey = storage.license_key || "";
 
       if (!instanceId) {
-        setUsageBalance(null);
+        // Usuario free puro (nunca activó licencia) — igual intentamos obtener
+        // el balance del tier free para mostrar los límites en el panel.
+        serverApi.setCredentials("", "");
+        const freeBalance = await serverApi.getUsageBalance().catch(() => null);
+        setUsageBalance(freeBalance);
         return;
       }
 
@@ -465,11 +469,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
 
         // Revocación explícita confirmada por el servidor
-        console.warn("License revoked by server, clearing local credentials:", errStr);
+        // → Se limpia la licencia premium pero el usuario CONTINÚA en modo free.
+        // El toggle de InvisibleAI API permanece ON: los usuarios free siguen usando
+        // el servidor con sus límites gratuitos (50k tokens, whisper-large-v3, etc.).
+        console.warn("License revoked by server, clearing local premium credentials:", errStr);
         await invoke("secure_storage_remove", {
           keys: [
             "invisibleai_license_key",
-            "invisibleai_instance_id",
             "groq_api_key",
             "groq_model",
             "deepgram_api_key",
@@ -478,9 +484,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             "license_expires_at",
           ],
         }).catch(() => {});
+        // Actualizar serverApi credentials (sin licencia → modo free, conservar instanceId)
+        serverApi.setCredentials(instanceId, "");
         setHasActiveLicense(false);
-        setUsageBalance(null);
-        setInvisibleAIApiEnabled(false);
+        // Refrescar balance para mostrar tier free en el panel
+        const freeBalance = await serverApi.getUsageBalance().catch(() => null);
+        if (freeBalance) setUsageBalance(freeBalance);
+        // NO deshabilitar el API — el usuario continúa en tier free
       }
     } catch {
       setUsageBalance(null);
@@ -495,6 +505,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       setUsageBalance(event.payload);
       if (event.payload.licenseType === "licensed") {
         setHasActiveLicense(true);
+      } else if (event.payload.licenseType === "free") {
+        // Cuando el servidor confirma el tier free, asegurar que hasActiveLicense sea false
+        setHasActiveLicense(false);
       }
     });
     return () => { unlistenUsage.then((fn) => fn()); };

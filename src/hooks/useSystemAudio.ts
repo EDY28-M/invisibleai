@@ -228,6 +228,7 @@ export function useSystemAudio() {
     systemPrompt,
     selectedAudioDevices,
     invisibleaiApiEnabled,
+    hasActiveLicense,
   } = useApp();
   const abortControllerRef = useRef<AbortController | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1988,7 +1989,13 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       const currentSttProvider = allSttProvidersRef.current.find(
         (p) => p.id === selectedSttProviderRef.current.provider
       );
-      const streamingEnabled = invisibleaiApiEnabled || currentSttProvider?.streaming === true;
+      // Streaming (Deepgram WebSocket) requires EITHER:
+      //   a) An active license (server provides a Deepgram token) OR
+      //   b) A custom STT provider with streaming=true (user-owned Deepgram key)
+      // Free-tier users with InvisibleAI API enabled use the server Whisper proxy
+      // (non-streaming) — NOT Deepgram. So invisibleaiApiEnabled alone is NOT enough.
+      const canUseDeepgramStreaming = invisibleaiApiEnabled && hasActiveLicense;
+      const streamingEnabled = canUseDeepgramStreaming || currentSttProvider?.streaming === true;
       setIsStreamingMode(streamingEnabled);
       isStreamingModeRef.current = streamingEnabled;
       setInterimTranscription("");
@@ -2521,7 +2528,10 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     const currentSttProvider = allSttProviders.find(
       (p) => p.id === selectedSttProvider.provider
     );
-    const providerSupportsStreaming = invisibleaiApiEnabled || currentSttProvider?.streaming === true;
+    // Mismo criterio que en startCapture: invisibleaiApiEnabled solo activa
+    // streaming si el usuario tiene licencia activa (o key propia con streaming=true).
+    const canUseDeepgramStreaming = invisibleaiApiEnabled && hasActiveLicense;
+    const providerSupportsStreaming = canUseDeepgramStreaming || currentSttProvider?.streaming === true;
 
     // No transition needed if modes are already aligned
     if (providerSupportsStreaming === isStreamingMode) return;
@@ -2642,7 +2652,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     allSttProviders,
     capturing,
     clearStreamingPendingTranscript,
+    hasActiveLicense,
     initializeStreaming,
+    invisibleaiApiEnabled,
     isDualChannel,
     isStreamingMode,
     resetSpeechQueue,

@@ -237,10 +237,11 @@ export const InvisibleAIApiSetup = () => {
         console.warn("Failed to deactivate license on server before local removal:", error);
       });
 
+      // Se eliminan solo las credenciales premium — el instance_id se conserva
+      // para que el usuario continúe usando el servidor en modo gratuito.
       await invoke("secure_storage_remove", {
         keys: [
           LICENSE_KEY_STORAGE_KEY,
-          INSTANCE_ID_STORAGE_KEY,
           "groq_api_key",
           "groq_model",
           "deepgram_api_key",
@@ -249,9 +250,19 @@ export const InvisibleAIApiSetup = () => {
           "license_expires_at",
         ],
       });
-      serverApi.setCredentials("", "");
-      setSuccess("License removed successfully!");
-      await setInvisibleAIApiEnabled(false);
+
+      // Leer el instance_id que sigue en storage para continuar en modo free
+      const storage = await invoke<{ instance_id?: string }>("secure_storage_get").catch(() => ({ instance_id: undefined }));
+      const instanceId = storage.instance_id || "";
+      serverApi.setCredentials(instanceId, "");
+
+      setSuccess(
+        language === "spanish"
+          ? "¡Licencia eliminada! Continúas en modo gratuito."
+          : "License removed! You're now on the free tier."
+      );
+
+      // No deshabilitar el API — el usuario continúa con el tier free
       await loadLicenseStatus();
       await refreshUsageBalance();
       await emit(LICENSE_STATE_UPDATED_EVENT, { active: false });
@@ -419,7 +430,7 @@ export const InvisibleAIApiSetup = () => {
                 label={language === "spanish" ? "Transcripciones (Whisper)" : "Transcriptions (Whisper)"}
                 used={usageBalance.stt.callsUsedToday}
                 max={usageBalance.stt.callLimitPerDay}
-                unit={language === "spanish" ? "llamadas hoy" : "calls today"}
+                unit={language === "spanish" ? "llamadas hoy (≈15 min gratis)" : "calls today (≈15 min free)"}
                 colorFrom="from-sky-500"
                 colorTo="to-blue-400"
                 language={language}

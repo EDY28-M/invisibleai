@@ -354,9 +354,12 @@ pub async fn deactivate_license_api(app: AppHandle) -> Result<DeactivationRespon
 
     let payment_endpoint = get_payment_endpoint()?;
     let api_access_key = get_api_access_key()?;
-    let machine_id: String = app.machine_uid().get_machine_uid().unwrap().id.unwrap();
     let (license_key, instance_id, _, _, _) = get_stored_credentials(&app).await?;
-    let app_version: String = env!("CARGO_PKG_VERSION").to_string();
+    if license_key.is_empty() {
+        return Err("No active license to deactivate.".to_string());
+    }
+    let app_version = env!("CARGO_PKG_VERSION").to_string();
+    let machine_id: String = app.machine_uid().get_machine_uid().unwrap().id.unwrap();
     let deactivation_request = ActivationRequest {
         license_key: license_key.clone(),
         instance_name: instance_id.clone(),
@@ -408,9 +411,12 @@ pub async fn deactivate_license_api(app: AppHandle) -> Result<DeactivationRespon
 #[tauri::command]
 pub async fn validate_license_api(app: AppHandle) -> Result<ValidateResponse, String> {
     let credentials = get_stored_credentials(&app).await;
-    let is_active = credentials.is_ok();
+    let is_active = match &credentials {
+        Ok((license_key, _, _, _, _)) => !license_key.is_empty(),
+        Err(_) => false,
+    };
 
-    let is_dev_license = match credentials {
+    let is_dev_license = match &credentials {
         Ok((license_key, _, _, _, _)) => license_key == "invisibleai-admin-local",
         Err(_) => false,
     };

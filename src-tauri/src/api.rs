@@ -54,6 +54,7 @@ struct SecureStorage {
     deepgram_api_key: Option<String>,
     deepgram_model: Option<String>,
     deepgram_language: Option<String>,
+    license_expires_at: Option<String>,
 }
 
 pub async fn get_stored_credentials(
@@ -61,22 +62,30 @@ pub async fn get_stored_credentials(
 ) -> Result<(String, String, Option<Model>, Option<String>, Option<String>), String> {
     let storage_path = get_secure_storage_path(app)?;
 
-    if !storage_path.exists() {
-        return Err("No license found. Please activate your license first.".to_string());
+    let mut storage = if storage_path.exists() {
+        let content = fs::read_to_string(&storage_path)
+            .map_err(|e| format!("Failed to read storage file: {}", e))?;
+        serde_json::from_str::<SecureStorage>(&content)
+            .map_err(|e| format!("Failed to parse storage file: {}", e))?
+    } else {
+        SecureStorage::default()
+    };
+
+    let mut modified = false;
+    if storage.instance_id.is_none() || storage.instance_id.as_ref().unwrap().is_empty() {
+        storage.instance_id = Some(uuid::Uuid::new_v4().to_string());
+        modified = true;
     }
 
-    let content = fs::read_to_string(&storage_path)
-        .map_err(|e| format!("Failed to read storage file: {}", e))?;
+    if modified {
+        let content = serde_json::to_string(&storage)
+            .map_err(|e| format!("Failed to serialize storage: {}", e))?;
+        fs::write(&storage_path, content)
+            .map_err(|e| format!("Failed to write storage file: {}", e))?;
+    }
 
-    let storage: SecureStorage = serde_json::from_str(&content)
-        .map_err(|e| format!("Failed to parse storage file: {}", e))?;
-
-    let license_key = storage
-        .license_key
-        .ok_or("License key not found".to_string())?;
-    let instance_id = storage
-        .instance_id
-        .ok_or("Instance ID not found".to_string())?;
+    let license_key = storage.license_key.unwrap_or_default();
+    let instance_id = storage.instance_id.unwrap_or_default();
 
     let selected_model: Option<Model> = storage
         .selected_invisibleai_model
