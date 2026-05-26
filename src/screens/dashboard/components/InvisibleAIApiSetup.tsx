@@ -1,7 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  CheckCircle2Icon,
-  ChevronDown,
   KeyIcon,
   LoaderIcon,
   TrashIcon,
@@ -9,20 +7,11 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "@/contexts";
 import { useTranslation } from "@/hooks";
+import { serverApi } from "@/lib/server-api";
 
 import {
-  Badge,
   Button,
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
   Input,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
   Switch,
 } from "@/components";
 
@@ -37,31 +26,104 @@ interface ActivationResponse {
 interface StorageResult {
   license_key?: string;
   instance_id?: string;
-  selected_invisibleai_model?: string;
-}
-
-interface Model {
-  provider: string;
-  name: string;
-  id: string;
-  model: string;
-  description: string;
-  modality: string;
-  isAvailable: boolean;
 }
 
 const LICENSE_KEY_STORAGE_KEY = "invisibleai_license_key";
 const INSTANCE_ID_STORAGE_KEY = "invisibleai_instance_id";
-const SELECTED_INVISIBLEAI_MODEL_STORAGE_KEY = "selected_invisibleai_model";
 
+// ── UsageBar ────────────────────────────────────────────────────────────────
+interface UsageBarProps {
+  label: string;
+  used: number;
+  max: number | null;
+  unit: string;
+  unitPrefix?: string;
+  colorFrom: string;
+  colorTo: string;
+  /** Número que se muestra en lugar de `used` (útil para streaming: mostrar disponible) */
+  displayUsed?: number;
+  /** Si true, la barra muestra el % restante en vez del % consumido */
+  inverted?: boolean;
+  resetsAt?: string;  // ISO — solo se muestra si está definido
+  language?: string;
+}
+
+const formatNum = (n: number): string => {
+  return n.toLocaleString();
+};
+
+const UsageBar = ({
+  label, used, max, unit, unitPrefix,
+  colorFrom, colorTo, displayUsed, inverted = false,
+  resetsAt, language,
+}: UsageBarProps) => {
+  const safeMax  = max ?? 1;
+  const fillPct  = Math.min(100, Math.round((inverted ? (safeMax - used) : used) / safeMax * 100));
+  const shown    = displayUsed !== undefined ? displayUsed : used;
+  const isWarn   = !inverted && fillPct >= 80;
+  const isOk     = inverted  && fillPct >= 50;
+
+  // Tiempo hasta reset
+  let resetLabel = "";
+  if (resetsAt) {
+    const diff = new Date(resetsAt).getTime() - Date.now();
+    if (diff > 0) {
+      const h = Math.floor(diff / 3_600_000);
+      const m = Math.floor((diff % 3_600_000) / 60_000);
+      resetLabel = language === "spanish"
+        ? `Resetea en ${h}h ${m}min`
+        : `Resets in ${h}h ${m}min`;
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-border/15 bg-card/20 px-4 py-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center min-w-0 gap-1.5">
+          <span className="text-sm select-none">🪙</span>
+          <span className="text-xs font-bold text-foreground/75 truncate">{label}</span>
+        </div>
+        <div className="text-right shrink-0">
+          <span className={`text-xs font-bold tabular-nums ${isWarn ? "text-rose-400" : isOk ? "text-emerald-400" : "text-foreground/70"}`}>
+            {unitPrefix ? `${formatNum(shown)} ` : formatNum(shown)}
+            {unitPrefix && <span className="font-normal text-muted-foreground/50">{unitPrefix}</span>}
+          </span>
+          {max !== null && (
+            <span className="text-[11px] text-muted-foreground/40 ml-1">/ {formatNum(max)}</span>
+          )}
+        </div>
+      </div>
+
+      {/* Barra */}
+      <div className="h-1.5 overflow-hidden rounded-full bg-foreground/8">
+        <div
+          className={`h-full bg-gradient-to-r ${colorFrom} ${colorTo} rounded-full transition-all duration-700`}
+          style={{ width: `${fillPct}%` }}
+        />
+      </div>
+
+      {/* Pie: unit + reset */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] text-muted-foreground/40">{unit}</span>
+        {resetLabel && (
+          <span className="text-[10px] text-muted-foreground/35">{resetLabel}</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── InvisibleAIApiSetup ──────────────────────────────────────────────────────
 export const InvisibleAIApiSetup = () => {
+
   const {
     invisibleaiApiEnabled,
     setInvisibleAIApiEnabled,
     hasActiveLicense,
     setHasActiveLicense,
     getActiveLicenseStatus,
-    setSupportsImages,
+    usageBalance,
+    refreshUsageBalance,
   } = useApp();
 
   const { t, language } = useTranslation();
@@ -72,37 +134,10 @@ export const InvisibleAIApiSetup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [models, setModels] = useState<Model[]>([]);
-  const [isModelsLoading, setIsModelsLoading] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<Model | null>(null);
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  const [searchValue, setSearchValue] = useState("");
-  const fetchInitiated = useRef(false);
-  const commandListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadLicenseStatus();
-    if (!fetchInitiated.current) {
-      fetchInitiated.current = true;
-      fetchModels();
-    }
   }, []);
-
-  useEffect(() => {
-    if (commandListRef.current) commandListRef.current.scrollTop = 0;
-  }, [searchValue]);
-
-  const fetchModels = async () => {
-    setIsModelsLoading(true);
-    try {
-      const fetchedModels = await invoke<Model[]>("fetch_models");
-      setModels(fetchedModels);
-    } catch (error) {
-      console.error("Failed to fetch models:", error);
-    } finally {
-      setIsModelsLoading(false);
-    }
-  };
 
   const loadLicenseStatus = async () => {
     try {
@@ -115,17 +150,10 @@ export const InvisibleAIApiSetup = () => {
         setStoredLicenseKey(null);
         setMaskedLicenseKey(null);
       }
-      if (storage.selected_invisibleai_model) {
-        try { setSelectedModel(JSON.parse(storage.selected_invisibleai_model)); }
-        catch { setSelectedModel(null); }
-      } else {
-        setSelectedModel(null);
-      }
     } catch (error) {
       console.error("Failed to load license status:", error);
       setStoredLicenseKey(null);
       setMaskedLicenseKey(null);
-      setSelectedModel(null);
     }
   };
 
@@ -141,12 +169,34 @@ export const InvisibleAIApiSetup = () => {
             { key: INSTANCE_ID_STORAGE_KEY, value: response.instance.id },
           ],
         });
+
+        // Fetch and store premium credentials immediately
+        try {
+          const creds = await serverApi.getCredentials(licenseKey.trim(), response.instance.id);
+          const saveItems = [
+            { key: "groq_api_key", value: creds.groqApiKey },
+            { key: "groq_model", value: creds.model },
+          ];
+          if (creds.deepgramApiKey) {
+            saveItems.push({ key: "deepgram_api_key", value: creds.deepgramApiKey });
+          }
+          if (creds.deepgramModel) {
+            saveItems.push({ key: "deepgram_model", value: creds.deepgramModel });
+          }
+          if (creds.deepgramLanguage) {
+            saveItems.push({ key: "deepgram_language", value: creds.deepgramLanguage });
+          }
+          await invoke("secure_storage_save", { items: saveItems });
+        } catch (credErr) {
+          console.error("Failed to fetch direct premium credentials:", credErr);
+        }
+
         setSuccess("License activated successfully!");
         setLicenseKey("");
         if (!response?.is_dev_license) setInvisibleAIApiEnabled(true);
         await loadLicenseStatus();
-        await fetchModels();
         await getActiveLicenseStatus();
+        await refreshUsageBalance();
       } else {
         setError(response.error || "Failed to activate license");
       }
@@ -162,37 +212,26 @@ export const InvisibleAIApiSetup = () => {
     setHasActiveLicense(false);
     try {
       await invoke("secure_storage_remove", {
-        keys: [LICENSE_KEY_STORAGE_KEY, INSTANCE_ID_STORAGE_KEY, SELECTED_INVISIBLEAI_MODEL_STORAGE_KEY],
+        keys: [
+          LICENSE_KEY_STORAGE_KEY,
+          INSTANCE_ID_STORAGE_KEY,
+          "groq_api_key",
+          "groq_model",
+          "deepgram_api_key",
+          "deepgram_model",
+          "deepgram_language",
+        ],
       });
       setSuccess("License removed successfully!");
       setInvisibleAIApiEnabled(false);
-      await fetchModels();
       await loadLicenseStatus();
+      await refreshUsageBalance();
     } catch (error) {
       setError("Failed to remove license");
     } finally {
       setIsLoading(false);
       await invoke("deactivate_license_api");
     }
-  };
-
-  const handleModelSelect = async (model: Model) => {
-    setSelectedModel(model);
-    setIsPopoverOpen(false);
-    setSearchValue("");
-    if (invisibleaiApiEnabled) setSupportsImages(model.modality?.includes("image") ?? false);
-    try {
-      await invoke("secure_storage_save", {
-        items: [{ key: SELECTED_INVISIBLEAI_MODEL_STORAGE_KEY, value: JSON.stringify(model) }],
-      });
-    } catch (error) {
-      setError("Failed to save model selection.");
-    }
-  };
-
-  const handlePopoverOpenChange = (open: boolean) => {
-    setIsPopoverOpen(open);
-    if (open) setSearchValue("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -209,82 +248,14 @@ export const InvisibleAIApiSetup = () => {
         <div className="relative z-10 space-y-5">
           <div>
             <h2 className="text-[15px] font-bold text-foreground/95 tracking-wide">
-              {language === "spanish" ? "Licencia y Modelos" : "License & Models"}
+              {language === "spanish" ? "Licencia" : "License"}
             </h2>
             <p className="text-xs text-muted-foreground/60 mt-1">
               {language === "spanish"
-                ? "Conecta tu licencia y selecciona el modelo inteligente del panel."
-                : "Connect your license and select the intelligence model for the panel."}
+                ? "Conecta tu licencia para acceso premium. El modelo de IA se configura automáticamente."
+                : "Connect your license for premium access. The AI model is configured automatically."}
             </p>
           </div>
-
-          <Popover modal={true} open={isPopoverOpen} onOpenChange={handlePopoverOpenChange}>
-            <PopoverTrigger asChild disabled={isModelsLoading} className="flex cursor-pointer justify-start">
-              <Button
-                variant="outline"
-                className="h-11 w-full justify-between rounded-2xl border border-border/25 bg-card/30 px-4 text-left hover:bg-card/50 transition-colors"
-              >
-                <span className="min-w-0 truncate text-sm">
-                  {selectedModel
-                    ? selectedModel.name
-                    : isModelsLoading
-                    ? (language === "spanish" ? "Cargando modelos..." : "Loading models...")
-                    : t("api_setup_select_pro")}
-                </span>
-                <span className="ml-3 flex shrink-0 items-center gap-2">
-                  {selectedModel && (
-                    <>
-                      <Badge variant="outline">{selectedModel.provider}</Badge>
-                      <Badge variant="secondary">{selectedModel.modality}</Badge>
-                    </>
-                  )}
-                  <ChevronDown className="size-4 text-muted-foreground/50" />
-                </span>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" side="bottom" className="w-[600px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl p-0">
-              <Command shouldFilter={true}>
-                <CommandInput
-                  placeholder={language === "spanish" ? "Buscar modelo..." : "Search model..."}
-                  value={searchValue}
-                  onValueChange={setSearchValue}
-                />
-                <CommandList ref={commandListRef} className="max-h-[340px] overflow-y-auto">
-                  <CommandEmpty>
-                    {language === "spanish" ? "No se encontraron modelos." : "No models found."}
-                  </CommandEmpty>
-                  <CommandGroup className="p-2">
-                    {models.map((model, index) => (
-                      <CommandItem
-                        disabled={!model?.isAvailable}
-                        key={`${model?.id}-${index}`}
-                        className="cursor-pointer rounded-xl px-3 py-3"
-                        onSelect={() => handleModelSelect(model)}
-                      >
-                        <div className="flex min-w-0 flex-1 flex-col">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-medium">{model.name}</p>
-                            <Badge variant="outline">{model.modality}</Badge>
-                            <Badge variant="secondary">
-                              {model.isAvailable
-                                ? model.provider
-                                : (language === "spanish" ? "No disponible" : "Not available")}
-                            </Badge>
-                            {selectedModel?.id === model.id && (
-                              <CheckCircle2Icon className="ml-auto size-4 text-primary" />
-                            )}
-                          </div>
-                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={model.description}>
-                            {model.description}
-                          </p>
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
 
           {error && (
             <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3">
@@ -381,6 +352,83 @@ export const InvisibleAIApiSetup = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Créditos de uso ── */}
+      {usageBalance && (
+        <div className="relative rounded-3xl border border-border/20 bg-card/40 backdrop-blur-xl p-6 overflow-hidden">
+          {/* Orbs */}
+          <div className="absolute -top-10 -left-10 w-44 h-44 rounded-full bg-emerald-500/8 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-8 -right-8 w-32 h-32 rounded-full bg-cyan-500/8 blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 space-y-5">
+            {/* Título */}
+            <div>
+              <h2 className="text-[15px] font-bold text-foreground/95 tracking-wide">
+                {language === "spanish" ? "Balance de Créditos" : "Usage Credits"}
+              </h2>
+              <p className="text-xs text-muted-foreground/60 mt-1">
+                {language === "spanish"
+                  ? "Consumo en tiempo real — se actualiza tras cada operación."
+                  : "Real-time usage — updates after each operation."}
+              </p>
+            </div>
+
+            {/* ── Chat tokens ── */}
+            <UsageBar
+              label={language === "spanish" ? "Chat IA" : "AI Chat"}
+              used={usageBalance.chat.tokensUsedToday}
+              max={usageBalance.chat.tokenLimitPerDay}
+              unit={language === "spanish" ? "tokens hoy" : "tokens today"}
+              colorFrom="from-violet-500"
+              colorTo="to-indigo-400"
+              resetsAt={usageBalance.chat.resetsAt}
+              language={language}
+            />
+
+            {/* ── STT calls (solo free users) ── */}
+            {usageBalance.stt.callLimitPerDay !== null && (
+              <UsageBar
+                label={language === "spanish" ? "Transcripciones (Whisper)" : "Transcriptions (Whisper)"}
+                used={usageBalance.stt.callsUsedToday}
+                max={usageBalance.stt.callLimitPerDay}
+                unit={language === "spanish" ? "llamadas hoy" : "calls today"}
+                colorFrom="from-sky-500"
+                colorTo="to-blue-400"
+                language={language}
+              />
+            )}
+
+            {/* ── Streaming credits (solo licensed) ── */}
+            {usageBalance.licenseType === "licensed" ? (
+              <UsageBar
+                label={language === "spanish" ? "Créditos Streaming" : "Streaming Credits"}
+                used={usageBalance.streaming.maxCredits - usageBalance.streaming.credits}
+                max={usageBalance.streaming.maxCredits}
+                displayUsed={usageBalance.streaming.credits}
+                unitPrefix={language === "spanish" ? "disponibles" : "available"}
+                unit={`≈ ${usageBalance.streaming.equivalentMinutes.toFixed(1)} min`}
+                colorFrom="from-amber-400"
+                colorTo="to-orange-400"
+                inverted
+                language={language}
+              />
+            ) : (
+              <div className="flex items-center rounded-2xl border border-dashed border-border/20 bg-card/10 px-4 py-3">
+                <div className="flex-1">
+                  <div className="text-xs font-bold text-foreground/50">
+                    {language === "spanish" ? "Streaming en tiempo real" : "Real-time Streaming"}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground/40 mt-0.5">
+                    {language === "spanish"
+                      ? "Disponible en plan de pago — activa tu licencia."
+                      : "Available on paid plan — activate your license."}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
     </div>
   );

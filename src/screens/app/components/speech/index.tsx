@@ -71,7 +71,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
     handleRemoveScreenshot,
   } = props;
 
-  const { hasActiveLicense, supportsImages } = useApp();
+  const { hasActiveLicense, supportsImages, usageBalance } = useApp();
 
   const [conversationMode, setConversationMode] = useState(false);
   const [isSwitchingMode, setIsSwitchingMode] = useState(false);
@@ -189,6 +189,14 @@ export const SystemAudio = (props: useSystemAudioType) => {
                 )}
                 {setupRequired && (
                   <h2 className="font-semibold text-sm">Setup Required</h2>
+                )}
+                {!setupRequired && hasActiveLicense && usageBalance && (
+                  <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 select-none shadow-[0_2px_8px_rgba(245,158,11,0.05)] cursor-default transition-all duration-300 hover:scale-102" title="Streaming Credits Balance">
+                    <span className="text-xs">🪙</span>
+                    <span className="tabular-nums">{usageBalance.streaming.credits.toLocaleString()}</span>
+                    <span className="text-amber-500/40 font-normal">/</span>
+                    <span className="text-amber-500/55 tabular-nums text-[10px] font-normal">{usageBalance.streaming.maxCredits.toLocaleString()}</span>
+                  </div>
                 )}
 
                 <div className="ml-auto flex items-center gap-2 flex-shrink-0 max-w-full">

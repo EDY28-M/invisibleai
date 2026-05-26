@@ -22,7 +22,8 @@ import {
   CursorType,
   updateCursorType,
 } from "@/lib/storage";
-import { IContextType, ScreenshotConfig, TYPE_PROVIDER } from "@/types";
+import { IContextType, ScreenshotConfig, TYPE_PROVIDER, UsageBalanceInfo } from "@/types";
+import { serverApi } from "@/lib/server-api";
 import curl2Json from "@bany/curl-to-json";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -130,6 +131,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setSupportsImagesState(value);
     safeLocalStorage.setItem(STORAGE_KEYS.SUPPORTS_IMAGES, String(value));
   };
+
+  const [usageBalance, setUsageBalance] = useState<UsageBalanceInfo | null>(null);
 
   // Default ON so every new user connects to the server out of the box.
   // Stored as "false" explicitly when the user turns it off; anything else = ON.
@@ -319,9 +322,94 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  useEffect(() => {
-    const initializeApp = async () => {
+  /** Sincroniza las credenciales del servidor y carga el saldo de uso. */
+  const syncServerCredentials = async () => {
+    try {
+      const storage = await invoke<{
+        instance_id?: string;
+        license_key?: string;
+      }>("secure_storage_get");
+      const instanceId = storage.instance_id || "";
+      const licenseKey = storage.license_key || "";
+      if (instanceId) {
+        serverApi.setCredentials(instanceId, licenseKey || undefined);
 
+        // ── VALIDAR LA LICENCIA EN EL SERVIDOR ──
+        try {
+          // Si es licencia dev local de admin, no requiere validar online
+          if (licenseKey === "invisibleai-admin-local") {
+            const balance = await serverApi.getUsageBalance().catch(() => null);
+            if (balance) setUsageBalance(balance);
+            return;
+          }
+
+          const validation = await serverApi.validate(licenseKey, instanceId);
+          if (!validation.valid) {
+            throw new Error("License revoked on server");
+          }
+
+          const balance = await serverApi.getUsageBalance().catch(() => null);
+          if (balance) setUsageBalance(balance);
+
+          // Fetch and refresh direct Groq & Deepgram credentials
+          try {
+            const creds = await serverApi.getCredentials(licenseKey, instanceId);
+            const saveItems = [
+              { key: "groq_api_key", value: creds.groqApiKey },
+              { key: "groq_model", value: creds.model },
+            ];
+            if (creds.deepgramApiKey) {
+              saveItems.push({ key: "deepgram_api_key", value: creds.deepgramApiKey });
+            }
+            if (creds.deepgramModel) {
+              saveItems.push({ key: "deepgram_model", value: creds.deepgramModel });
+            }
+            if (creds.deepgramLanguage) {
+              saveItems.push({ key: "deepgram_language", value: creds.deepgramLanguage });
+            }
+            await invoke("secure_storage_save", { items: saveItems });
+          } catch (credErr) {
+            console.debug("Failed to sync direct premium credentials:", credErr);
+          }
+
+        } catch (valErr: any) {
+          // Si el error es porque el servidor está inaccesible temporalmente (offline), no revocar
+          const errStr = valErr?.message || String(valErr);
+          if (errStr.includes("Network error") || errStr.includes("Failed to fetch") || errStr.includes("Server error 5")) {
+            console.debug("Server temporarily unreachable, keeping local credentials:", errStr);
+            return;
+          }
+
+          // Si el servidor confirma explícitamente la invalidez, limpiar todo localmente
+          console.warn("License validation failed, revoking premium access locally:", errStr);
+          await invoke("secure_storage_remove", {
+            keys: [
+              "invisibleai_license_key",
+              "invisibleai_instance_id",
+              "groq_api_key",
+              "groq_model",
+              "deepgram_api_key",
+              "deepgram_model",
+              "deepgram_language",
+            ],
+          }).catch(() => {});
+          setHasActiveLicense(false);
+          setUsageBalance(null);
+          setInvisibleAIApiEnabled(false);
+        }
+      } else {
+        setUsageBalance(null);
+      }
+    } catch {
+      setUsageBalance(null);
+    }
+  };
+
+  useEffect(() => {
+    // Registrar callback para que serverApi actualice el saldo cuando cambia
+    serverApi.setOnUsageUpdate((balance) => setUsageBalance(balance));
+
+    const initializeApp = async () => {
       await getActiveLicenseStatus();
 
       try {
@@ -333,6 +421,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       } catch (error) {
         console.debug("Failed to track app start:", error);
       }
+
+      // Inicializar credenciales del servidor y cargar saldo de uso
+      await syncServerCredentials();
     };
 
     loadData();
@@ -430,7 +521,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         e.key === STORAGE_KEYS.SYSTEM_PROMPT ||
         e.key === STORAGE_KEYS.SCREENSHOT_CONFIG ||
         e.key === STORAGE_KEYS.CUSTOMIZABLE ||
-        e.key === STORAGE_KEYS.SELECTED_AUDIO_DEVICES
+        e.key === STORAGE_KEYS.SELECTED_AUDIO_DEVICES ||
+        e.key === STORAGE_KEYS.INVISIBLEAI_API_ENABLED
       ) {
         loadData();
       }
@@ -442,22 +534,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const checkImageSupport = async () => {
       if (invisibleaiApiEnabled) {
-
+        // Ask the server what the active model supports — no need to store model locally
         try {
           const storage = await invoke<{
-            selected_invisibleai_model?: string;
+            license_key?: string;
+            instance_id?: string;
           }>("secure_storage_get");
 
-          if (storage.selected_invisibleai_model) {
-            const model = JSON.parse(storage.selected_invisibleai_model);
-            const hasImageSupport = model.modality?.includes("image") ?? false;
-            setSupportsImages(hasImageSupport);
-          } else {
-
-            setSupportsImages(false);
-          }
-        } catch (error) {
-          setSupportsImages(false);
+          const config = await serverApi.getConfig(
+            storage.license_key,
+            storage.instance_id,
+          );
+          // Server tells us if the active chat model supports vision
+          setSupportsImages(config.chat.supportsVision ?? false);
+        } catch {
+          // If server unreachable, optimistically allow images (Llama 4 supports vision)
+          setSupportsImages(true);
         }
       } else {
 
@@ -475,6 +567,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     checkImageSupport();
   }, [invisibleaiApiEnabled, selectedAIProvider.provider]);
+
 
   useEffect(() => {
     if (selectedAIProvider.provider) {
@@ -652,7 +745,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         if (storage.selected_invisibleai_model) {
           const model = JSON.parse(storage.selected_invisibleai_model);
-          const hasImageSupport = model.modality?.includes("image") ?? false;
+          const hasImageSupport = (model.modality?.includes("image") || model.modality?.includes("vision")) ?? false;
           setSupportsImages(hasImageSupport);
         } else {
 
@@ -707,6 +800,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     toggleContentProtected,
     supportsImages,
     setSupportsImages,
+    usageBalance,
+    refreshUsageBalance: syncServerCredentials,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

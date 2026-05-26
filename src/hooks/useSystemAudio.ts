@@ -167,13 +167,38 @@ export function useSystemAudio() {
 
       const base64: string = await invoke("capture_to_base64");
 
-      setScreenshotImage(base64);
+      // Compress the image to reduce payload size (max 1280px wide, JPEG 75%)
+      const compressedBase64 = await compressBase64Image(base64, 1280, 0.75);
+      setScreenshotImage(compressedBase64);
     } catch (err) {
       console.error(await getScreenCaptureErrorMessage(err), err);
     } finally {
       setIsCapturingScreenshot(false);
     }
   }, [isCapturingScreenshot]);
+
+  /** Compress a base64 image via canvas — reduces size for AI vision payloads */
+  function compressBase64Image(base64: string, maxWidth: number, quality: number): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const canvas = document.createElement("canvas");
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(base64); return; }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        // Strip the data:image/jpeg;base64, prefix
+        resolve(dataUrl.split(",")[1] ?? base64);
+      };
+      img.onerror = () => resolve(base64);
+      // The incoming base64 may or may not have a data URL prefix
+      img.src = base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`;
+    });
+  }
+
 
   const handleRemoveScreenshot = useCallback(() => {
     setScreenshotImage(null);
@@ -982,7 +1007,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         setIsAIProcessing(false);
       }
     },
-    [selectedAIProvider, allAiProviders, isDualChannel, screenshotImage]
+    [selectedAIProvider, allAiProviders, isDualChannel, screenshotImage, invisibleaiApiEnabled]
   );
 
   const handleStreamingCopilotTranscription = useCallback(async (
@@ -1486,31 +1511,47 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       };
       deepgramTokenCacheRef.current = { token: tokenData, fetchedAt: Date.now() };
     } else {
-      // Sin key local → intentar obtener token efímero del servidor InvisibleAI
+      // Sin key local → intentar usar la key de licencia guardada o pedir token efímero
       try {
-        const now = Date.now();
-        const cached = deepgramTokenCacheRef.current;
-        const TOKEN_MARGIN_MS = 5 * 60 * 1000; // renovar 5 min antes de expirar
+        const storage = await invoke<{
+          license_key?: string;
+          instance_id?: string;
+          deepgram_api_key?: string;
+          deepgram_model?: string;
+          deepgram_language?: string;
+        }>("secure_storage_get");
 
-        if (cached && (now - cached.fetchedAt) < (55 * 60 * 1000 - TOKEN_MARGIN_MS)) {
-          tokenData = cached.token;
+        if (storage.deepgram_api_key) {
+          tokenData = {
+            token: storage.deepgram_api_key,
+            model: storage.deepgram_model || "nova-3",
+            language: storage.deepgram_language || "es-419",
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          };
         } else {
-          const storage = await invoke<{ license_key?: string; instance_id?: string }>("secure_storage_get");
-          const licenseKey = storage.license_key ?? "";
-          const instanceId = storage.instance_id ?? "";
+          const now = Date.now();
+          const cached = deepgramTokenCacheRef.current;
+          const TOKEN_MARGIN_MS = 5 * 60 * 1000; // renovar 5 min antes de expirar
 
-          if (!licenseKey || !instanceId) {
-            setError("Streaming requiere una licencia activa o configura tu API key de Deepgram en Settings.");
-            setIsPopoverOpen(true);
-            return;
+          if (cached && (now - cached.fetchedAt) < (55 * 60 * 1000 - TOKEN_MARGIN_MS)) {
+            tokenData = cached.token;
+          } else {
+            const licenseKey = storage.license_key ?? "";
+            const instanceId = storage.instance_id ?? "";
+
+            if (!licenseKey || !instanceId) {
+              setError("Streaming requiere una licencia activa o configura tu API key de Deepgram en Settings.");
+              setIsPopoverOpen(true);
+              return;
+            }
+
+            tokenData = await serverApi.getDeepgramToken(licenseKey, instanceId);
+            deepgramTokenCacheRef.current = { token: tokenData, fetchedAt: now };
           }
-
-          tokenData = await serverApi.getDeepgramToken(licenseKey, instanceId);
-          deepgramTokenCacheRef.current = { token: tokenData, fetchedAt: now };
         }
-      } catch (err) {
-        // Servidor no disponible — guiar al usuario
-        setError("No se pudo obtener acceso a Deepgram. Configura tu API key en Deepgram Streaming Settings o verifica tu conexión al servidor.");
+      } catch (err: any) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        setError(errMsg || "No se pudo obtener acceso a Deepgram. Configura tu API key en Deepgram Streaming Settings o verifica tu conexión al servidor.");
         setIsPopoverOpen(true);
         return;
       }
@@ -1888,7 +1929,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       const currentSttProvider = allSttProvidersRef.current.find(
         (p) => p.id === selectedSttProviderRef.current.provider
       );
-      const streamingEnabled = currentSttProvider?.streaming === true;
+      const streamingEnabled = invisibleaiApiEnabled || currentSttProvider?.streaming === true;
       setIsStreamingMode(streamingEnabled);
       isStreamingModeRef.current = streamingEnabled;
       setInterimTranscription("");
@@ -2151,6 +2192,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     conversation.title,
     conversation.id,
     conversation.updatedAt,
+    allAiProviders,
+    selectedAIProvider,
+    invisibleaiApiEnabled,
   ]);
 
   const startNewConversation = useCallback(() => {
@@ -2195,7 +2239,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     const currentSttProvider = allSttProvidersRef.current.find(
       (p) => p.id === selectedSttProviderRef.current.provider
     );
-    const streamingEnabled = currentSttProvider?.streaming === true;
+    const streamingEnabled = invisibleaiApiEnabled || currentSttProvider?.streaming === true;
 
     if (isStreamingModeRef.current) {
       // Case 1: Currently in streaming mode, but switching to Manual mode (vadConfig.enabled becomes false)
@@ -2401,7 +2445,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     const currentSttProvider = allSttProviders.find(
       (p) => p.id === selectedSttProvider.provider
     );
-    const providerSupportsStreaming = currentSttProvider?.streaming === true;
+    const providerSupportsStreaming = invisibleaiApiEnabled || currentSttProvider?.streaming === true;
 
     // No transition needed if modes are already aligned
     if (providerSupportsStreaming === isStreamingMode) return;

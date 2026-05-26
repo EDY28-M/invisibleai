@@ -2,6 +2,27 @@ import { Dispatch, SetStateAction } from "react";
 import { ScreenshotConfig, TYPE_PROVIDER } from "@/types";
 import { CursorType, CustomizableState } from "@/lib/storage";
 
+/** Saldo de uso devuelto por el servidor (espeja UsageBalanceInfo del server). */
+export interface UsageBalanceInfo {
+  licenseType: "free" | "licensed";
+  chat: {
+    tokensUsedToday:  number;
+    tokenLimitPerDay: number;
+    remainingToday:   number;
+    resetsAt:         string; // ISO — medianoche UTC
+  };
+  stt: {
+    callsUsedToday:  number;
+    callLimitPerDay: number | null; // null = ilimitado
+    remainingToday:  number | null;
+  };
+  streaming: {
+    credits:           number;
+    maxCredits:        number;
+    equivalentMinutes: number;
+  };
+}
+
 export type IContextType = {
   systemPrompt: string;
   setSystemPrompt: Dispatch<SetStateAction<string>>;
@@ -59,4 +80,8 @@ export type IContextType = {
   toggleContentProtected: (isEnabled: boolean) => Promise<void>;
   supportsImages: boolean;
   setSupportsImages: (value: boolean) => void;
+  /** Saldo de uso del dispositivo (null mientras se carga). */
+  usageBalance: UsageBalanceInfo | null;
+  /** Fuerza un refresh del saldo de uso desde el servidor. */
+  refreshUsageBalance: () => Promise<void>;
 };

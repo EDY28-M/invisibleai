@@ -9,7 +9,14 @@
  *
  * Uso:
  *   import { serverApi } from "@/lib/server-api";
- *   const config = await serverApi.getConfig(licenseKey, instanceId);
+ *
+ *   // Inicializar credentials al arrancar la app
+ *   serverApi.setCredentials(instanceId, licenseKey);
+ *
+ *   // Recibir updates de saldo de uso
+ *   serverApi.setOnUsageUpdate((balance) => { ... });
+ *
+ *   const text = await serverApi.chat({ model, messages });
  */
 
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
@@ -17,63 +24,76 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 // ── URL base ──────────────────────────────────────────────────────────────────
 
 function getServerUrl(): string {
-  // 1. Build-time env (Vite)
   const envUrl = (import.meta as any).env?.VITE_INVISIBLEAI_SERVER as string | undefined;
   if (envUrl) return envUrl.replace(/\/$/, "");
-
-  // 2. Runtime override (dev/testing)
   const stored = localStorage.getItem("invisibleai_server_url");
   if (stored) return stored.replace(/\/$/, "");
-
-  // 3. Local dev fallback
   return "http://localhost:3000";
 }
+
+// ── Credenciales del dispositivo (se inicializan en AppProvider.initializeApp) ─
+
+let _instanceId:    string = "";
+let _licenseKey:    string = "";
+let _onUsageUpdate: ((balance: UsageBalanceInfo) => void) | null = null;
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 export interface AppConfig {
   mode: "free" | "licensed";
   streaming: boolean;
-  chat: {
-    model: string;
-    supportsVision: boolean;
-  };
-  stt: {
-    type: "server" | "deepgram_streaming";
-    model: string;
-    language: string;
-  };
+  chat: { model: string; supportsVision: boolean };
+  stt:  { type: "server" | "deepgram_streaming"; model: string; language: string };
 }
 
 export interface DeepgramTokenResponse {
-  token: string;
-  model: string;
-  language: string;
-  expiresAt: string;
+  token:            string;
+  model:            string;
+  language:         string;
+  expiresAt:        string;
+  creditsRemaining?: number;
+  creditsMax?:       number;
+  segmentSeconds?:   number;
 }
 
 export interface ActivateResponse {
-  activated: boolean;
-  instance?: { id: string; name: string };
+  activated:       boolean;
+  instance?:       { id: string; name: string };
   is_dev_license?: boolean;
-  error?: string;
+  error?:          string;
 }
 
 export interface ValidateResponse {
-  valid: boolean;
+  valid:   boolean;
   status?: string;
-  type?: string;
-  error?: string;
+  type?:   string;
+  error?:  string;
+}
+
+export interface UsageBalanceInfo {
+  licenseType: "free" | "licensed";
+  chat: {
+    tokensUsedToday:  number;
+    tokenLimitPerDay: number;
+    remainingToday:   number;
+    resetsAt:         string; // ISO
+  };
+  stt: {
+    callsUsedToday:  number;
+    callLimitPerDay: number | null; // null = ilimitado
+    remainingToday:  number | null;
+  };
+  streaming: {
+    credits:           number;
+    maxCredits:        number;
+    equivalentMinutes: number;
+  };
 }
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
 
-async function apiFetch<T>(
-  path: string,
-  options?: RequestInit
-): Promise<T> {
-  const url = `${getServerUrl()}${path}`;
-  // tauriFetch permite llamadas de red desde Tauri sin restricciones de CORS
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const url  = `${getServerUrl()}${path}`;
   const resp = await tauriFetch(url, options as any);
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: resp.statusText })) as any;
@@ -82,15 +102,9 @@ async function apiFetch<T>(
   return resp.json() as Promise<T>;
 }
 
-async function apiFetchMultipart<T>(
-  path: string,
-  formData: FormData
-): Promise<T> {
-  const url = `${getServerUrl()}${path}`;
-  const resp = await tauriFetch(url, {
-    method: "POST",
-    body: formData,
-  } as any);
+async function apiFetchMultipart<T>(path: string, formData: FormData): Promise<T> {
+  const url  = `${getServerUrl()}${path}`;
+  const resp = await tauriFetch(url, { method: "POST", body: formData } as any);
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: resp.statusText })) as any;
     throw new Error(err.error || `Server error ${resp.status}`);
@@ -98,15 +112,36 @@ async function apiFetchMultipart<T>(
   return resp.json() as Promise<T>;
 }
 
+/** Dispara un refresh del saldo de uso en background (no bloquea). */
+function backgroundRefreshUsage(): void {
+  if (!_instanceId || !_onUsageUpdate) return;
+  serverApi.getUsageBalance()
+    .then(_onUsageUpdate)
+    .catch(() => { /* silencioso — no crítico */ });
+}
+
 // ── API pública ───────────────────────────────────────────────────────────────
 
 export const serverApi = {
-  // ── Configuración de la app ───────────────────────────────────────────────
+
+  // ── Inicialización ────────────────────────────────────────────────────────
 
   /**
-   * Obtiene la config operativa según estado de licencia.
-   * Sin licenseKey → devuelve config free tier.
+   * Guarda las credenciales del dispositivo.
+   * Llamar en AppProvider.initializeApp y después de activar/desactivar licencia.
    */
+  setCredentials(instanceId: string, licenseKey?: string): void {
+    _instanceId = instanceId || "";
+    _licenseKey = licenseKey || "";
+  },
+
+  /** Registra un callback que se invoca cuando el saldo de uso cambia. */
+  setOnUsageUpdate(cb: (balance: UsageBalanceInfo) => void): void {
+    _onUsageUpdate = cb;
+  },
+
+  // ── Configuración de la app ───────────────────────────────────────────────
+
   async getConfig(licenseKey?: string, instanceId?: string): Promise<AppConfig> {
     const params = new URLSearchParams();
     if (licenseKey) params.set("licenseKey", licenseKey);
@@ -115,60 +150,99 @@ export const serverApi = {
     return apiFetch<AppConfig>(`/api/config${qs}`);
   },
 
+  // ── Saldo de uso ──────────────────────────────────────────────────────────
+
+  /**
+   * Obtiene el saldo de uso actual del dispositivo.
+   * Usa las credenciales almacenadas con setCredentials().
+   */
+  async getUsageBalance(): Promise<UsageBalanceInfo> {
+    const params = new URLSearchParams();
+    if (_instanceId) params.set("instanceId", _instanceId);
+    if (_licenseKey) params.set("licenseKey", _licenseKey);
+    return apiFetch<UsageBalanceInfo>(`/api/usage?${params}`);
+  },
+
   // ── Licencias ─────────────────────────────────────────────────────────────
 
   async activate(
     licenseKey: string,
     instanceId?: string,
     instanceName?: string,
-    platform?: string
+    platform?: string,
   ): Promise<ActivateResponse> {
     return apiFetch<ActivateResponse>("/api/activate", {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ licenseKey, instanceId, instanceName, platform }),
+      body:    JSON.stringify({ licenseKey, instanceId, instanceName, platform }),
     });
   },
 
   async deactivate(licenseKey: string, instanceId: string): Promise<{ deactivated: boolean }> {
     return apiFetch("/api/deactivate", {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ licenseKey, instanceId }),
+      body:    JSON.stringify({ licenseKey, instanceId }),
     });
   },
 
   async validate(licenseKey: string, instanceId: string): Promise<ValidateResponse> {
     return apiFetch<ValidateResponse>("/api/validate", {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ licenseKey, instanceId }),
+      body:    JSON.stringify({ licenseKey, instanceId }),
     });
+  },
+
+  async getCredentials(licenseKey: string, instanceId: string): Promise<{
+    groqApiKey: string;
+    model: string;
+    deepgramApiKey?: string;
+    deepgramModel?: string;
+    deepgramLanguage?: string;
+  }> {
+    const params = new URLSearchParams({ licenseKey, instanceId });
+    return apiFetch(`/api/credentials?${params}`);
   },
 
   // ── STT — Transcripción no-streaming (Groq Whisper) ──────────────────────
 
   /**
    * Envía un audio blob y recibe la transcripción.
-   * Usa el servidor para no exponer la API key de Groq.
+   * Incluye instanceId y licenseKey como query params para tracking de uso.
+   * Tras la transcripción dispara un refresh del saldo en background.
    */
   async transcribe(audio: Blob, filename = "audio.wav"): Promise<string> {
+    const params = new URLSearchParams();
+    if (_instanceId) params.set("instanceId", _instanceId);
+    if (_licenseKey) params.set("licenseKey",  _licenseKey);
+    const qs   = params.toString() ? `?${params}` : "";
     const form = new FormData();
     form.append("file", audio, filename);
-    const result = await apiFetchMultipart<{ transcription: string }>("/api/stt", form);
+    const result = await apiFetchMultipart<{ transcription: string; usage?: UsageBalanceInfo }>(
+      `/api/stt${qs}`, form
+    );
+    // Si el servidor devolvió el saldo actualizado, notificamos directamente
+    if (result.usage && _onUsageUpdate) {
+      _onUsageUpdate(result.usage);
+    } else {
+      backgroundRefreshUsage();
+    }
     return result.transcription;
   },
 
   // ── STT — Token efímero Deepgram (solo usuarios con licencia) ────────────
 
   /**
-   * Solicita un token temporal de Deepgram (TTL: 1 hora).
-   * La app usa este token para conectar el WebSocket directamente a Deepgram.
-   * Solo disponible para licencias activas.
+   * Solicita un token temporal de Deepgram.
+   * Descuenta créditos del saldo del usuario en el servidor.
    */
   async getDeepgramToken(licenseKey: string, instanceId: string): Promise<DeepgramTokenResponse> {
     const params = new URLSearchParams({ licenseKey, instanceId });
-    return apiFetch<DeepgramTokenResponse>(`/api/stt/token?${params}`);
+    const result = await apiFetch<DeepgramTokenResponse>(`/api/stt/token?${params}`);
+    // Refresh saldo para reflejar los créditos descontados
+    backgroundRefreshUsage();
+    return result;
   },
 
   // ── Chat / IA ─────────────────────────────────────────────────────────────
@@ -185,11 +259,16 @@ export const serverApi = {
     maxTokens?: number;
     temperature?: number;
   }): Promise<ReadableStream<string>> {
-    const url = `${getServerUrl()}/api/chat`;
+    const url  = `${getServerUrl()}/api/chat`;
     const resp = await tauriFetch(url, {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...params, stream: true }),
+      body:    JSON.stringify({
+        ...params,
+        instanceId: params.instanceId || _instanceId || undefined,
+        licenseKey: params.licenseKey || _licenseKey || undefined,
+        stream: true,
+      }),
     } as any);
 
     if (!resp.ok) {
@@ -197,11 +276,13 @@ export const serverApi = {
       throw new Error(err.error || `Chat error ${resp.status}`);
     }
 
+    backgroundRefreshUsage();
     return resp.body as unknown as ReadableStream<string>;
   },
 
   /**
    * Llamada de chat sin streaming — devuelve el texto completo.
+   * El servidor incluye el saldo actualizado en la respuesta.
    */
   async chat(params: {
     licenseKey?: string;
@@ -211,20 +292,31 @@ export const serverApi = {
     maxTokens?: number;
     temperature?: number;
   }): Promise<string> {
-    const result = await apiFetch<{ content: string }>("/api/chat", {
-      method: "POST",
+    const result = await apiFetch<{ content: string; usage?: UsageBalanceInfo }>("/api/chat", {
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...params, stream: false }),
+      body:    JSON.stringify({
+        ...params,
+        instanceId: params.instanceId || _instanceId || undefined,
+        licenseKey: params.licenseKey || _licenseKey || undefined,
+        stream: false,
+      }),
     });
+
+    // Actualizar saldo de uso en el contexto
+    if (result.usage && _onUsageUpdate) {
+      _onUsageUpdate(result.usage);
+    } else {
+      backgroundRefreshUsage();
+    }
+
     return result.content;
   },
 
   // ── Utilidades ────────────────────────────────────────────────────────────
 
-  /** URL actual del servidor (para mostrar en UI de settings) */
   getServerUrl,
 
-  /** Verifica si el servidor responde */
   async healthCheck(): Promise<boolean> {
     try {
       const resp = await tauriFetch(`${getServerUrl()}/health` as any);

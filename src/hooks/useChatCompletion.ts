@@ -395,6 +395,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       messages,
       conversationId,
       setMessages,
+      invisibleaiApiEnabled,
     ]
   );
 

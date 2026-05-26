@@ -130,7 +130,7 @@ export const InvisibleAIPrompts = () => {
       const matchingModel = models.find((model) => model.model === prompt.modelId || model.id === prompt.modelId);
       if (matchingModel) {
         if (invisibleaiApiEnabled) {
-          setSupportsImages(matchingModel.modality?.includes("image") ?? false);
+          setSupportsImages((matchingModel.modality?.includes("image") || matchingModel.modality?.includes("vision")) ?? false);
         }
         await invoke("secure_storage_save", {
           items: [{ key: SELECTED_INVISIBLEAI_MODEL_STORAGE_KEY, value: JSON.stringify(matchingModel) }],

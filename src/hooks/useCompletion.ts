@@ -271,6 +271,7 @@ export const useCompletion = () => {
       allAiProviders,
       systemPrompt,
       state.conversationHistory,
+      invisibleaiApiEnabled,
     ]
   );
 
@@ -658,6 +659,7 @@ export const useCompletion = () => {
       systemPrompt,
       saveCurrentConversation,
       inputRef,
+      invisibleaiApiEnabled,
     ]
   );
 

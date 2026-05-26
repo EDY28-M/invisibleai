@@ -107,6 +107,80 @@ async function* fetchInvisibleAIAIResponse(params: {
       return;
     }
 
+    // ── MODO DIRECTO LOCAL (JS FETCH): Máxima velocidad, cero lag ──
+    const storage = await invoke<{
+      groq_api_key?: string;
+      groq_model?: string;
+    }>("secure_storage_get").catch(() => ({} as { groq_api_key?: string; groq_model?: string }));
+
+    if (storage.groq_api_key) {
+      const messages = buildServerMessages(
+        systemPrompt,
+        history,
+        userMessage,
+        imagesBase64
+      );
+      const modelId = storage.groq_model || "meta-llama/llama-4-scout-17b-16e-instruct";
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${storage.groq_api_key}`,
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages,
+          stream: true,
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(`Groq API Error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`);
+      }
+
+      if (!response.body) {
+        throw new Error("No response body received from Groq");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        if (signal?.aborted) {
+          reader.cancel();
+          return;
+        }
+
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data:")) {
+            const trimmed = line.substring(5).trim();
+            if (!trimmed || trimmed === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(trimmed);
+              const delta = parsed.choices?.[0]?.delta?.content || "";
+              if (delta) {
+                yield delta;
+              }
+            } catch (e) {
+              // Silencioso
+            }
+          }
+        }
+      }
+      return;
+    }
+
     let historyString: string | undefined;
     if (history.length > 0) {
       const formattedHistory = [...history].map((msg) => ({

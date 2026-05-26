@@ -14,7 +14,7 @@ fn get_payment_endpoint() -> Result<String, String> {
 
     match option_env!("PAYMENT_ENDPOINT") {
         Some(endpoint) => Ok(endpoint.to_string()),
-        None => Err("PAYMENT_ENDPOINT environment variable not set. Please ensure it's set during the build process.".to_string())
+        None => Ok("https://invisibleai.onrender.com/api".to_string())
     }
 }
 
@@ -25,7 +25,7 @@ fn get_api_access_key() -> Result<String, String> {
 
     match option_env!("API_ACCESS_KEY") {
         Some(key) => Ok(key.to_string()),
-        None => Err("API_ACCESS_KEY environment variable not set. Please ensure it's set during the build process.".to_string())
+        None => Ok("dummy-local-key".to_string())
     }
 }
 
@@ -46,6 +46,11 @@ struct SecureStorage {
     license_key: Option<String>,
     instance_id: Option<String>,
     selected_invisibleai_model: Option<String>,
+    groq_api_key: Option<String>,
+    groq_model: Option<String>,
+    deepgram_api_key: Option<String>,
+    deepgram_model: Option<String>,
+    deepgram_language: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -59,6 +64,11 @@ pub struct StorageResult {
     license_key: Option<String>,
     instance_id: Option<String>,
     selected_invisibleai_model: Option<String>,
+    groq_api_key: Option<String>,
+    groq_model: Option<String>,
+    deepgram_api_key: Option<String>,
+    deepgram_model: Option<String>,
+    deepgram_language: Option<String>,
 }
 
 #[tauri::command]
@@ -78,6 +88,11 @@ pub async fn secure_storage_save(app: AppHandle, items: Vec<StorageItem>) -> Res
             "invisibleai_license_key" => storage.license_key = Some(item.value),
             "invisibleai_instance_id" => storage.instance_id = Some(item.value),
             "selected_invisibleai_model" => storage.selected_invisibleai_model = Some(item.value),
+            "groq_api_key" => storage.groq_api_key = Some(item.value),
+            "groq_model" => storage.groq_model = Some(item.value),
+            "deepgram_api_key" => storage.deepgram_api_key = Some(item.value),
+            "deepgram_model" => storage.deepgram_model = Some(item.value),
+            "deepgram_language" => storage.deepgram_language = Some(item.value),
             _ => return Err(format!("Invalid storage key: {}", item.key)),
         }
     }
@@ -100,6 +115,11 @@ pub async fn secure_storage_get(app: AppHandle) -> Result<StorageResult, String>
             license_key: None,
             instance_id: None,
             selected_invisibleai_model: None,
+            groq_api_key: None,
+            groq_model: None,
+            deepgram_api_key: None,
+            deepgram_model: None,
+            deepgram_language: None,
         });
     }
 
@@ -113,6 +133,11 @@ pub async fn secure_storage_get(app: AppHandle) -> Result<StorageResult, String>
         license_key: storage.license_key,
         instance_id: storage.instance_id,
         selected_invisibleai_model: storage.selected_invisibleai_model,
+        groq_api_key: storage.groq_api_key,
+        groq_model: storage.groq_model,
+        deepgram_api_key: storage.deepgram_api_key,
+        deepgram_model: storage.deepgram_model,
+        deepgram_language: storage.deepgram_language,
     })
 }
 
@@ -135,6 +160,11 @@ pub async fn secure_storage_remove(app: AppHandle, keys: Vec<String>) -> Result<
             "invisibleai_license_key" => storage.license_key = None,
             "invisibleai_instance_id" => storage.instance_id = None,
             "selected_invisibleai_model" => storage.selected_invisibleai_model = None,
+            "groq_api_key" => storage.groq_api_key = None,
+            "groq_model" => storage.groq_model = None,
+            "deepgram_api_key" => storage.deepgram_api_key = None,
+            "deepgram_model" => storage.deepgram_model = None,
+            "deepgram_language" => storage.deepgram_language = None,
             _ => return Err(format!("Invalid storage key: {}", key)),
         }
     }
@@ -158,32 +188,43 @@ pub struct ActivationRequest {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ActivationResponse {
-    activated: bool,
-    error: Option<String>,
-    license_key: Option<String>,
-    instance: Option<InstanceInfo>,
-    is_dev_license: bool,
+    #[serde(default)]
+    pub activated: bool,
+    pub error: Option<String>,
+    pub license_key: Option<String>,
+    pub instance: Option<InstanceInfo>,
+    #[serde(default)]
+    pub is_dev_license: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ValidateResponse {
-    is_active: bool,
-    last_validated_at: Option<String>,
-    is_dev_license: bool,
+    pub is_active: bool,
+    pub last_validated_at: Option<String>,
+    #[serde(default)]
+    pub is_dev_license: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InstanceInfo {
-    id: String,
-    name: String,
-    created_at: String,
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DeactivationResponse {
+    #[serde(default)]
+    pub deactivated: bool,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CheckoutResponse {
-    success: Option<bool>,
-    checkout_url: Option<String>,
-    error: Option<String>,
+    pub success: Option<bool>,
+    pub checkout_url: Option<String>,
+    pub error: Option<String>,
 }
 
 #[tauri::command]
@@ -264,12 +305,12 @@ pub async fn activate_license_api(
 }
 
 #[tauri::command]
-pub async fn deactivate_license_api(app: AppHandle) -> Result<ActivationResponse, String> {
+pub async fn deactivate_license_api(app: AppHandle) -> Result<DeactivationResponse, String> {
 
     let payment_endpoint = get_payment_endpoint()?;
     let api_access_key = get_api_access_key()?;
     let machine_id: String = app.machine_uid().get_machine_uid().unwrap().id.unwrap();
-    let (license_key, instance_id, _) = get_stored_credentials(&app).await?;
+    let (license_key, instance_id, _, _, _) = get_stored_credentials(&app).await?;
     let app_version: String = env!("CARGO_PKG_VERSION").to_string();
     let deactivation_request = ActivationRequest {
         license_key: license_key.clone(),
@@ -302,7 +343,7 @@ pub async fn deactivate_license_api(app: AppHandle) -> Result<ActivationResponse
                 format!("Failed to make chat request: {}", error_msg)
             }
         })?;
-    let deactivation_response: ActivationResponse = response.json().await.map_err(|e| {
+    let deactivation_response: DeactivationResponse = response.json().await.map_err(|e| {
         let error_msg = format!("{}", e);
         if error_msg.contains("url (") {
 
@@ -325,7 +366,7 @@ pub async fn validate_license_api(app: AppHandle) -> Result<ValidateResponse, St
     let is_active = credentials.is_ok();
 
     let is_dev_license = match credentials {
-        Ok((license_key, _, _)) => license_key == "invisibleai-admin-local",
+        Ok((license_key, _, _, _, _)) => license_key == "invisibleai-admin-local",
         Err(_) => false,
     };
 
