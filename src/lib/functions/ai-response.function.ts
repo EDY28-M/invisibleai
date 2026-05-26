@@ -183,9 +183,28 @@ async function* fetchInvisibleAIAIResponse(params: {
         }
       }
 
+      // Process any content remaining in buffer after stream ends (usage chunk may lack trailing newline)
+      if (buffer.trim()) {
+        for (const line of buffer.split("\n")) {
+          if (line.startsWith("data:")) {
+            const trimmed = line.substring(5).trim();
+            if (!trimmed || trimmed === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(trimmed);
+              if (parsed.usage?.total_tokens) {
+                totalTokens = parsed.usage.total_tokens;
+              }
+            } catch {}
+          }
+        }
+      }
+
       // Report token usage to server in background — non-blocking
       if (totalTokens > 0) {
         serverApi.reportChatTokens(totalTokens);
+      } else {
+        // Groq usage chunk wasn't captured — refresh balance so the UI stays in sync
+        serverApi.refreshBalance();
       }
       return;
     }

@@ -84,6 +84,9 @@
     "tauri-plugin-macos-permissions-api": "^2.3.0",
     "tauri-plugin-posthog-api": "^0.2.2"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": ["core-js", "esbuild", "protobufjs"]
+  },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
     "@types/node": "^24.3.0",

@@ -20,6 +20,8 @@
  */
 
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 
 // ── URL base ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +38,27 @@ function getServerUrl(): string {
 let _instanceId:    string = "";
 let _licenseKey:    string = "";
 let _onUsageUpdate: ((balance: UsageBalanceInfo) => void) | null = null;
+
+/**
+ * Asegura que _instanceId esté poblado.
+ * Si no está, intenta cargarlo desde secure_storage (Tauri keychain).
+ * Esto evita la race condition entre AppProvider.initializeApp() y los componentes
+ * que llaman a refreshBalance / reportChatTokens antes de que setCredentials se ejecute.
+ */
+async function ensureCredentialsLoaded(): Promise<boolean> {
+  if (_instanceId) return true;
+  try {
+    const storage = await invoke<{ instance_id?: string; license_key?: string }>("secure_storage_get");
+    if (storage.instance_id) {
+      _instanceId = storage.instance_id;
+      _licenseKey = storage.license_key ?? "";
+      return true;
+    }
+  } catch {
+    // Silencioso — el dispositivo aún no tiene credenciales en disco
+  }
+  return false;
+}
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -126,10 +149,15 @@ async function apiFetchMultipart<T>(path: string, formData: FormData): Promise<T
 
 /** Dispara un refresh del saldo de uso en background (no bloquea). */
 function backgroundRefreshUsage(): void {
-  if (!_instanceId || !_onUsageUpdate) return;
-  serverApi.getUsageBalance()
-    .then(_onUsageUpdate)
-    .catch(() => { /* silencioso — no crítico */ });
+  ensureCredentialsLoaded().then((ready) => {
+    if (!ready) return;
+    serverApi.getUsageBalance()
+      .then((balance) => {
+        if (_onUsageUpdate) _onUsageUpdate(balance);
+        emit("usage-balance-updated", balance).catch(() => {});
+      })
+      .catch((err) => { console.warn("[serverApi] backgroundRefreshUsage failed:", err); });
+  });
 }
 
 // ── API pública ───────────────────────────────────────────────────────────────
@@ -332,31 +360,61 @@ export const serverApi = {
   /**
    * Lightweight balance refresh — fetches latest usage and fires _onUsageUpdate.
    * Safe to call from anywhere without triggering full license validation.
+   * Auto-loads credentials from secure_storage if they haven't been set yet
+   * (evita la race condition al montar el dashboard antes de initializeApp).
    */
   refreshBalance(): void {
-    if (!_instanceId || !_onUsageUpdate) return;
-    serverApi.getUsageBalance()
-      .then(_onUsageUpdate)
-      .catch(() => {});
+    ensureCredentialsLoaded().then((ready) => {
+      if (!ready) return;
+      serverApi.getUsageBalance()
+        .then((balance) => {
+          if (_onUsageUpdate) _onUsageUpdate(balance);
+          emit("usage-balance-updated", balance).catch(() => {});
+        })
+        .catch((err) => { console.warn("[serverApi] refreshBalance failed:", err); });
+    });
   },
 
   /**
    * Reports token usage for a direct (client-side) Groq chat call.
-   * Fire-and-forget — does not block the UI. Updates balance via _onUsageUpdate.
+   * Fire-and-forget — does not block the UI. Updates balance via _onUsageUpdate
+   * AND emits a cross-window Tauri event so the dashboard updates immediately
+   * even if the call was made from the chat overlay window.
+   * Retries up to 2 times (15s apart) to survive Render cold-start delays.
    */
   reportChatTokens(tokens: number): void {
-    if (!_instanceId || tokens <= 0) return;
-    apiFetch<UsageBalanceInfo>("/api/usage/report", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        instanceId: _instanceId,
-        licenseKey: _licenseKey || undefined,
-        tokens,
-      }),
-    })
-      .then((balance) => { if (_onUsageUpdate) _onUsageUpdate(balance); })
-      .catch(() => {});
+    if (tokens <= 0) return;
+    ensureCredentialsLoaded().then((ready) => {
+      if (!ready) return;
+      const attempt = (retriesLeft: number) => {
+        apiFetch<UsageBalanceInfo>("/api/usage/report", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({
+            instanceId: _instanceId,
+            licenseKey: _licenseKey || undefined,
+            tokens,
+          }),
+        })
+          .then((balance) => {
+            if (_onUsageUpdate) _onUsageUpdate(balance);
+            // Notify ALL windows (dashboard, overlay, etc.) immediately
+            emit("usage-balance-updated", balance).catch(() => {});
+          })
+          .catch((err) => {
+            if (retriesLeft > 0) {
+              // Render free tier can take 30-60s to wake up — retry
+              setTimeout(() => attempt(retriesLeft - 1), 15_000);
+            } else {
+              console.warn("[serverApi] reportChatTokens failed after retries:", err);
+              // Server unreachable — trigger a plain balance refresh so the
+              // dashboard at least shows the latest server-side count
+              serverApi.refreshBalance();
+            }
+          });
+      };
+      attempt(2);
+    });
   },
 
   getServerUrl,

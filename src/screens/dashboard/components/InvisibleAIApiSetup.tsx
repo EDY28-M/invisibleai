@@ -148,12 +148,13 @@ export const InvisibleAIApiSetup = () => {
     loadLicenseStatus();
   }, []);
 
-  // Refresh balance every 60s while the dashboard is open
+  // Refresh balance immediately on mount and then every 15s while the dashboard is open.
+  // No hasActiveLicense guard — free users also need their token count updated.
   useEffect(() => {
-    if (!hasActiveLicense) return;
-    const id = setInterval(() => serverApi.refreshBalance(), 60_000);
+    serverApi.refreshBalance();
+    const id = setInterval(() => serverApi.refreshBalance(), 15_000);
     return () => clearInterval(id);
-  }, [hasActiveLicense]);
+  }, []);
 
   const loadLicenseStatus = async () => {
     try {

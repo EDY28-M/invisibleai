@@ -419,6 +419,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    // Escuchar eventos cross-window de actualización de saldo.
+    // El evento se emite desde cualquier ventana (chat overlay, dashboard) cuando
+    // reportChatTokens o refreshBalance obtienen un nuevo balance del servidor.
+    const unlistenUsage = listen<UsageBalanceInfo>("usage-balance-updated", (event) => {
+      setUsageBalance(event.payload);
+    });
+    return () => { unlistenUsage.then((fn) => fn()); };
+  }, []);
+
+  useEffect(() => {
     // Registrar callback para que serverApi actualice el saldo cuando cambia
     serverApi.setOnUsageUpdate((balance) => setUsageBalance(balance));
 
