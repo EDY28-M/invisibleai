@@ -51,6 +51,20 @@ interface ChatCompletionState {
   attachedFiles: AttachedFile[];
 }
 
+const shouldUseGlobalMemoryForMessage = (input: string) => {
+  const normalized = input
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  return [
+    /\b(te acuerdas|recuerdas|recuerdame|memoria|contexto anterior)\b/,
+    /\b(que hablamos|hablamos antes|sesion pasada|conversacion pasada)\b/,
+    /\b(ayer|la ultima vez|lo anterior|lo de antes|sigamos con)\b/,
+    /\b(remember|memory|previous conversation|last session|last time)\b/,
+  ].some((pattern) => pattern.test(normalized));
+};
+
 export const useChatCompletion = (
   conversationId: string,
   messages: ChatConversation | null,
@@ -209,8 +223,9 @@ export const useChatCompletion = (
         let extendedMessageHistory = [...messageHistory];
         let effectiveSystemPrompt = systemPrompt || "";
 
-        const useConversationalMemory = safeLocalStorage.getItem("system_audio_use_memory") === "true";
-        if (useConversationalMemory) {
+        const useConversationalMemory =
+          safeLocalStorage.getItem("system_audio_use_memory") === "true";
+        if (useConversationalMemory && shouldUseGlobalMemoryForMessage(input)) {
           try {
             const memoryContextStr = await getGlobalMemoryContext(15);
             if (memoryContextStr) {
@@ -223,7 +238,8 @@ ${memoryContextStr}
 
 ERES CAPAZ DE RECORDAR EL PASADO: El sistema te está proveyendo esta memoria.
 Si el usuario pregunta "¿De qué hablamos la sesión pasada?" o "¿Te acuerdas de mí?", DEBES responder usando la información de <PastConversations>.
-ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el modelo parte de cero", o que "no tienes memoria". Tienes memoria, y está en <PastConversations>. Usa esta información de manera fluida y natural.`;
+ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el modelo parte de cero", o que "no tienes memoria". Tienes memoria, y está en <PastConversations>.
+Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni menciones recuerdos que no sean relevantes para lo que el usuario pidió.`;
               effectiveSystemPrompt = globalContextBlock + "\n\n" + effectiveSystemPrompt;
             }
           } catch (memError) {

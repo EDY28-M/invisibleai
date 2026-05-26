@@ -2,6 +2,22 @@ import { Message, TYPE_PROVIDER } from "@/types";
 import { fetchAIResponse } from "./ai-response.function";
 import { upsertMemoryFact } from "../database/memory.action";
 
+const shouldPersistMemorySummary = (summary: string) => {
+  const normalized = summary.trim().toLowerCase();
+  if (!normalized) return false;
+
+  return ![
+    "api request failed",
+    "network error",
+    "failed to",
+    "no hay informacion relevante",
+    "no hay información relevante",
+    "no hay hechos",
+    "la conversacion apenas ha comenzado",
+    "la conversación apenas ha comenzado",
+  ].some((needle) => normalized.includes(needle));
+};
+
 export async function extractAndStoreMemories(
   conversationId: string,
   messages: Message[],
@@ -51,7 +67,7 @@ Estos hechos se utilizarán como contexto en futuras conversaciones con el usuar
     clearTimeout(timeoutId);
 
     const cleanedSummary = fullSummary.trim();
-    if (cleanedSummary) {
+    if (shouldPersistMemorySummary(cleanedSummary)) {
       await upsertMemoryFact(conversationId, cleanedSummary);
       console.log(`Memory fact updated for conversation ${conversationId}`);
     }

@@ -3,6 +3,7 @@ export const STORAGE_KEYS = {
   TRANSPARENCY: "transparency",
   SYSTEM_PROMPT: "system_prompt",
   SELECTED_SYSTEM_PROMPT_ID: "selected_system_prompt_id",
+  SELECTED_INVISIBLEAI_PROMPT: "selected_invisibleai_prompt",
   SCREENSHOT_CONFIG: "screenshot_config",
 
   CUSTOM_AI_PROVIDERS: "curl_custom_ai_providers",

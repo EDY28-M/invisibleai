@@ -5,6 +5,7 @@ import {
   STORAGE_KEYS,
 } from "@/config";
 import { getPlatform, safeLocalStorage, trackAppStart } from "@/lib";
+import { getSystemPromptById } from "@/lib/database";
 import {
   getCustomAiProviders,
   getCustomSttProviders,
@@ -40,6 +41,28 @@ import {
 const AppContext = createContext<IContextType | undefined>(undefined);
 const LICENSE_STATE_UPDATED_EVENT = "license-state-updated";
 
+const getPersistedSystemPrompt = () => {
+  const savedSystemPrompt = safeLocalStorage.getItem(STORAGE_KEYS.SYSTEM_PROMPT);
+  if (!savedSystemPrompt) return DEFAULT_SYSTEM_PROMPT;
+
+  const hasSelectedCustomPrompt = Boolean(
+    safeLocalStorage.getItem(STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID)
+  );
+  const hasSelectedInvisibleAIPrompt = Boolean(
+    safeLocalStorage.getItem(STORAGE_KEYS.SELECTED_INVISIBLEAI_PROMPT)
+  );
+
+  if (hasSelectedCustomPrompt || hasSelectedInvisibleAIPrompt) {
+    return savedSystemPrompt;
+  }
+
+  if (savedSystemPrompt !== DEFAULT_SYSTEM_PROMPT) {
+    safeLocalStorage.setItem(STORAGE_KEYS.SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT);
+  }
+
+  return DEFAULT_SYSTEM_PROMPT;
+};
+
 const getValidCustomProviders = (
   providers: TYPE_PROVIDER[],
   providerType: "AI" | "STT"
@@ -65,8 +88,7 @@ const getValidCustomProviders = (
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [systemPrompt, setSystemPrompt] = useState<string>(
-    safeLocalStorage.getItem(STORAGE_KEYS.SYSTEM_PROMPT) ||
-      DEFAULT_SYSTEM_PROMPT
+    getPersistedSystemPrompt
   );
 
   const [selectedAudioDevices, setSelectedAudioDevices] = useState<{
@@ -185,12 +207,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   const loadData = () => {
 
-    const savedSystemPrompt = safeLocalStorage.getItem(
-      STORAGE_KEYS.SYSTEM_PROMPT
-    );
-    if (savedSystemPrompt) {
-      setSystemPrompt(savedSystemPrompt || DEFAULT_SYSTEM_PROMPT);
-    }
+    setSystemPrompt(getPersistedSystemPrompt());
 
     const savedScreenshotConfig = safeLocalStorage.getItem(
       STORAGE_KEYS.SCREENSHOT_CONFIG
@@ -296,6 +313,42 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         console.warn("Failed to parse selected audio devices");
       }
     }
+  };
+
+  const syncPersistedSystemPrompt = async () => {
+    const selectedPromptId = safeLocalStorage.getItem(
+      STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID
+    );
+    if (!selectedPromptId) {
+      setSystemPrompt(getPersistedSystemPrompt());
+      return;
+    }
+
+    const promptId = Number(selectedPromptId);
+    if (!Number.isFinite(promptId)) {
+      safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID);
+      safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_INVISIBLEAI_PROMPT);
+      safeLocalStorage.setItem(STORAGE_KEYS.SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT);
+      setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
+      return;
+    }
+
+    try {
+      const prompt = await getSystemPromptById(promptId);
+      if (prompt) {
+        safeLocalStorage.setItem(STORAGE_KEYS.SYSTEM_PROMPT, prompt.prompt);
+        setSystemPrompt(prompt.prompt);
+        return;
+      }
+    } catch (error) {
+      console.debug("Failed to validate selected system prompt:", error);
+      return;
+    }
+
+    safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID);
+    safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_INVISIBLEAI_PROMPT);
+    safeLocalStorage.setItem(STORAGE_KEYS.SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT);
+    setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
   };
 
   const updateCursor = (type: CursorType | undefined) => {
@@ -495,6 +548,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
 
     loadData();
+    syncPersistedSystemPrompt().catch(() => {});
     initializeApp();
   }, []);
 

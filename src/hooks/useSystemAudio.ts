@@ -2285,12 +2285,14 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     setIsAIProcessing(false);
     setIsPopoverOpen(false);
     setUseSystemPrompt(true);
+    useSystemPromptRef.current = true;
+    saveContextSettings(true, contextContentRef.current);
     isLastTranscriptionSavedRef.current = true;
     setAccumulatedSystemText("");
     accumulatedSystemTextRef.current = "";
     resetStreamingCopilotBuffers();
     setScreenshotImage(null);
-  }, [resetStreamingCopilotBuffers]);
+  }, [resetStreamingCopilotBuffers, saveContextSettings]);
 
   const updateVadConfiguration = useCallback(async (config: VadConfig, overrideDualChannel?: boolean) => {
     // Clear any stuck utterances from the previous mode before switching

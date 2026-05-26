@@ -38,7 +38,6 @@ interface Model {
 }
 
 const SELECTED_INVISIBLEAI_MODEL_STORAGE_KEY = "selected_invisibleai_model";
-const SELECTED_INVISIBLEAI_PROMPT_STORAGE_KEY = "selected_invisibleai_prompt";
 
 const LOCAL_FALLBACK_PROMPTS: Record<"en" | "es", InvisibleAIPrompt[]> = {
   en: [
@@ -62,7 +61,7 @@ export const InvisibleAIPrompts = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [selectedInvisibleAIPrompt, setSelectedInvisibleAIPrompt] = useState<InvisibleAIPrompt | null>(() => {
-    const stored = safeLocalStorage.getItem(SELECTED_INVISIBLEAI_PROMPT_STORAGE_KEY);
+    const stored = safeLocalStorage.getItem(STORAGE_KEYS.SELECTED_INVISIBLEAI_PROMPT);
     if (stored) { try { return JSON.parse(stored); } catch { return null; } }
     return null;
   });
@@ -160,7 +159,7 @@ export const InvisibleAIPrompts = () => {
       setSelectedInvisibleAIPrompt(prompt);
       safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID);
       safeLocalStorage.setItem(STORAGE_KEYS.SYSTEM_PROMPT, prompt.prompt);
-      safeLocalStorage.setItem(SELECTED_INVISIBLEAI_PROMPT_STORAGE_KEY, JSON.stringify(prompt));
+      safeLocalStorage.setItem(STORAGE_KEYS.SELECTED_INVISIBLEAI_PROMPT, JSON.stringify(prompt));
 
       const matchingModel = models.find((model) => model.model === prompt.modelId || model.id === prompt.modelId);
       if (matchingModel) {
