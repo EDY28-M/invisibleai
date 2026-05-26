@@ -1995,7 +1995,10 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       // Free-tier users with InvisibleAI API enabled use the server Whisper proxy
       // (non-streaming) — NOT Deepgram. So invisibleaiApiEnabled alone is NOT enough.
       const canUseDeepgramStreaming = invisibleaiApiEnabled && hasActiveLicense;
-      const streamingEnabled = canUseDeepgramStreaming || currentSttProvider?.streaming === true;
+      const sttVars = selectedSttProviderRef.current.variables || {};
+      const localApiKey = sttVars.api_key || sttVars.API_KEY || "";
+      const hasCustomStreamingKey = currentSttProvider?.streaming === true && !!localApiKey;
+      const streamingEnabled = canUseDeepgramStreaming || hasCustomStreamingKey;
       setIsStreamingMode(streamingEnabled);
       isStreamingModeRef.current = streamingEnabled;
       setInterimTranscription("");
@@ -2320,7 +2323,11 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     const currentSttProvider = allSttProvidersRef.current.find(
       (p) => p.id === selectedSttProviderRef.current.provider
     );
-    const streamingEnabled = invisibleaiApiEnabled || currentSttProvider?.streaming === true;
+    const canUseDeepgramStreaming = invisibleaiApiEnabled && hasActiveLicense;
+    const sttVars = selectedSttProviderRef.current.variables || {};
+    const localApiKey = sttVars.api_key || sttVars.API_KEY || "";
+    const hasCustomStreamingKey = currentSttProvider?.streaming === true && !!localApiKey;
+    const streamingEnabled = canUseDeepgramStreaming || hasCustomStreamingKey;
 
     if (isStreamingModeRef.current) {
       // Case 1: Currently in streaming mode, but switching to Manual mode (vadConfig.enabled becomes false)
@@ -2531,7 +2538,10 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     // Mismo criterio que en startCapture: invisibleaiApiEnabled solo activa
     // streaming si el usuario tiene licencia activa (o key propia con streaming=true).
     const canUseDeepgramStreaming = invisibleaiApiEnabled && hasActiveLicense;
-    const providerSupportsStreaming = canUseDeepgramStreaming || currentSttProvider?.streaming === true;
+    const sttVars = selectedSttProvider.variables || {};
+    const localApiKey = sttVars.api_key || sttVars.API_KEY || "";
+    const hasCustomStreamingKey = currentSttProvider?.streaming === true && !!localApiKey;
+    const providerSupportsStreaming = canUseDeepgramStreaming || hasCustomStreamingKey;
 
     // No transition needed if modes are already aligned
     if (providerSupportsStreaming === isStreamingMode) return;
