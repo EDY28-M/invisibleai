@@ -22,6 +22,15 @@ function getCachedCurlJson(curl: string) {
 
 async function fetchInvisibleAISTT(audio: File | Blob): Promise<string> {
   try {
+    const storage = await invoke<{ groq_api_key?: string }>("secure_storage_get")
+      .catch(() => ({} as { groq_api_key?: string }));
+
+    if (storage.groq_api_key) {
+      const licenseStillValid = await serverApi.ensureLicensedCredentialsValid();
+      if (!licenseStillValid) {
+        throw new Error("Tu licencia ya no está activa. Actívala nuevamente para usar InvisibleAI STT.");
+      }
+    }
 
     const audioBase64 = await blobToBase64(audio);
 

@@ -114,6 +114,11 @@ async function* fetchInvisibleAIAIResponse(params: {
     }>("secure_storage_get").catch(() => ({} as { groq_api_key?: string; groq_model?: string }));
 
     if (storage.groq_api_key) {
+      const licenseStillValid = await serverApi.ensureLicensedCredentialsValid();
+      if (!licenseStillValid) {
+        throw new Error("Tu licencia ya no está activa. Actívala nuevamente para usar InvisibleAI API.");
+      }
+
       const messages = buildServerMessages(
         systemPrompt,
         history,

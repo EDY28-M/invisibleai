@@ -38,6 +38,17 @@ function getServerUrl(): string {
 let _instanceId:    string = "";
 let _licenseKey:    string = "";
 let _onUsageUpdate: ((balance: UsageBalanceInfo) => void) | null = null;
+const LICENSE_STATE_UPDATED_EVENT = "license-state-updated";
+const SERVER_CREDENTIAL_KEYS = [
+  "invisibleai_license_key",
+  "invisibleai_instance_id",
+  "groq_api_key",
+  "groq_model",
+  "deepgram_api_key",
+  "deepgram_model",
+  "deepgram_language",
+  "license_expires_at",
+] as const;
 
 /**
  * Asegura que _instanceId esté poblado.
@@ -147,6 +158,65 @@ async function apiFetchMultipart<T>(path: string, formData: FormData): Promise<T
   return resp.json() as Promise<T>;
 }
 
+function isNetworkLikeError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("Network error") ||
+    message.includes("Failed to fetch") ||
+    message.includes("Server error 5") ||
+    message.includes("connect") ||
+    message.includes("timeout")
+  );
+}
+
+function isLicenseInvalidError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("Licencia no encontrada") ||
+    message.includes("Licencia inválida") ||
+    message.includes("Licencia revocada") ||
+    message.includes("Licencia expirada") ||
+    message.includes("licencia activa") ||
+    message.includes("no está registrado para esta licencia") ||
+    message.includes("License revoked") ||
+    message.includes("license_invalid")
+  );
+}
+
+async function clearServerCredentials(reason: string): Promise<void> {
+  await invoke("secure_storage_remove", {
+    keys: [...SERVER_CREDENTIAL_KEYS],
+  }).catch(() => {});
+  _instanceId = "";
+  _licenseKey = "";
+  emit(LICENSE_STATE_UPDATED_EVENT, { active: false, reason }).catch(() => {});
+}
+
+async function validateStoredLicenseOrClear(): Promise<boolean> {
+  const ready = await ensureCredentialsLoaded();
+  if (!ready || !_licenseKey || !_instanceId) return false;
+  if (_licenseKey === "invisibleai-admin-local") return true;
+
+  try {
+    const validation = await apiFetch<ValidateResponse>("/api/validate", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ licenseKey: _licenseKey, instanceId: _instanceId }),
+    });
+
+    if (validation.valid) return true;
+    await clearServerCredentials(validation.error || "license_invalid");
+    return false;
+  } catch (error) {
+    if (isNetworkLikeError(error)) {
+      return true;
+    }
+
+    await clearServerCredentials(error instanceof Error ? error.message : "license_invalid");
+    return false;
+  }
+}
+
 /** Dispara un refresh del saldo de uso en background (no bloquea). */
 function backgroundRefreshUsage(): void {
   ensureCredentialsLoaded().then((ready) => {
@@ -178,6 +248,15 @@ export const serverApi = {
   /** Registra un callback que se invoca cuando el saldo de uso cambia. */
   setOnUsageUpdate(cb: (balance: UsageBalanceInfo) => void): void {
     _onUsageUpdate = cb;
+  },
+
+  /**
+   * Revalida la licencia antes de usar credenciales premium guardadas localmente.
+   * Si el server confirma que la licencia ya no existe/no es válida, limpia las keys locales.
+   * Si el server está temporalmente inaccesible, conserva el comportamiento offline existente.
+   */
+  async ensureLicensedCredentialsValid(): Promise<boolean> {
+    return validateStoredLicenseOrClear();
   },
 
   // ── Configuración de la app ───────────────────────────────────────────────
@@ -277,14 +356,45 @@ export const serverApi = {
 
   /**
    * Solicita un token temporal de Deepgram.
-   * Descuenta créditos del saldo del usuario en el servidor.
+   * No descuenta créditos aquí — los créditos se descuentan al final
+   * de la sesión con reportStreamingSeconds() basado en uso real.
    */
   async getDeepgramToken(licenseKey: string, instanceId: string): Promise<DeepgramTokenResponse> {
     const params = new URLSearchParams({ licenseKey, instanceId });
-    const result = await apiFetch<DeepgramTokenResponse>(`/api/stt/token?${params}`);
-    // Refresh saldo para reflejar los créditos descontados
-    backgroundRefreshUsage();
-    return result;
+    return apiFetch<DeepgramTokenResponse>(`/api/stt/token?${params}`);
+  },
+
+  /**
+   * Reporta los segundos reales de streaming Deepgram al terminar una sesión.
+   * Funciona tanto con key local como con token del servidor.
+   * Fire-and-forget — no bloquea la UI.
+   */
+  reportStreamingSeconds(seconds: number): void {
+    if (seconds <= 0) return;
+    const secs = Math.ceil(seconds);
+    ensureCredentialsLoaded().then((ready) => {
+      if (!ready) return;
+      apiFetch<UsageBalanceInfo>("/api/stt/usage", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          instanceId: _instanceId,
+          licenseKey: _licenseKey || undefined,
+          seconds:    secs,
+        }),
+      })
+        .then((balance) => {
+          if (_onUsageUpdate) _onUsageUpdate(balance);
+          emit("usage-balance-updated", balance).catch(() => {});
+        })
+        .catch((err) => {
+          if (isLicenseInvalidError(err)) {
+            clearServerCredentials(err instanceof Error ? err.message : "license_invalid").catch(() => {});
+            return;
+          }
+          console.warn("[serverApi] reportStreamingSeconds failed:", err);
+        });
+    });
   },
 
   // ── Chat / IA ─────────────────────────────────────────────────────────────
@@ -402,6 +512,11 @@ export const serverApi = {
             emit("usage-balance-updated", balance).catch(() => {});
           })
           .catch((err) => {
+            if (isLicenseInvalidError(err)) {
+              clearServerCredentials(err instanceof Error ? err.message : "license_invalid").catch(() => {});
+              return;
+            }
+
             if (retriesLeft > 0) {
               // Render free tier can take 30-60s to wake up — retry
               setTimeout(() => attempt(retriesLeft - 1), 15_000);

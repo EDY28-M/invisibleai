@@ -5,6 +5,7 @@ import {
   TrashIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import { useApp } from "@/contexts";
 import { useTranslation } from "@/hooks";
 import { serverApi } from "@/lib/server-api";
@@ -39,6 +40,7 @@ interface StorageResult {
 
 const LICENSE_KEY_STORAGE_KEY = "invisibleai_license_key";
 const INSTANCE_ID_STORAGE_KEY = "invisibleai_instance_id";
+const LICENSE_STATE_UPDATED_EVENT = "license-state-updated";
 
 // ── UsageBar ────────────────────────────────────────────────────────────────
 interface UsageBarProps {
@@ -188,6 +190,7 @@ export const InvisibleAIApiSetup = () => {
             { key: INSTANCE_ID_STORAGE_KEY, value: response.instance.id },
           ],
         });
+        serverApi.setCredentials(response.instance.id, licenseKey.trim());
 
         // If the server didn't bundle credentials (older server version) fall
         // back to a separate getCredentials call so we stay backwards-compatible.
@@ -210,10 +213,12 @@ export const InvisibleAIApiSetup = () => {
 
         setSuccess("License activated successfully!");
         setLicenseKey("");
-        if (!response?.is_dev_license) setInvisibleAIApiEnabled(true);
+        setHasActiveLicense(true);
+        if (!response?.is_dev_license) await setInvisibleAIApiEnabled(true);
         await loadLicenseStatus();
         await getActiveLicenseStatus();
         await refreshUsageBalance();
+        await emit(LICENSE_STATE_UPDATED_EVENT, { active: true });
       } else {
         setError(response.error || "Failed to activate license");
       }
@@ -228,6 +233,10 @@ export const InvisibleAIApiSetup = () => {
     setIsLoading(true); setError(null); setSuccess(null);
     setHasActiveLicense(false);
     try {
+      await invoke("deactivate_license_api").catch((error) => {
+        console.warn("Failed to deactivate license on server before local removal:", error);
+      });
+
       await invoke("secure_storage_remove", {
         keys: [
           LICENSE_KEY_STORAGE_KEY,
@@ -240,15 +249,16 @@ export const InvisibleAIApiSetup = () => {
           "license_expires_at",
         ],
       });
+      serverApi.setCredentials("", "");
       setSuccess("License removed successfully!");
-      setInvisibleAIApiEnabled(false);
+      await setInvisibleAIApiEnabled(false);
       await loadLicenseStatus();
       await refreshUsageBalance();
+      await emit(LICENSE_STATE_UPDATED_EVENT, { active: false });
     } catch (error) {
       setError("Failed to remove license");
     } finally {
       setIsLoading(false);
-      await invoke("deactivate_license_api");
     }
   };
 

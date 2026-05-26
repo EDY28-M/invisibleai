@@ -62,6 +62,7 @@ const DEFAULT_VAD_CONFIG: VadConfig = {
 };
 
 const STREAMING_DISPATCH_IDLE_MS = 500;
+const STREAMING_CREDIT_REPORT_INTERVAL_MS = 10_000;
 
 const mergeStreamingTranscriptText = (currentText: string, nextText: string) => {
   const current = currentText.trim();
@@ -136,6 +137,9 @@ export function useSystemAudio() {
 
   const deepgramManagerRef = useRef<DeepgramStreamManager | null>(null);
   const deepgramTokenCacheRef = useRef<{ token: DeepgramTokenResponse; fetchedAt: number } | null>(null);
+  const streamingSessionStartRef = useRef<number | null>(null);
+  const streamingUsageLastReportAtRef = useRef<number | null>(null);
+  const streamingUsageReportTimerRef = useRef<number | null>(null);
   const isStreamingModeRef = useRef<boolean>(false);
   const streamingSmartModeRef = useRef<boolean>(false);
   const streamingMicStreamRef = useRef<MediaStream | null>(null);
@@ -1484,6 +1488,51 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     scheduleStreamingPendingDispatch(channel);
   }, [scheduleStreamingPendingDispatch]);
 
+  const reportStreamingUsageSinceLastTick = useCallback(() => {
+    const lastReportAt = streamingUsageLastReportAtRef.current;
+    if (lastReportAt === null) return;
+
+    const now = Date.now();
+    const secondsUsed = (now - lastReportAt) / 1000;
+    if (secondsUsed < 1) return;
+
+    serverApi.reportStreamingSeconds(secondsUsed);
+    streamingUsageLastReportAtRef.current = now;
+  }, []);
+
+  const startStreamingUsageReporting = useCallback(() => {
+    const now = Date.now();
+    if (streamingSessionStartRef.current === null) {
+      streamingSessionStartRef.current = now;
+    }
+    if (streamingUsageLastReportAtRef.current === null) {
+      streamingUsageLastReportAtRef.current = now;
+    }
+    if (streamingUsageReportTimerRef.current !== null) return;
+
+    streamingUsageReportTimerRef.current = window.setInterval(
+      reportStreamingUsageSinceLastTick,
+      STREAMING_CREDIT_REPORT_INTERVAL_MS
+    );
+  }, [reportStreamingUsageSinceLastTick]);
+
+  const stopStreamingUsageReporting = useCallback(() => {
+    if (streamingUsageReportTimerRef.current !== null) {
+      window.clearInterval(streamingUsageReportTimerRef.current);
+      streamingUsageReportTimerRef.current = null;
+    }
+
+    reportStreamingUsageSinceLastTick();
+    streamingUsageLastReportAtRef.current = null;
+    streamingSessionStartRef.current = null;
+  }, [reportStreamingUsageSinceLastTick]);
+
+  useEffect(() => {
+    return () => {
+      stopStreamingUsageReporting();
+    };
+  }, [stopStreamingUsageReporting]);
+
   const initializeStreaming = useCallback(async (micMediaStream: MediaStream | null) => {
     streamingMicStreamRef.current = micMediaStream;
     if (deepgramManagerRef.current) {
@@ -1522,6 +1571,13 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         }>("secure_storage_get");
 
         if (storage.deepgram_api_key) {
+          const licenseStillValid = await serverApi.ensureLicensedCredentialsValid();
+          if (!licenseStillValid) {
+            setError("Tu licencia ya no está activa. Actívala nuevamente para usar streaming.");
+            setIsPopoverOpen(true);
+            return;
+          }
+
           tokenData = {
             token: storage.deepgram_api_key,
             model: storage.deepgram_model || "nova-3",
@@ -1590,6 +1646,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       deepgramManagerRef.current = micManager;
       console.log("[Streaming] Starting microphone stream...");
       await micManager.start(micMediaStream);
+      startStreamingUsageReporting();
     }
 
     // 2. System Audio Deepgram Stream (via Rust — handles capture + WebSocket internally)
@@ -1605,6 +1662,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         language: config.language,
         deviceId,
       });
+      startStreamingUsageReporting();
     } catch (err) {
       console.error("[Streaming] Failed to start system Deepgram stream:", err);
       setError(`Failed to start system stream: ${err}`);
@@ -1614,6 +1672,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     queueStreamingPendingTranscript,
     markStreamingAudioActivity,
     selectedAudioDevices.output.id,
+    startStreamingUsageReporting,
   ]);
 
   const handleMicSpeechDetected = useCallback((audioBlob: Blob) => {
@@ -1942,6 +2001,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
       await stopFrontendMicRecording(false);
       await invoke<string>("stop_system_audio_capture");
+      stopStreamingUsageReporting();
       try { await invoke("stop_system_deepgram_stream"); } catch {}
 
       if (streamingEnabled) {
@@ -1980,10 +2040,13 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     stopFrontendMicRecording,
     isDualChannel,
     initializeStreaming,
+    stopStreamingUsageReporting,
   ]);
 
   const stopCapture = useCallback(async () => {
     try {
+      stopStreamingUsageReporting();
+
       if (deepgramManagerRef.current) {
         deepgramManagerRef.current.destroy();
         deepgramManagerRef.current = null;
@@ -2033,7 +2096,13 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       setError(`Failed to stop capture: ${errorMessage}`);
       console.error("Stop capture error:", err);
     }
-  }, [clearStreamingPendingTranscript, resetSpeechQueue, resetStreamingCopilotBuffers, stopFrontendMicRecording]);
+  }, [
+    clearStreamingPendingTranscript,
+    resetSpeechQueue,
+    resetStreamingCopilotBuffers,
+    stopFrontendMicRecording,
+    stopStreamingUsageReporting,
+  ]);
 
   const manualStopAndSend = useCallback(async () => {
     try {
@@ -2248,6 +2317,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       // Case 1: Currently in streaming mode, but switching to Manual mode (vadConfig.enabled becomes false)
       if (!config.enabled) {
         try {
+          stopStreamingUsageReporting();
           if (deepgramManagerRef.current) {
             deepgramManagerRef.current.destroy();
             deepgramManagerRef.current = null;
@@ -2343,6 +2413,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     selectedAudioDevices.input.id,
     isDualChannel,
     initializeStreaming,
+    stopStreamingUsageReporting,
   ]);
   // Dynamically add/remove microphone stream when switching between Auto and Multihilo during active streaming
   useEffect(() => {
@@ -2494,6 +2565,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           setError("");
         } catch (err) {
           console.error("[Provider Switch] Failed to transition to streaming:", err);
+          stopStreamingUsageReporting();
           if (streamingMicStreamRef.current) {
             try {
               streamingMicStreamRef.current.getTracks().forEach((track) => {
@@ -2525,6 +2597,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         console.log("[Provider Switch] Transitioning to non-streaming (classic VAD) mode");
         try {
           resetSpeechQueue();
+          stopStreamingUsageReporting();
           // Tear down mic Deepgram manager
           if (deepgramManagerRef.current) {
             deepgramManagerRef.current.destroy();
@@ -2572,6 +2645,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     isStreamingMode,
     resetSpeechQueue,
     resetStreamingCopilotBuffers,
+    stopStreamingUsageReporting,
     selectedAudioDevices.input.id,
     selectedAudioDevices.output.id,
     selectedSttProvider.provider,

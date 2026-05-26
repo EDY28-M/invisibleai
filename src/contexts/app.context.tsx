@@ -38,6 +38,7 @@ import {
 } from "react";
 
 const AppContext = createContext<IContextType | undefined>(undefined);
+const LICENSE_STATE_UPDATED_EVENT = "license-state-updated";
 
 const getValidCustomProviders = (
   providers: TYPE_PROVIDER[],
@@ -346,8 +347,20 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }
 
       serverApi.setCredentials(instanceId, licenseKey || undefined);
+      if (licenseKey) {
+        setHasActiveLicense(true);
+      }
 
       if (licenseKey === "invisibleai-admin-local") {
+        const balance = await serverApi.getUsageBalance().catch(() => null);
+        if (balance) {
+          setUsageBalance(balance);
+          if (balance.licenseType === "licensed") setHasActiveLicense(true);
+        }
+        return;
+      }
+
+      if (!licenseKey) {
         const balance = await serverApi.getUsageBalance().catch(() => null);
         if (balance) setUsageBalance(balance);
         return;
@@ -361,7 +374,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         // Cargar saldo de uso
         const balance = await serverApi.getUsageBalance().catch(() => null);
-        if (balance) setUsageBalance(balance);
+        if (balance) {
+          setUsageBalance(balance);
+          if (balance.licenseType === "licensed") setHasActiveLicense(true);
+        }
 
         // Refrescar credenciales directas (Groq + Deepgram) en background
         try {
@@ -424,13 +440,30 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     // reportChatTokens o refreshBalance obtienen un nuevo balance del servidor.
     const unlistenUsage = listen<UsageBalanceInfo>("usage-balance-updated", (event) => {
       setUsageBalance(event.payload);
+      if (event.payload.licenseType === "licensed") {
+        setHasActiveLicense(true);
+      }
     });
     return () => { unlistenUsage.then((fn) => fn()); };
   }, []);
 
   useEffect(() => {
+    const unlistenLicense = listen(LICENSE_STATE_UPDATED_EVENT, async () => {
+      await getActiveLicenseStatus().catch(() => {});
+      await syncServerCredentials().catch(() => {});
+    });
+
+    return () => { unlistenLicense.then((fn) => fn()); };
+  }, []);
+
+  useEffect(() => {
     // Registrar callback para que serverApi actualice el saldo cuando cambia
-    serverApi.setOnUsageUpdate((balance) => setUsageBalance(balance));
+    serverApi.setOnUsageUpdate((balance) => {
+      setUsageBalance(balance);
+      if (balance.licenseType === "licensed") {
+        setHasActiveLicense(true);
+      }
+    });
 
     const initializeApp = async () => {
       // 1. Verificar licencia local (lee archivo local — instantáneo)
