@@ -56,11 +56,23 @@ export interface DeepgramTokenResponse {
   segmentSeconds?:   number;
 }
 
+export interface ActivationCredentials {
+  groqApiKey?:        string;
+  model?:             string;
+  deepgramApiKey?:    string | null;
+  deepgramModel?:     string;
+  deepgramLanguage?:  string;
+  licenseExpiresAt?:  string | null;
+  supportsVision?:    boolean;
+}
+
 export interface ActivateResponse {
   activated:       boolean;
   instance?:       { id: string; name: string };
   is_dev_license?: boolean;
   error?:          string;
+  /** Bundled by the server to avoid a separate /api/credentials call. */
+  credentials?:    ActivationCredentials;
 }
 
 export interface ValidateResponse {
@@ -200,6 +212,8 @@ export const serverApi = {
     deepgramApiKey?: string;
     deepgramModel?: string;
     deepgramLanguage?: string;
+    licenseExpiresAt?: string | null;
+    supportsVision?: boolean;
   }> {
     const params = new URLSearchParams({ licenseKey, instanceId });
     return apiFetch(`/api/credentials?${params}`);
@@ -314,6 +328,36 @@ export const serverApi = {
   },
 
   // ── Utilidades ────────────────────────────────────────────────────────────
+
+  /**
+   * Lightweight balance refresh — fetches latest usage and fires _onUsageUpdate.
+   * Safe to call from anywhere without triggering full license validation.
+   */
+  refreshBalance(): void {
+    if (!_instanceId || !_onUsageUpdate) return;
+    serverApi.getUsageBalance()
+      .then(_onUsageUpdate)
+      .catch(() => {});
+  },
+
+  /**
+   * Reports token usage for a direct (client-side) Groq chat call.
+   * Fire-and-forget — does not block the UI. Updates balance via _onUsageUpdate.
+   */
+  reportChatTokens(tokens: number): void {
+    if (!_instanceId || tokens <= 0) return;
+    apiFetch<UsageBalanceInfo>("/api/usage/report", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        instanceId: _instanceId,
+        licenseKey: _licenseKey || undefined,
+        tokens,
+      }),
+    })
+      .then((balance) => { if (_onUsageUpdate) _onUsageUpdate(balance); })
+      .catch(() => {});
+  },
 
   getServerUrl,
 

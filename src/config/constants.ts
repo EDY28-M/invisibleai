@@ -20,6 +20,12 @@ export const STORAGE_KEYS = {
   RESPONSE_SETTINGS: "response_settings",
   SUPPORTS_IMAGES: "supports_images",
   INVISIBLEAI_SERVER_URL: "invisibleai_server_url",
+
+  // Local cache — server data persisted for offline resilience
+  CACHED_MODELS: "iai_cached_models",
+  CACHED_MODELS_AT: "iai_cached_models_at",
+  CACHED_PROMPTS: "iai_cached_prompts",
+  CACHED_PROMPTS_AT: "iai_cached_prompts_at",
 } as const;
 
 export const MAX_FILES = 6;

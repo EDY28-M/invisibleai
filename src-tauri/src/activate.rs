@@ -51,6 +51,7 @@ struct SecureStorage {
     deepgram_api_key: Option<String>,
     deepgram_model: Option<String>,
     deepgram_language: Option<String>,
+    license_expires_at: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -69,6 +70,7 @@ pub struct StorageResult {
     deepgram_api_key: Option<String>,
     deepgram_model: Option<String>,
     deepgram_language: Option<String>,
+    license_expires_at: Option<String>,
 }
 
 #[tauri::command]
@@ -93,6 +95,7 @@ pub async fn secure_storage_save(app: AppHandle, items: Vec<StorageItem>) -> Res
             "deepgram_api_key" => storage.deepgram_api_key = Some(item.value),
             "deepgram_model" => storage.deepgram_model = Some(item.value),
             "deepgram_language" => storage.deepgram_language = Some(item.value),
+            "license_expires_at" => storage.license_expires_at = Some(item.value),
             _ => return Err(format!("Invalid storage key: {}", item.key)),
         }
     }
@@ -120,6 +123,7 @@ pub async fn secure_storage_get(app: AppHandle) -> Result<StorageResult, String>
             deepgram_api_key: None,
             deepgram_model: None,
             deepgram_language: None,
+            license_expires_at: None,
         });
     }
 
@@ -138,6 +142,7 @@ pub async fn secure_storage_get(app: AppHandle) -> Result<StorageResult, String>
         deepgram_api_key: storage.deepgram_api_key,
         deepgram_model: storage.deepgram_model,
         deepgram_language: storage.deepgram_language,
+        license_expires_at: storage.license_expires_at,
     })
 }
 
@@ -165,6 +170,7 @@ pub async fn secure_storage_remove(app: AppHandle, keys: Vec<String>) -> Result<
             "deepgram_api_key" => storage.deepgram_api_key = None,
             "deepgram_model" => storage.deepgram_model = None,
             "deepgram_language" => storage.deepgram_language = None,
+            "license_expires_at" => storage.license_expires_at = None,
             _ => return Err(format!("Invalid storage key: {}", key)),
         }
     }
@@ -186,6 +192,26 @@ pub struct ActivationRequest {
     app_version: String,
 }
 
+/// API credentials bundled by the server in the activation response.
+/// All fields are optional — the server may omit them if provider keys
+/// are not yet configured.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ActivationCredentials {
+    #[serde(rename = "groqApiKey")]
+    pub groq_api_key: Option<String>,
+    pub model: Option<String>,
+    #[serde(rename = "deepgramApiKey")]
+    pub deepgram_api_key: Option<String>,
+    #[serde(rename = "deepgramModel")]
+    pub deepgram_model: Option<String>,
+    #[serde(rename = "deepgramLanguage")]
+    pub deepgram_language: Option<String>,
+    #[serde(rename = "licenseExpiresAt")]
+    pub license_expires_at: Option<String>,
+    #[serde(rename = "supportsVision", default)]
+    pub supports_vision: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ActivationResponse {
     #[serde(default)]
@@ -195,6 +221,7 @@ pub struct ActivationResponse {
     pub instance: Option<InstanceInfo>,
     #[serde(default)]
     pub is_dev_license: bool,
+    pub credentials: Option<ActivationCredentials>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -245,6 +272,7 @@ pub async fn activate_license_api(
                 created_at: "2024-01-01T00:00:00Z".to_string(),
             }),
             is_dev_license: true,
+            credentials: None,
         });
     }
 
@@ -290,7 +318,6 @@ pub async fn activate_license_api(
     let activation_response: ActivationResponse = response.json().await.map_err(|e| {
         let error_msg = format!("{}", e);
         if error_msg.contains("url (") {
-
             let parts: Vec<&str> = error_msg.split(" for url (").collect();
             if parts.len() > 1 {
                 format!("Failed to make chat request: {}", parts[0])
@@ -301,6 +328,24 @@ pub async fn activate_license_api(
             format!("Failed to make chat request: {}", error_msg)
         }
     })?;
+
+    // Auto-save bundled API credentials so the frontend doesn't need a
+    // separate /api/credentials round-trip after activation.
+    if activation_response.activated {
+        if let Some(ref creds) = activation_response.credentials {
+            let mut items: Vec<StorageItem> = Vec::new();
+            if let Some(ref v) = creds.groq_api_key      { items.push(StorageItem { key: "groq_api_key".into(),      value: v.clone() }); }
+            if let Some(ref v) = creds.model             { items.push(StorageItem { key: "groq_model".into(),        value: v.clone() }); }
+            if let Some(ref v) = creds.deepgram_api_key  { items.push(StorageItem { key: "deepgram_api_key".into(),  value: v.clone() }); }
+            if let Some(ref v) = creds.deepgram_model    { items.push(StorageItem { key: "deepgram_model".into(),    value: v.clone() }); }
+            if let Some(ref v) = creds.deepgram_language { items.push(StorageItem { key: "deepgram_language".into(), value: v.clone() }); }
+            if let Some(ref v) = creds.license_expires_at { items.push(StorageItem { key: "license_expires_at".into(), value: v.clone() }); }
+            if !items.is_empty() {
+                let _ = secure_storage_save(app, items).await;
+            }
+        }
+    }
+
     Ok(activation_response)
 }
 

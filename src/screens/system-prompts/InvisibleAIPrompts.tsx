@@ -9,7 +9,7 @@ import {
   LockIcon,
 } from "lucide-react";
 import { useApp } from "@/contexts";
-import { safeLocalStorage } from "@/lib";
+import { safeLocalStorage, getLocalCache, setLocalCache } from "@/lib";
 import { STORAGE_KEYS } from "@/config";
 import moment from "moment";
 import { useTranslation } from "@/hooks";
@@ -95,12 +95,31 @@ export const InvisibleAIPrompts = () => {
   }, [language]);
 
   const fetchInvisibleAIPrompts = async () => {
+    // 1. Serve from cache immediately if fresh
+    const cached = getLocalCache<InvisibleAIPromptsResponse>(STORAGE_KEYS.CACHED_PROMPTS);
+    if (cached) {
+      setPrompts(cached.prompts);
+      if (cached.last_updated) setLastUpdated(cached.last_updated);
+      // Refresh in background — user already sees content
+      invoke<InvisibleAIPromptsResponse>("fetch_prompts")
+        .then((fresh) => {
+          setPrompts(fresh.prompts);
+          if (fresh.last_updated) setLastUpdated(fresh.last_updated);
+          setLocalCache(STORAGE_KEYS.CACHED_PROMPTS, fresh);
+        })
+        .catch(() => {});
+      return;
+    }
+
+    // 2. No cache — fetch and show loading state
     setIsLoading(true);
     try {
       const response = await invoke<InvisibleAIPromptsResponse>("fetch_prompts");
+      setLocalCache(STORAGE_KEYS.CACHED_PROMPTS, response);
       setPrompts(response.prompts);
       if (response.last_updated) setLastUpdated(response.last_updated);
     } catch {
+      // Network failure and no cache → use built-in fallback
       const fallbackList = LOCAL_FALLBACK_PROMPTS[language === "spanish" ? "es" : "en"];
       setPrompts(fallbackList);
       setLastUpdated(new Date().toISOString());
@@ -110,11 +129,27 @@ export const InvisibleAIPrompts = () => {
   };
 
   const fetchModels = async () => {
+    // 1. Serve from cache immediately
+    const cached = getLocalCache<Model[]>(STORAGE_KEYS.CACHED_MODELS);
+    if (cached) {
+      setModels(cached);
+      // Refresh in background
+      invoke<Model[]>("fetch_models")
+        .then((fresh) => {
+          setModels(fresh);
+          setLocalCache(STORAGE_KEYS.CACHED_MODELS, fresh);
+        })
+        .catch(() => {});
+      return;
+    }
+
+    // 2. No cache — fetch from server
     try {
       const fetchedModels = await invoke<Model[]>("fetch_models");
+      setLocalCache(STORAGE_KEYS.CACHED_MODELS, fetchedModels);
       setModels(fetchedModels);
-    } catch (error) {
-      console.error("Failed to fetch models:", error);
+    } catch {
+      // Non-fatal — model list is only used for selecting the selected_invisibleai_model
     }
   };
 

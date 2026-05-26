@@ -132,6 +132,7 @@ async function* fetchInvisibleAIAIResponse(params: {
           model: modelId,
           messages,
           stream: true,
+          stream_options: { include_usage: true },
         }),
         signal,
       });
@@ -148,6 +149,7 @@ async function* fetchInvisibleAIAIResponse(params: {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let totalTokens = 0;
 
       while (true) {
         if (signal?.aborted) {
@@ -169,14 +171,21 @@ async function* fetchInvisibleAIAIResponse(params: {
             try {
               const parsed = JSON.parse(trimmed);
               const delta = parsed.choices?.[0]?.delta?.content || "";
-              if (delta) {
-                yield delta;
+              if (delta) yield delta;
+              // Groq sends usage in the final chunk (choices=[]) when stream_options.include_usage=true
+              if (parsed.usage?.total_tokens) {
+                totalTokens = parsed.usage.total_tokens;
               }
-            } catch (e) {
+            } catch {
               // Silencioso
             }
           }
         }
+      }
+
+      // Report token usage to server in background — non-blocking
+      if (totalTokens > 0) {
+        serverApi.reportChatTokens(totalTokens);
       }
       return;
     }
@@ -309,22 +318,16 @@ export async function* fetchAIResponse(params: {
       return;
     }
     if (!provider) {
-      // No custom provider configured → route through InvisibleAI server (Groq)
-      try {
-        const messages = buildServerMessages(
-          enhancedSystemPrompt,
-          history,
-          userMessage,
-          imagesBase64
-        );
-        const text = await serverApi.chat({
-          model: "meta-llama/llama-4-scout-17b-16e-instruct",
-          messages,
-        });
-        if (text) yield text;
-      } catch (serverError) {
-        yield `Error: ${serverError instanceof Error ? serverError.message : String(serverError)}`;
-      }
+      // No custom provider and InvisibleAI API is off — try direct Groq with
+      // the locally stored key before giving up. Falls back gracefully to the
+      // Render proxy inside fetchInvisibleAIAIResponse if no local key exists.
+      yield* fetchInvisibleAIAIResponse({
+        systemPrompt: enhancedSystemPrompt,
+        userMessage,
+        imagesBase64,
+        history,
+        signal,
+      });
       return;
     }
     if (!selectedProvider) {

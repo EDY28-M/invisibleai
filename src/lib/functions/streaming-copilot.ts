@@ -102,7 +102,8 @@ Si el evento solo narra contexto, evita respuestas largas y no cambies de tema.
 
 const STANDARD_QUESTION_PATTERNS = [
   "?",
-  "como",
+  // "como" and "por que" removed — matched accent-aware in classifyStandardSystemEvent
+  // to avoid false positives on "como" (comparative) and "por que" (conjunction)
   "que opinas",
   "que propones",
   "puedes explicar",
@@ -110,7 +111,6 @@ const STANDARD_QUESTION_PATTERNS = [
   "como resolverias",
   "que harias",
   "cual seria",
-  "por que",
   "recomiendas",
   "que estrategia",
   "que alternativa",
@@ -407,7 +407,11 @@ const classifyStandardSystemEvent = (text: string): SystemClassification => {
   }
 
   const normalized = normalizeForMatch(text);
-  if (/[?¿]/.test(text) || textMatchesAny(normalized, STANDARD_QUESTION_PATTERNS)) {
+  // Check accent-sensitive interrogatives against original text to avoid false positives:
+  // "cómo" (how?) vs "como" (like/as), "por qué" (why?) vs "por que" (rare conjunction)
+  const hasInterrogativeComo = /\bcómo\b/i.test(text);
+  const hasInterrogativePorQue = /\bpor\s+qué\b/i.test(text);
+  if (/[?¿]/.test(text) || hasInterrogativeComo || hasInterrogativePorQue || textMatchesAny(normalized, STANDARD_QUESTION_PATTERNS)) {
     return {
       eventKind: "external_question",
       confidence: "high",

@@ -322,7 +322,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  /** Sincroniza las credenciales del servidor y carga el saldo de uso. */
+  /**
+   * Sincroniza credenciales y saldo de uso contra el servidor.
+   * Siempre se ejecuta en background — nunca bloquea el arranque de la app.
+   *
+   * - Si el servidor no responde (red caída, Render frío) → mantiene
+   *   las credenciales locales y la sesión sigue funcionando.
+   * - Solo revoca el acceso si el servidor confirma explícitamente
+   *   que la licencia está revocada o expirada.
+   */
   const syncServerCredentials = async () => {
     try {
       const storage = await invoke<{
@@ -331,74 +339,79 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       }>("secure_storage_get");
       const instanceId = storage.instance_id || "";
       const licenseKey = storage.license_key || "";
-      if (instanceId) {
-        serverApi.setCredentials(instanceId, licenseKey || undefined);
 
-        // ── VALIDAR LA LICENCIA EN EL SERVIDOR ──
-        try {
-          // Si es licencia dev local de admin, no requiere validar online
-          if (licenseKey === "invisibleai-admin-local") {
-            const balance = await serverApi.getUsageBalance().catch(() => null);
-            if (balance) setUsageBalance(balance);
-            return;
-          }
-
-          const validation = await serverApi.validate(licenseKey, instanceId);
-          if (!validation.valid) {
-            throw new Error("License revoked on server");
-          }
-
-          const balance = await serverApi.getUsageBalance().catch(() => null);
-          if (balance) setUsageBalance(balance);
-
-          // Fetch and refresh direct Groq & Deepgram credentials
-          try {
-            const creds = await serverApi.getCredentials(licenseKey, instanceId);
-            const saveItems = [
-              { key: "groq_api_key", value: creds.groqApiKey },
-              { key: "groq_model", value: creds.model },
-            ];
-            if (creds.deepgramApiKey) {
-              saveItems.push({ key: "deepgram_api_key", value: creds.deepgramApiKey });
-            }
-            if (creds.deepgramModel) {
-              saveItems.push({ key: "deepgram_model", value: creds.deepgramModel });
-            }
-            if (creds.deepgramLanguage) {
-              saveItems.push({ key: "deepgram_language", value: creds.deepgramLanguage });
-            }
-            await invoke("secure_storage_save", { items: saveItems });
-          } catch (credErr) {
-            console.debug("Failed to sync direct premium credentials:", credErr);
-          }
-
-        } catch (valErr: any) {
-          // Si el error es porque el servidor está inaccesible temporalmente (offline), no revocar
-          const errStr = valErr?.message || String(valErr);
-          if (errStr.includes("Network error") || errStr.includes("Failed to fetch") || errStr.includes("Server error 5")) {
-            console.debug("Server temporarily unreachable, keeping local credentials:", errStr);
-            return;
-          }
-
-          // Si el servidor confirma explícitamente la invalidez, limpiar todo localmente
-          console.warn("License validation failed, revoking premium access locally:", errStr);
-          await invoke("secure_storage_remove", {
-            keys: [
-              "invisibleai_license_key",
-              "invisibleai_instance_id",
-              "groq_api_key",
-              "groq_model",
-              "deepgram_api_key",
-              "deepgram_model",
-              "deepgram_language",
-            ],
-          }).catch(() => {});
-          setHasActiveLicense(false);
-          setUsageBalance(null);
-          setInvisibleAIApiEnabled(false);
-        }
-      } else {
+      if (!instanceId) {
         setUsageBalance(null);
+        return;
+      }
+
+      serverApi.setCredentials(instanceId, licenseKey || undefined);
+
+      if (licenseKey === "invisibleai-admin-local") {
+        const balance = await serverApi.getUsageBalance().catch(() => null);
+        if (balance) setUsageBalance(balance);
+        return;
+      }
+
+      try {
+        const validation = await serverApi.validate(licenseKey, instanceId);
+        if (!validation.valid) {
+          throw new Error("License revoked on server");
+        }
+
+        // Cargar saldo de uso
+        const balance = await serverApi.getUsageBalance().catch(() => null);
+        if (balance) setUsageBalance(balance);
+
+        // Refrescar credenciales directas (Groq + Deepgram) en background
+        try {
+          const creds = await serverApi.getCredentials(licenseKey, instanceId);
+          const saveItems: { key: string; value: string }[] = [
+            { key: "groq_api_key", value: creds.groqApiKey },
+            { key: "groq_model",   value: creds.model },
+          ];
+          if (creds.deepgramApiKey)    saveItems.push({ key: "deepgram_api_key",    value: creds.deepgramApiKey });
+          if (creds.deepgramModel)     saveItems.push({ key: "deepgram_model",       value: creds.deepgramModel });
+          if (creds.deepgramLanguage)  saveItems.push({ key: "deepgram_language",    value: creds.deepgramLanguage });
+          if (creds.licenseExpiresAt)  saveItems.push({ key: "license_expires_at",   value: creds.licenseExpiresAt });
+          await invoke("secure_storage_save", { items: saveItems });
+        } catch (credErr) {
+          console.debug("Failed to refresh direct credentials:", credErr);
+        }
+
+      } catch (valErr: any) {
+        const errStr = valErr?.message || String(valErr);
+
+        // Red caída o Render frío → mantener estado local, no revocar
+        const isNetworkError =
+          errStr.includes("Network error") ||
+          errStr.includes("Failed to fetch") ||
+          errStr.includes("Server error 5") ||
+          errStr.includes("connect") ||
+          errStr.includes("timeout");
+
+        if (isNetworkError) {
+          console.debug("Server unreachable, keeping local credentials:", errStr);
+          return;
+        }
+
+        // Revocación explícita confirmada por el servidor
+        console.warn("License revoked by server, clearing local credentials:", errStr);
+        await invoke("secure_storage_remove", {
+          keys: [
+            "invisibleai_license_key",
+            "invisibleai_instance_id",
+            "groq_api_key",
+            "groq_model",
+            "deepgram_api_key",
+            "deepgram_model",
+            "deepgram_language",
+            "license_expires_at",
+          ],
+        }).catch(() => {});
+        setHasActiveLicense(false);
+        setUsageBalance(null);
+        setInvisibleAIApiEnabled(false);
       }
     } catch {
       setUsageBalance(null);
@@ -410,20 +423,32 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     serverApi.setOnUsageUpdate((balance) => setUsageBalance(balance));
 
     const initializeApp = async () => {
+      // 1. Verificar licencia local (lee archivo local — instantáneo)
       await getActiveLicenseStatus();
 
+      // 2. Registrar credenciales en serverApi desde storage local
+      //    para que las llamadas en background puedan autenticarse
       try {
-        const appVersion = await invoke<string>("get_app_version");
-        const storage = await invoke<{
-          instance_id: string;
-        }>("secure_storage_get");
-        await trackAppStart(appVersion, storage.instance_id || "");
-      } catch (error) {
-        console.debug("Failed to track app start:", error);
+        const storage = await invoke<{ instance_id?: string; license_key?: string }>("secure_storage_get");
+        if (storage.instance_id) {
+          serverApi.setCredentials(storage.instance_id, storage.license_key ?? "");
+        }
+      } catch {
+        // Non-fatal
       }
 
-      // Inicializar credenciales del servidor y cargar saldo de uso
-      await syncServerCredentials();
+      // 3. Track app start (no bloquea)
+      try {
+        const appVersion = await invoke<string>("get_app_version");
+        const storage = await invoke<{ instance_id?: string }>("secure_storage_get");
+        trackAppStart(appVersion, storage.instance_id || "").catch(() => {});
+      } catch {
+        // Non-fatal
+      }
+
+      // 4. Sincronizar con el servidor en background — nunca bloquea el arranque.
+      //    La app ya es funcional con las credenciales locales.
+      syncServerCredentials().catch(() => {});
     };
 
     loadData();
@@ -534,21 +559,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const checkImageSupport = async () => {
       if (invisibleaiApiEnabled) {
-        // Ask the server what the active model supports — no need to store model locally
+        // Derive vision support from the locally stored model name.
+        // All Llama 4 / Scout models on Groq support vision natively, so
+        // if a local key is present we never need to call the server for this.
         try {
           const storage = await invoke<{
-            license_key?: string;
-            instance_id?: string;
+            groq_api_key?: string;
+            groq_model?: string;
           }>("secure_storage_get");
 
-          const config = await serverApi.getConfig(
-            storage.license_key,
-            storage.instance_id,
-          );
-          // Server tells us if the active chat model supports vision
-          setSupportsImages(config.chat.supportsVision ?? false);
+          if (storage.groq_api_key) {
+            const model = storage.groq_model ?? "";
+            const supportsVision =
+              !model ||
+              model.includes("llama-4") ||
+              model.includes("scout") ||
+              model.includes("vision");
+            setSupportsImages(supportsVision);
+          } else {
+            // No local key → free-tier proxy; ask server
+            try {
+              const storageAuth = await invoke<{ license_key?: string; instance_id?: string }>("secure_storage_get");
+              const config = await serverApi.getConfig(storageAuth.license_key, storageAuth.instance_id);
+              setSupportsImages(config.chat.supportsVision ?? true);
+            } catch {
+              setSupportsImages(true);
+            }
+          }
         } catch {
-          // If server unreachable, optimistically allow images (Llama 4 supports vision)
           setSupportsImages(true);
         }
       } else {

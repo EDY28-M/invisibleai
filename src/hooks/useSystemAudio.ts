@@ -2025,6 +2025,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       setError("");
       setIsPopoverOpen(false);
       setMicStream(null);
+
+      // Update streaming credits balance after session ends
+      serverApi.refreshBalance();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
       setError(`Failed to stop capture: ${errorMessage}`);

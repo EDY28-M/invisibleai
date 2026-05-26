@@ -21,6 +21,15 @@ interface ActivationResponse {
   license_key?: string;
   instance?: { id: string; name: string; created_at: string };
   is_dev_license?: boolean;
+  credentials?: {
+    groqApiKey?: string;
+    model?: string;
+    deepgramApiKey?: string | null;
+    deepgramModel?: string;
+    deepgramLanguage?: string;
+    licenseExpiresAt?: string | null;
+    supportsVision?: boolean;
+  };
 }
 
 interface StorageResult {
@@ -139,6 +148,13 @@ export const InvisibleAIApiSetup = () => {
     loadLicenseStatus();
   }, []);
 
+  // Refresh balance every 60s while the dashboard is open
+  useEffect(() => {
+    if (!hasActiveLicense) return;
+    const id = setInterval(() => serverApi.refreshBalance(), 60_000);
+    return () => clearInterval(id);
+  }, [hasActiveLicense]);
+
   const loadLicenseStatus = async () => {
     try {
       const storage = await invoke<StorageResult>("secure_storage_get");
@@ -163,6 +179,8 @@ export const InvisibleAIApiSetup = () => {
     try {
       const response: ActivationResponse = await invoke("activate_license_api", { licenseKey: licenseKey.trim() });
       if (response.activated && response.instance) {
+        // Save license identity — Rust already persisted the API credentials
+        // (groq_api_key, deepgram_api_key, etc.) from the bundled response.
         await invoke("secure_storage_save", {
           items: [
             { key: LICENSE_KEY_STORAGE_KEY, value: licenseKey.trim() },
@@ -170,25 +188,23 @@ export const InvisibleAIApiSetup = () => {
           ],
         });
 
-        // Fetch and store premium credentials immediately
-        try {
-          const creds = await serverApi.getCredentials(licenseKey.trim(), response.instance.id);
-          const saveItems = [
-            { key: "groq_api_key", value: creds.groqApiKey },
-            { key: "groq_model", value: creds.model },
-          ];
-          if (creds.deepgramApiKey) {
-            saveItems.push({ key: "deepgram_api_key", value: creds.deepgramApiKey });
+        // If the server didn't bundle credentials (older server version) fall
+        // back to a separate getCredentials call so we stay backwards-compatible.
+        if (!response.credentials?.groqApiKey) {
+          try {
+            const creds = await serverApi.getCredentials(licenseKey.trim(), response.instance.id);
+            const saveItems: { key: string; value: string }[] = [
+              { key: "groq_api_key", value: creds.groqApiKey },
+              { key: "groq_model",   value: creds.model },
+            ];
+            if (creds.deepgramApiKey)   saveItems.push({ key: "deepgram_api_key",   value: creds.deepgramApiKey });
+            if (creds.deepgramModel)    saveItems.push({ key: "deepgram_model",      value: creds.deepgramModel });
+            if (creds.deepgramLanguage) saveItems.push({ key: "deepgram_language",   value: creds.deepgramLanguage });
+            if (creds.licenseExpiresAt) saveItems.push({ key: "license_expires_at",  value: creds.licenseExpiresAt });
+            await invoke("secure_storage_save", { items: saveItems });
+          } catch (credErr) {
+            console.error("Fallback credentials fetch failed:", credErr);
           }
-          if (creds.deepgramModel) {
-            saveItems.push({ key: "deepgram_model", value: creds.deepgramModel });
-          }
-          if (creds.deepgramLanguage) {
-            saveItems.push({ key: "deepgram_language", value: creds.deepgramLanguage });
-          }
-          await invoke("secure_storage_save", { items: saveItems });
-        } catch (credErr) {
-          console.error("Failed to fetch direct premium credentials:", credErr);
         }
 
         setSuccess("License activated successfully!");
@@ -220,6 +236,7 @@ export const InvisibleAIApiSetup = () => {
           "deepgram_api_key",
           "deepgram_model",
           "deepgram_language",
+          "license_expires_at",
         ],
       });
       setSuccess("License removed successfully!");

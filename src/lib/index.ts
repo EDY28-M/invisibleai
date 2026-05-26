@@ -9,3 +9,4 @@ export * from "./platform";
 export * from "./analytics";
 export * from "./response-settings.constants";
 export * from "./media-devices";
+export * from "./local-cache";
