@@ -678,7 +678,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             groq_model?: string;
           }>("secure_storage_get");
 
-          if (storage.groq_api_key) {
+          if (storage.groq_api_key && hasActiveLicense) {
             const model = storage.groq_model ?? "";
             const supportsVision =
               !model ||
@@ -686,8 +686,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               model.includes("scout") ||
               model.includes("vision");
             setSupportsImages(supportsVision);
+          } else if (!hasActiveLicense) {
+            // Free user → llama-3.3-70b-versatile which does not support vision
+            setSupportsImages(false);
           } else {
-            // No local key → free-tier proxy; ask server
+            // Licensed/premium user without direct key stored yet → ask server
             try {
               const storageAuth = await invoke<{ license_key?: string; instance_id?: string }>("secure_storage_get");
               const config = await serverApi.getConfig(storageAuth.license_key, storageAuth.instance_id);
@@ -714,7 +717,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
 
     checkImageSupport();
-  }, [invisibleaiApiEnabled, selectedAIProvider.provider]);
+  }, [invisibleaiApiEnabled, selectedAIProvider.provider, hasActiveLicense]);
 
 
   useEffect(() => {

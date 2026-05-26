@@ -4,8 +4,10 @@ import { DeepgramStreamManager, fetchSTT, getMicrophoneStream } from "@/lib";
 import { floatArrayToWav } from "@/lib/utils";
 import { UseCompletionReturn } from "@/types";
 import { MicVAD } from "@ricky0123/vad-web";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { AppIcons } from "../icons/AppIcons";
+import { serverApi } from "@/lib/server-api";
+import { invoke } from "@tauri-apps/api/core";
 
 interface AutoSpeechVADProps {
   submit: UseCompletionReturn["submit"];
@@ -14,7 +16,7 @@ interface AutoSpeechVADProps {
   microphoneDeviceId?: string;
 }
 
-const STREAMING_MIC_DISPATCH_IDLE_MS = 1000;
+const STREAMING_MIC_DISPATCH_IDLE_MS = 600;
 
 const mergeStreamingTranscriptText = (currentText: string, nextText: string) => {
   const current = currentText.trim();
@@ -38,7 +40,7 @@ const AutoSpeechVADInternal = ({
   const [loading, setLoading] = useState(true);
   const [errored, setErrored] = useState<string | false>(false);
   const [userSpeaking, setUserSpeaking] = useState(false);
-  const { selectedSttProvider, allSttProviders, invisibleaiApiEnabled } =
+  const { selectedSttProvider, allSttProviders, invisibleaiApiEnabled, hasActiveLicense } =
     useApp();
   const vadRef = useRef<MicVAD | null>(null);
   const streamingManagerRef = useRef<DeepgramStreamManager | null>(null);
@@ -51,7 +53,29 @@ const AutoSpeechVADInternal = ({
     selectedSttProvider,
     allSttProviders,
     invisibleaiApiEnabled,
+    hasActiveLicense,
   });
+
+  // Streaming credit and session refs
+  const streamingSessionStartRef = useRef<number | null>(null);
+  const streamingUsageLastReportAtRef = useRef<number | null>(null);
+  const streamingUsageReportTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Persistent accumulated transcript refs
+  const finalTranscriptsRef = useRef<string[]>([]);
+  const currentInterimRef = useRef<string>("");
+
+  const reportStreamingUsageSinceLastTick = useCallback(() => {
+    const lastReportAt = streamingUsageLastReportAtRef.current;
+    if (lastReportAt === null) return;
+
+    const now = Date.now();
+    const secondsUsed = (now - lastReportAt) / 1000;
+    if (secondsUsed < 1) return;
+
+    serverApi.reportStreamingSeconds(secondsUsed);
+    streamingUsageLastReportAtRef.current = now;
+  }, []);
 
   useEffect(() => {
     callbacksRef.current = { submit, setState };
@@ -62,8 +86,9 @@ const AutoSpeechVADInternal = ({
       selectedSttProvider,
       allSttProviders,
       invisibleaiApiEnabled,
+      hasActiveLicense,
     };
-  }, [selectedSttProvider, allSttProviders, invisibleaiApiEnabled]);
+  }, [selectedSttProvider, allSttProviders, invisibleaiApiEnabled, hasActiveLicense]);
 
   useEffect(() => {
     let active = true;
@@ -108,6 +133,11 @@ const AutoSpeechVADInternal = ({
       }
 
       setIsTranscribing(false);
+
+      // Reset local refs after VAD dispatch
+      finalTranscriptsRef.current = [];
+      currentInterimRef.current = "";
+
       callbacksRef.current.setState((prev: any) => ({
         ...prev,
         input: finalText,
@@ -199,17 +229,22 @@ const AutoSpeechVADInternal = ({
         lastStreamingAudioAtRef.current = 0;
         clearStreamingDispatchTimer();
         clearStreamingSpeakingTimer();
+        finalTranscriptsRef.current = [];
+        currentInterimRef.current = "";
 
         const {
           selectedSttProvider,
           allSttProviders,
           invisibleaiApiEnabled,
+          hasActiveLicense,
         } = sttConfigRef.current;
         const providerConfig = allSttProviders.find(
           (p) => p.id === selectedSttProvider.provider
         );
+
+        const isPremiumStreaming = invisibleaiApiEnabled && hasActiveLicense;
         const useStreamingProvider =
-          !invisibleaiApiEnabled && providerConfig?.streaming === true;
+          isPremiumStreaming || (!invisibleaiApiEnabled && providerConfig?.streaming === true);
 
         stream = await getMicrophoneStream(microphoneDeviceId);
 
@@ -219,27 +254,68 @@ const AutoSpeechVADInternal = ({
         }
 
         if (useStreamingProvider) {
-          const vars = selectedSttProvider.variables || {};
-          const apiKey = vars.api_key || vars.API_KEY || "";
+          let tokenData: { token: string; model: string; language: string };
+          if (isPremiumStreaming) {
+            const storage = await invoke<{
+              license_key?: string;
+              instance_id?: string;
+              deepgram_api_key?: string;
+              deepgram_model?: string;
+              deepgram_language?: string;
+            }>("secure_storage_get");
 
-          if (!apiKey) {
-            throw new Error("Deepgram Streaming requires an API Key.");
+            if (storage.deepgram_api_key) {
+              tokenData = {
+                token: storage.deepgram_api_key,
+                model: storage.deepgram_model || "nova-3",
+                language: storage.deepgram_language || "es-419",
+              };
+            } else {
+              const licenseKey = storage.license_key ?? "";
+              const instanceId = storage.instance_id ?? "";
+              tokenData = await serverApi.getDeepgramToken(licenseKey, instanceId);
+            }
+          } else {
+            const vars = selectedSttProvider.variables || {};
+            const apiKey = vars.api_key || vars.API_KEY || "";
+
+            if (!apiKey) {
+              throw new Error("Deepgram Streaming requires an API Key.");
+            }
+            tokenData = {
+              token: apiKey,
+              model: vars.model || vars.MODEL || "nova-3",
+              language: vars.language || vars.LANGUAGE || "es-419",
+            };
           }
 
           const streamingManager = new DeepgramStreamManager(
             {
-              apiKey,
-              model: vars.model || vars.MODEL || "nova-3",
-              language: vars.language || vars.LANGUAGE || "es-419",
+              apiKey: tokenData.token,
+              model: tokenData.model,
+              language: tokenData.language,
               utteranceEndMs: 1000,
               endpointing: 10,
             },
             {
-              onTranscript: (_text, _isFinal, fullAccumulated) => {
+              onTranscript: (text, isFinal) => {
                 if (!active) return;
+                
+                if (isFinal) {
+                  finalTranscriptsRef.current.push(text);
+                  currentInterimRef.current = "";
+                } else {
+                  currentInterimRef.current = text;
+                }
+
+                const finals = finalTranscriptsRef.current.join(" ").trim();
+                const fullText = currentInterimRef.current 
+                  ? (finals ? `${finals} ${currentInterimRef.current}` : currentInterimRef.current)
+                  : finals;
+
                 callbacksRef.current.setState((prev: any) => ({
                   ...prev,
-                  input: fullAccumulated,
+                  input: fullText,
                   error: null,
                 }));
               },
@@ -265,6 +341,16 @@ const AutoSpeechVADInternal = ({
           if (!active) {
             streamingManager.destroy();
             return;
+          }
+
+          if (isPremiumStreaming) {
+            // Start credit tracking
+            streamingSessionStartRef.current = Date.now();
+            streamingUsageLastReportAtRef.current = Date.now();
+            streamingUsageReportTimerRef.current = setInterval(
+              reportStreamingUsageSinceLastTick,
+              10000
+            );
           }
 
           setListening(true);
@@ -315,6 +401,23 @@ const AutoSpeechVADInternal = ({
       vadRef.current = null;
       streamingManagerRef.current?.destroy();
       streamingManagerRef.current = null;
+
+      // Stop credit reporting
+      if (streamingUsageReportTimerRef.current !== null) {
+        clearInterval(streamingUsageReportTimerRef.current);
+        streamingUsageReportTimerRef.current = null;
+      }
+      if (streamingUsageLastReportAtRef.current !== null) {
+        const lastReportAt = streamingUsageLastReportAtRef.current;
+        const now = Date.now();
+        const secondsUsed = (now - lastReportAt) / 1000;
+        if (secondsUsed >= 1) {
+          serverApi.reportStreamingSeconds(secondsUsed);
+        }
+        streamingUsageLastReportAtRef.current = null;
+      }
+      streamingSessionStartRef.current = null;
+
       clearStreamingDispatchTimer();
       clearStreamingSpeakingTimer();
       streamingPendingTextRef.current = "";
@@ -322,8 +425,10 @@ const AutoSpeechVADInternal = ({
       stream?.getTracks().forEach((track) => track.stop());
       setListening(false);
       setUserSpeaking(false);
+      finalTranscriptsRef.current = [];
+      currentInterimRef.current = "";
     };
-  }, [microphoneDeviceId, setEnableVAD]);
+  }, [microphoneDeviceId, setEnableVAD, reportStreamingUsageSinceLastTick]);
 
   return (
     <>

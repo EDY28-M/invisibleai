@@ -61,7 +61,7 @@ const DEFAULT_VAD_CONFIG: VadConfig = {
   max_recording_duration_secs: 180,
 };
 
-const STREAMING_DISPATCH_IDLE_MS = 500;
+const STREAMING_DISPATCH_IDLE_MS = 600;
 const STREAMING_CREDIT_REPORT_INTERVAL_MS = 10_000;
 
 const mergeStreamingTranscriptText = (currentText: string, nextText: string) => {

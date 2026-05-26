@@ -242,6 +242,9 @@ const View = () => {
                   completion.setIsRecording(false);
                   completion.submit(text);
                 }}
+                onTranscriptUpdate={(text) => {
+                  completion.setInput(text);
+                }}
                 onCancel={() => completion.setIsRecording(false)}
               />
             ) : (

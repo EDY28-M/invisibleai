@@ -218,8 +218,11 @@ pub async fn transcribe_audio(
     let audio_bytes = decode_audio_base64(&audio_base64)?;
     let client = reqwest::Client::new();
 
-    // ── MODO DIRECTO: Groq API key guardada localmente → llamada directa (rápido) ──
-    if let Some(groq_key) = local_groq_key {
+    // ── MODO DIRECTO: Groq API key guardada localmente Y es modo FREE ──
+    // Si el usuario tiene una licencia activa, debe pasar por el proxy del servidor 
+    // para usar el tier premium/streaming y consumir créditos.
+    let is_licensed = license_key.as_ref().map(|lk| !lk.is_empty()).unwrap_or(false);
+    if let (Some(groq_key), false) = (local_groq_key, is_licensed) {
         let url = "https://api.groq.com/openai/v1/audio/transcriptions";
 
         let part = reqwest::multipart::Part::bytes(audio_bytes)
@@ -463,10 +466,14 @@ pub async fn chat_stream_response(
         = get_stored_credentials(&app).await?;
 
     // Modelo: usar el guardado localmente si existe; si no, el default
-    let model_id = local_groq_model
-        .clone()
-        .or_else(|| selected_model.as_ref().map(|m| m.model.clone()))
-        .unwrap_or_else(|| "meta-llama/llama-4-scout-17b-16e-instruct".to_string());
+    let model_id = if license_key.is_empty() {
+        "llama-3.3-70b-versatile".to_string()
+    } else {
+        local_groq_model
+            .clone()
+            .or_else(|| selected_model.as_ref().map(|m| m.model.clone()))
+            .unwrap_or_else(|| "meta-llama/llama-4-scout-17b-16e-instruct".to_string())
+    };
 
 
     // Construir mensajes OpenAI-compatible
