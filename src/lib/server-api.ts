@@ -147,7 +147,13 @@ export interface UsageBalanceInfo {
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const url  = `${getServerUrl()}${path}`;
-  const resp = await tauriFetch(url, options as any);
+  const headers: Record<string, string> = {
+    ...(options?.headers as Record<string, string> || {}),
+  };
+  if (_instanceId) headers["x-instance-id"] = _instanceId;
+  if (_licenseKey) headers["x-license-key"] = _licenseKey;
+
+  const resp = await tauriFetch(url, { ...options, headers } as any);
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: resp.statusText })) as any;
     throw new Error(err.error || `Server error ${resp.status}`);
@@ -409,8 +415,10 @@ export const serverApi = {
   // ── Chat / IA ─────────────────────────────────────────────────────────────
 
   /**
-   * Llamada de chat con streaming SSE.
-   * Devuelve un ReadableStream que emite chunks de texto.
+   * @deprecated Desde v1.2.3. Se eliminará en v2.x.
+   * El chat usa fetchAIResponse() con invoke("chat_stream_response") para el proxy
+   * o fetch directo a Groq cuando hay key local.
+   * Si necesitas chat vía servidor, usa invoke("chat_stream_response").
    */
   async chatStream(params: {
     licenseKey?: string;
@@ -442,8 +450,10 @@ export const serverApi = {
   },
 
   /**
-   * Llamada de chat sin streaming — devuelve el texto completo.
-   * El servidor incluye el saldo actualizado en la respuesta.
+   * @deprecated Desde v1.2.3. Se eliminará en v2.x.
+   * El chat usa fetchAIResponse() con invoke("chat_stream_response") para el proxy
+   * o fetch directo a Groq cuando hay key local.
+   * Si necesitas chat vía servidor, usa invoke("chat_stream_response").
    */
   async chat(params: {
     licenseKey?: string;
