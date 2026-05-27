@@ -163,7 +163,10 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 
 async function apiFetchMultipart<T>(path: string, formData: FormData): Promise<T> {
   const url  = `${getServerUrl()}${path}`;
-  const resp = await tauriFetch(url, { method: "POST", body: formData } as any);
+  const headers: Record<string, string> = {};
+  if (_instanceId) headers["x-instance-id"] = _instanceId;
+  if (_licenseKey) headers["x-license-key"] = _licenseKey;
+  const resp = await tauriFetch(url, { method: "POST", body: formData, headers } as any);
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ error: resp.statusText })) as any;
     throw new Error(err.error || `Server error ${resp.status}`);
