@@ -12,7 +12,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![Rust](https://img.shields.io/badge/Core-Rust-brown)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.2.3-green)](https://github.com/EDY28-M/invisibleai/releases)
+[![Version](https://img.shields.io/badge/version-1.3.0-green)](https://github.com/EDY28-M/invisibleai/releases)
 
 > Proyecto en construcción. InvisibleAI es una app de escritorio multiplataforma para asistencia con IA en reuniones, entrevistas, clases, auditorías, videos y conversaciones en tiempo real.
 
@@ -24,6 +24,34 @@ La aplicación permite trabajar en dos caminos separados:
 
 - **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
 - **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
+
+## Novedades en v1.3.0
+
+### Sistema de Auto-Actualización (In-App)
+- **Actualizaciones Silenciosas:** La aplicación ahora descarga e instala actualizaciones directamente desde la interfaz sin necesidad de navegadores externos.
+- **Componente `<Updater/>`:** Interfaz integrada con barra de progreso que gestiona la descarga, instalación y reinicio automático de la app.
+- **Backend de Releases:** Nuevas rutas en el servidor (`/api/update` y `/api/admin/releases`) que comparan versiones semánticas (semver) y proveen los enlaces de descarga directa.
+- **Soporte Multiplataforma:** Gestión de descargas (`.tar.gz`, `.nsis.zip`) por arquitectura (macOS ARM/Intel, Windows x64) integrables con servicios de almacenamiento como Cloudflare R2.
+
+### Seguridad y Criptografía (Hardening)
+- **Encriptación de API Keys (AES-256-GCM):** Todas las claves de proveedores (Groq, Deepgram, OpenAI) se guardan cifradas en la base de datos local y se descifran en memoria solo durante su uso.
+- **Hashing de Contraseñas (Bcrypt):** Eliminación de credenciales hardcodeadas. Autenticación de administrador ahora utiliza `bcrypt` con variables de entorno para una mayor seguridad.
+- **Rate Limiting Granular:** Implementación de límites de peticiones globales (200/min) y por ruta específica (ej. login: 5/min, chat: 60/min, validación: 120/min) para prevenir abusos.
+- **Protección de Headers HTTP (`@fastify/helmet`):** Añadidas políticas de seguridad CSP, HSTS y control de referrers en todos los endpoints públicos.
+- **Admin Guard Unificado:** Función centralizada `requireAdmin()` utilizando `timingSafeEqual` para prevenir ataques de timing en todas las rutas privadas.
+
+### Arquitectura, Rendimiento y Mantenibilidad
+- **Autenticación Dual:** La función `extractDeviceAuth()` ahora extrae `instanceId` y `licenseKey` tanto desde Headers (para Fetch nativo) como desde Query Params (para WebSockets y casos especiales).
+- **Caché de Licencias Optimizado:** `validateLicenseCached()` almacena en caché la validez de las licencias por 30 segundos, reduciendo la carga en la DB. Incluye mecanismos de invalidación al desactivar o eliminar un usuario.
+- **Fallback Inteligente de Proveedores (`provider-keys.ts`):** Nuevo servicio que prioriza las claves cifradas administradas en el panel (DB), con caída (fallback) segura a Variables de Entorno en Render.
+- **Timeout en Streams:** Establecido un límite estricto de 120s en `chat.ts` para evitar conexiones zombie.
+- **Resolución de IP Confiable:** Configurado `trustProxy: true` para identificar correctamente a los usuarios a través del load balancer de Render.
+
+### Corrección de Bugs Críticos
+- **Error 401 en STT/Deepgram/Groq:** Solucionado el fallo de autorización originado al enviar versiones cifradas de las llaves. Ahora el servidor verifica, descifra correctamente y hace fallbacks a variables de entorno sin enmascaramiento falso.
+- **Reset de Uso de Licencia (Upgrade):** Corregido un bug en el que pasar de estado Free a Licensed no limpiaba las cuotas de tokens previas. Ahora otorga instantáneamente un *welcome bonus* (+3,600) y recarga base (+1,800) sumando 5,400 créditos de streaming disponibles al instante.
+
+---
 
 ## Novedades en v1.2.3
 
@@ -231,7 +259,7 @@ Para usar IA local:
 
 ## Release y despliegue
 
-La versión actual es **1.2.3**.
+La versión actual es **1.3.0**.
 
 Los archivos que deben mantenerse sincronizados para release son:
 
@@ -250,7 +278,7 @@ app-v<VERSION>
 Para esta versión, GitHub Actions generará el release como:
 
 ```text
-app-v1.2.3
+app-v1.3.0
 ```
 
 ## Estructura del proyecto
