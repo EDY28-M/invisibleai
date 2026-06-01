@@ -14,7 +14,7 @@ fn get_payment_endpoint() -> Result<String, String> {
 
     match option_env!("PAYMENT_ENDPOINT") {
         Some(endpoint) => Ok(endpoint.to_string()),
-        None => Ok("https://invisibleai.onrender.com/api".to_string())
+        None => Ok("https://serverai.keraai.online/api".to_string())
     }
 }
 
