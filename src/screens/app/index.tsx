@@ -33,9 +33,6 @@ const App = () => {
         return <ErrorLayout isCompact />;
       }}
       resetKeys={["app-error"]}
-      onReset={() => {
-        console.log("Reset");
-      }}
     >
       <div
         className={`w-screen h-screen flex overflow-hidden justify-center items-start ${isHidden ? "hidden pointer-events-none" : ""

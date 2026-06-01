@@ -69,7 +69,6 @@ Estos hechos se utilizarán como contexto en futuras conversaciones con el usuar
     const cleanedSummary = fullSummary.trim();
     if (shouldPersistMemorySummary(cleanedSummary)) {
       await upsertMemoryFact(conversationId, cleanedSummary);
-      console.log(`Memory fact updated for conversation ${conversationId}`);
     }
   } catch (error) {
     console.error("Failed to extract memories in the background:", error);

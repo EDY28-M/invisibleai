@@ -5,15 +5,24 @@ export const CustomCursor = () => {
   const cursorRef = useRef<HTMLDivElement>(null);
   const positionRef = useRef({ x: 0, y: 0 });
   const isVisibleRef = useRef(false);
+  const frameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    let rafId: number;
-
-    const updateCursorPosition = () => {
+    // Apply the latest position exactly once per animation frame. The frame is
+    // scheduled only in response to movement, so the cursor costs zero CPU while
+    // the mouse is idle (the previous implementation ran a 60fps loop forever).
+    const renderFrame = () => {
+      frameRef.current = null;
       if (cursorRef.current && isVisibleRef.current) {
-        cursorRef.current.style.transform = `translate3d(${positionRef.current.x}px, ${positionRef.current.y}px, 0)`;
+        const { x, y } = positionRef.current;
+        cursorRef.current.style.transform = `translate3d(${x}px, ${y}px, 0)`;
       }
-      rafId = requestAnimationFrame(updateCursorPosition);
+    };
+
+    const scheduleFrame = () => {
+      if (frameRef.current === null) {
+        frameRef.current = requestAnimationFrame(renderFrame);
+      }
     };
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -25,33 +34,28 @@ export const CustomCursor = () => {
           cursorRef.current.style.opacity = "1";
         }
       }
+
+      scheduleFrame();
     };
 
-    const handleMouseLeave = () => {
+    const hideCursor = () => {
       isVisibleRef.current = false;
       if (cursorRef.current) {
         cursorRef.current.style.opacity = "0";
       }
     };
 
-    const handleWindowBlur = () => {
-      isVisibleRef.current = false;
-      if (cursorRef.current) {
-        cursorRef.current.style.display = "0";
-      }
-    };
-
-    rafId = requestAnimationFrame(updateCursorPosition);
-
     document.addEventListener("mousemove", handleMouseMove, { passive: true });
-    document.addEventListener("mouseleave", handleMouseLeave);
-    window.addEventListener("blur", handleWindowBlur);
+    document.addEventListener("mouseleave", hideCursor);
+    window.addEventListener("blur", hideCursor);
 
     return () => {
       document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseleave", handleMouseLeave);
-      window.removeEventListener("blur", handleWindowBlur);
-      cancelAnimationFrame(rafId);
+      document.removeEventListener("mouseleave", hideCursor);
+      window.removeEventListener("blur", hideCursor);
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current);
+      }
     };
   }, []);
 

@@ -11,9 +11,6 @@ export const DashboardLayout = () => {
         return <ErrorLayout />;
       }}
       resetKeys={["dashboard-error"]}
-      onReset={() => {
-        console.log("Reset");
-      }}
     >
       <DashboardShell sidebar={<Sidebar />}>
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">

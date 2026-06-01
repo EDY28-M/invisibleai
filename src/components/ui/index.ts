@@ -12,6 +12,5 @@ export * from "./textarea";
 export * from "./command";
 export * from "./slider";
 export * from "./dropdown-menu";
-export * from "./chart";
 export * from "./empty";
 export * from "./badge";

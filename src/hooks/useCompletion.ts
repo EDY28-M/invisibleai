@@ -415,10 +415,7 @@ export const useCompletion = () => {
 
   useEffect(() => {
     const handleConversationSelected = async (event: any) => {
-      console.log(event, "event");
-
       const { id } = event.detail;
-      console.log(id, "id");
       if (!id || typeof id !== "string") {
         console.error("No conversation ID provided");
         setState((prev) => ({
@@ -427,7 +424,6 @@ export const useCompletion = () => {
         }));
         return;
       }
-      console.log(id, "id");
       try {
 
         const conversation = await getConversationById(id);

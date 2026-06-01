@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useWindowResize, useGlobalShortcuts } from ".";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -63,6 +63,11 @@ const DEFAULT_VAD_CONFIG: VadConfig = {
 
 const STREAMING_DISPATCH_IDLE_MS = 600;
 const STREAMING_CREDIT_REPORT_INTERVAL_MS = 10_000;
+// Deepgram emits interim transcripts every ~50-100ms. Re-rendering (and
+// re-parsing the Markdown preview) on each one is the main source of perceived
+// lag while transcribing. We coalesce interim updates to this cadence; final
+// transcripts and clears (empty string) are always applied immediately.
+const INTERIM_TRANSCRIPTION_THROTTLE_MS = 90;
 
 const mergeStreamingTranscriptText = (currentText: string, nextText: string) => {
   const current = currentText.trim();
@@ -128,8 +133,8 @@ export function useSystemAudio() {
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
 
   const [isStreamingMode, setIsStreamingMode] = useState<boolean>(false);
-  const [interimTranscription, setInterimTranscription] = useState<string>("");
-  const [systemInterimTranscription, setSystemInterimTranscription] = useState<string>("");
+  const [interimTranscription, setInterimTranscriptionRaw] = useState<string>("");
+  const [systemInterimTranscription, setSystemInterimTranscriptionRaw] = useState<string>("");
   const [streamingSmartMode, setStreamingSmartMode] = useState<boolean>(false);
   const [screenshotImage, setScreenshotImage] = useState<string | null>(null);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState<boolean>(false);
@@ -150,9 +155,74 @@ export function useSystemAudio() {
   });
   const streamingLastSmartSystemResponseRef = useRef<StreamingSmartSystemResponseRecord | null>(null);
 
+  // Throttle state for interim transcription previews (see throttle constant above).
+  const interimThrottleRef = useRef<{
+    mic: { timer: number | null; pending: string | null };
+    system: { timer: number | null; pending: string | null };
+  }>({
+    mic: { timer: null, pending: null },
+    system: { timer: null, pending: null },
+  });
+
   useEffect(() => { isStreamingModeRef.current = isStreamingMode; }, [isStreamingMode]);
   useEffect(() => { streamingSmartModeRef.current = streamingSmartMode; }, [streamingSmartMode]);
   useEffect(() => { accumulatedSystemTextRef.current = accumulatedSystemText; }, [accumulatedSystemText]);
+
+  // Coalesce high-frequency interim updates; apply clears (empty string) and the
+  // trailing value immediately. `setRaw` is the underlying React state setter.
+  const makeThrottledInterimSetter = useCallback(
+    (channel: "mic" | "system", setRaw: (value: string) => void) =>
+      (value: string) => {
+        const slot = interimThrottleRef.current[channel];
+
+        // Empty string = explicit clear/reset → flush immediately, drop pending.
+        if (value === "") {
+          if (slot.timer !== null) {
+            window.clearTimeout(slot.timer);
+            slot.timer = null;
+          }
+          slot.pending = null;
+          setRaw("");
+          return;
+        }
+
+        // A timer is already scheduled — just remember the latest value.
+        if (slot.timer !== null) {
+          slot.pending = value;
+          return;
+        }
+
+        // Leading edge: apply now and open a throttle window.
+        setRaw(value);
+        slot.timer = window.setTimeout(() => {
+          slot.timer = null;
+          if (slot.pending !== null) {
+            const trailing = slot.pending;
+            slot.pending = null;
+            setRaw(trailing);
+          }
+        }, INTERIM_TRANSCRIPTION_THROTTLE_MS);
+      },
+    []
+  );
+
+  const setInterimTranscription = useMemo(
+    () => makeThrottledInterimSetter("mic", setInterimTranscriptionRaw),
+    [makeThrottledInterimSetter]
+  );
+  const setSystemInterimTranscription = useMemo(
+    () => makeThrottledInterimSetter("system", setSystemInterimTranscriptionRaw),
+    [makeThrottledInterimSetter]
+  );
+
+  // Clear any pending interim timers on unmount.
+  useEffect(() => {
+    const throttle = interimThrottleRef.current;
+    return () => {
+      if (throttle.mic.timer !== null) window.clearTimeout(throttle.mic.timer);
+      if (throttle.system.timer !== null) window.clearTimeout(throttle.system.timer);
+    };
+  }, []);
 
   const resetStreamingCopilotBuffers = useCallback(() => {
     streamingCopilotBuffersRef.current = {
@@ -509,9 +579,8 @@ export function useSystemAudio() {
         if (cancelled) { uError(); return; }
         errorUnlisten = uError;
 
-        const uDiscarded = await listen("speech-discarded", (event) => {
-          const reason = event.payload as string;
-          console.log("Speech discarded:", reason);
+        const uDiscarded = await listen("speech-discarded", () => {
+          // Speech discarded by the backend VAD; nothing to do in Manual mode.
         });
         if (cancelled) { uDiscarded(); return; }
         discardedUnlisten = uDiscarded;
@@ -777,7 +846,6 @@ export function useSystemAudio() {
     };
 
     activeSpeechUtterancesRef.current.push(newUtterance);
-    console.log("[Queue] Registered system speech start at", newUtterance.startTime);
   }, []);
 
   const handleMicSpeechStart = useCallback(() => {
@@ -794,7 +862,6 @@ export function useSystemAudio() {
     };
 
     activeSpeechUtterancesRef.current.push(newUtterance);
-    console.log("[Queue] Registered mic speech start at", newUtterance.startTime);
   }, []);
 
   const processSpeechQueue = useCallback(async () => {
@@ -824,11 +891,8 @@ export function useSystemAudio() {
         );
 
         if (!readyUtterance) {
-          console.log("[Queue] No ready utterances to process.");
           break;
         }
-
-        console.log(`[Queue] Processing completed utterance from channel: ${readyUtterance.channel} (startTime: ${readyUtterance.startTime})`);
 
         setIsProcessing(true);
         let transcription = "";
@@ -869,7 +933,6 @@ export function useSystemAudio() {
             await handleNewTranscriptionRef.current(formattedTranscription);
           }
         } else {
-          console.log(`[Queue] Received empty transcription from ${readyUtterance.channel}`);
         }
 
         // Mark as processed
@@ -1645,7 +1708,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       };
       const micManager = new DeepgramStreamManager(config, micCallbacks);
       deepgramManagerRef.current = micManager;
-      console.log("[Streaming] Starting microphone stream...");
       await micManager.start(micMediaStream);
       startStreamingUsageReporting();
     }
@@ -1732,7 +1794,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     let speechUnlisten: (() => void) | undefined;
     let startUnlisten: (() => void) | undefined;
     let discardedUnlisten: (() => void) | undefined;
-    let debugUnlisten: (() => void) | undefined;
     let streamStateUnlisten: (() => void) | undefined;
     let streamTranscriptUnlisten: (() => void) | undefined;
     let streamUtteranceEndUnlisten: (() => void) | undefined;
@@ -1742,30 +1803,8 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
     const setupEventListeners = async () => {
       try {
-        // Diagnostic listener for classic (non-streaming) system audio debug
-        const uDebug = await listen<{
-          sample_rate: number;
-          raw_rms: number;
-          raw_peak: number;
-          is_speech: boolean;
-          in_speech: boolean;
-          speech_chunks: number;
-          silence_chunks: number;
-          emitted_event: string;
-        }>("classic-system-audio-debug", (event) => {
-          const d = event.payload;
-          if (d.raw_rms > 0.001 || d.is_speech || d.in_speech) {
-            console.log(
-              `[ClassicSystemAudio] rms=${d.raw_rms.toFixed(4)} peak=${d.raw_peak.toFixed(4)} speech=${d.is_speech} in_speech=${d.in_speech} chunks=${d.speech_chunks} silence=${d.silence_chunks} event=${d.emitted_event}`
-            );
-          }
-        });
-        if (cancelled) { uDebug(); return; }
-        debugUnlisten = uDebug;
-
         const uStart = await listen("speech-start", () => {
           if (isStreamingModeRef.current) return;
-          console.log("[ClassicSystemAudio] speech-start received");
           handleSystemSpeechStartRef.current();
         });
         if (cancelled) { uStart(); return; }
@@ -1776,7 +1815,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           if (!capturingRef.current) return;
 
           const base64Audio = event.payload as string;
-          console.log(`[ClassicSystemAudio] speech-detected received, base64 length=${base64Audio.length}`);
 
           if (!vadConfigRef.current.enabled) {
             console.warn("Ignoring system loopback transcription in Manual mode");
@@ -1834,7 +1872,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
                 audio: audioBlob,
                 useInvisibleAIAPI: invisibleaiApiEnabledRef.current,
               });
-              console.log(`[ClassicSystemAudio] STT result: "${result?.substring(0, 100)}..."`);
               return result;
             } catch (sttErr) {
               console.error(`[ClassicSystemAudio] STT error:`, sttErr);
@@ -1847,14 +1884,12 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         if (cancelled) { uDetected(); return; }
         speechUnlisten = uDetected;
 
-        const uDiscarded = await listen("speech-discarded", (event) => {
+        const uDiscarded = await listen("speech-discarded", () => {
           if (isStreamingModeRef.current) return;
           if (!vadConfigRef.current.enabled) {
             console.warn("Ignoring system loopback speech-discarded in Manual mode");
             return;
           }
-
-          console.log("[Queue] Speech discarded event:", event.payload);
 
           const utterance = activeSpeechUtterancesRef.current.find(
             (u) => u.channel === "system" && u.isRecording && !u.isDiscarded
@@ -1871,8 +1906,8 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         discardedUnlisten = uDiscarded;
 
         // Rust system Deepgram stream events
-        const uStreamState = await listen<string>("system-stream-state", (event) => {
-          console.log("[Streaming] System stream state changed:", event.payload);
+        const uStreamState = await listen<string>("system-stream-state", () => {
+          // System Deepgram stream state transitions are handled by Rust.
         });
         if (cancelled) { uStreamState(); return; }
         streamStateUnlisten = uStreamState;
@@ -1938,7 +1973,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       if (speechUnlisten) speechUnlisten();
       if (startUnlisten) startUnlisten();
       if (discardedUnlisten) discardedUnlisten();
-      if (debugUnlisten) debugUnlisten();
       if (streamStateUnlisten) streamStateUnlisten();
       if (streamTranscriptUnlisten) streamTranscriptUnlisten();
       if (streamUtteranceEndUnlisten) streamUtteranceEndUnlisten();
@@ -2392,7 +2426,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
               streamingMicStreamRef.current = micStream;
               await initializeStreaming(micStream);
             } else {
-              console.log("[Streaming] Switched to Auto mode, starting system stream via Rust");
               await initializeStreaming(null);
             }
           } else {
@@ -2554,7 +2587,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
 
       if (providerSupportsStreaming && !isStreamingMode) {
         // Transition: non-streaming → streaming
-        console.log("[Provider Switch] Transitioning to streaming mode");
         try {
           resetSpeechQueue();
           await invoke("stop_system_audio_capture");
@@ -2616,7 +2648,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         }
       } else if (!providerSupportsStreaming && isStreamingMode) {
         // Transition: streaming → non-streaming (classic VAD)
-        console.log("[Provider Switch] Transitioning to non-streaming (classic VAD) mode");
         try {
           resetSpeechQueue();
           stopStreamingUsageReporting();

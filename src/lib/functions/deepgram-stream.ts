@@ -229,7 +229,6 @@ export class DeepgramStreamManager {
    */
   reset(): void {
     this.resetTranscripts();
-    console.log("[DeepgramStream] Transcripts reset for next utterance");
   }
 
   // ─── Connection ──────────────────────────────────────────────────────────
@@ -260,7 +259,6 @@ export class DeepgramStreamManager {
       this.socket.binaryType = "arraybuffer";
 
       this.socket.onopen = () => {
-        console.log("[DeepgramStream] WebSocket connected");
         this.setState("connected");
         this.reconnectAttempts = 0;
         this.startKeepAlive();
@@ -268,7 +266,6 @@ export class DeepgramStreamManager {
           this.startMediaRecorder();
         } else {
           this.setState("streaming");
-          console.log("[DeepgramStream] Started in manual/injection mode");
         }
       };
 
@@ -284,9 +281,6 @@ export class DeepgramStreamManager {
       };
 
       this.socket.onclose = (event: CloseEvent) => {
-        console.log(
-          `[DeepgramStream] WebSocket closed: code=${event.code} reason=${event.reason}`
-        );
         this.stopKeepAlive();
 
         if (this.state === "draining") {
@@ -324,10 +318,6 @@ export class DeepgramStreamManager {
     this.reconnectAttempts++;
     const delay =
       RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1);
-
-    console.log(
-      `[DeepgramStream] Reconnecting (attempt ${this.reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS}) in ${delay}ms`
-    );
 
     this.setState("reconnecting");
     this.stopKeepAlive();
@@ -483,7 +473,6 @@ export class DeepgramStreamManager {
       (this as any)._gainNode = gainNode;
 
       this.setState("streaming");
-      console.log(`[DeepgramStream] Audio capture started (Box-resampled from ${audioContext.sampleRate}Hz to 16kHz)`);
     } catch (err) {
       console.error("[DeepgramStream] Failed to start audio capture:", err);
       this.callbacks.onError(
@@ -571,8 +560,6 @@ export class DeepgramStreamManager {
           this.callbacks.onUtteranceEnd?.(text);
           this.resetTranscripts(); // Clear segments after dispatch to prevent re-sending
         }
-      } else if (data.type === "Metadata") {
-        console.log("[DeepgramStream] Metadata received:", data.request_id);
       } else if (data.type === "Error") {
         console.error("[DeepgramStream] Deepgram error:", data);
         this.callbacks.onError(
@@ -637,7 +624,6 @@ export class DeepgramStreamManager {
 
   private setState(newState: StreamState): void {
     if (this.state === newState) return;
-    console.log(`[DeepgramStream] ${this.state} → ${newState}`);
     this.state = newState;
     this.callbacks.onStateChange?.(newState);
   }

@@ -35,6 +35,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -770,17 +771,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [selectedSttProvider]);
 
-  const allAiProviders: TYPE_PROVIDER[] = [
-    ...AI_PROVIDERS,
-    ...customAiProviders,
-  ];
+  // Memoized so the merged arrays keep a stable identity across renders. These
+  // feed the dependency arrays of the heavy audio hook (useSystemAudio); rebuilding
+  // them every render would needlessly invalidate its callbacks and effects.
+  const allAiProviders: TYPE_PROVIDER[] = useMemo(
+    () => [...AI_PROVIDERS, ...customAiProviders],
+    [customAiProviders]
+  );
 
   // Free users don't see streaming STT providers (e.g. deepgram-streaming).
   // Licensed users see all providers. Custom providers are always shown.
-  const allSttProviders: TYPE_PROVIDER[] = [
-    ...SPEECH_TO_TEXT_PROVIDERS.filter((p) => !p.streaming || hasActiveLicense),
-    ...customSttProviders,
-  ];
+  const allSttProviders: TYPE_PROVIDER[] = useMemo(
+    () => [
+      ...SPEECH_TO_TEXT_PROVIDERS.filter((p) => !p.streaming || hasActiveLicense),
+      ...customSttProviders,
+    ],
+    [customSttProviders, hasActiveLicense]
+  );
 
   const onSetSelectedAIProvider = ({
     provider,
