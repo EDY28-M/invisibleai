@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_machine_uid::MachineUidExt;
 
-fn get_app_endpoint() -> Result<String, String> {
+pub(crate) fn get_app_endpoint() -> Result<String, String> {
     if let Ok(endpoint) = env::var("APP_ENDPOINT") {
         return Ok(endpoint);
     }
@@ -21,7 +21,7 @@ fn get_app_endpoint() -> Result<String, String> {
     }
 }
 
-fn get_api_access_key() -> Result<String, String> {
+pub(crate) fn get_api_access_key() -> Result<String, String> {
     if let Ok(key) = env::var("API_ACCESS_KEY") {
         return Ok(key);
     }
@@ -120,14 +120,14 @@ pub struct ChatResponse {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Model {
-    provider: String,
-    name: String,
-    id: String,
-    model: String,
-    description: String,
-    modality: String,
+    pub provider: String,
+    pub name: String,
+    pub id: String,
+    pub model: String,
+    pub description: String,
+    pub modality: String,
     #[serde(rename = "isAvailable")]
-    is_available: bool,
+    pub is_available: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1335,4 +1335,84 @@ pub async fn end_active_session(
     )
 }
 
+#[tauri::command]
+pub async fn on_transcript_received(
+    app: tauri::AppHandle,
+    session_id: String,
+    channel: String,
+    text: String,
+    is_final: bool,
+    is_smart_mode: bool,
+) -> Result<(), String> {
+    tokio::spawn(async move {
+        let _ = crate::services::cognitive_router::handle_incoming_transcript(
+            app,
+            session_id,
+            channel,
+            text,
+            is_final,
+            is_smart_mode,
+        ).await;
+    });
+    Ok(())
+}
 
+#[tauri::command]
+pub async fn cancel_active_llm_task_cmd(app: tauri::AppHandle) -> Result<(), String> {
+    crate::services::cognitive_router::cancel_active_llm_task(&app).await;
+    Ok(())
+}
+
+// ── PROFILE TEMPLATES & MODIFIERS ──
+
+#[tauri::command]
+pub async fn get_profile_templates(
+    app: tauri::AppHandle,
+) -> Result<Vec<crate::services::profile_service::ProfileTemplate>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::profile_service::get_all_templates(app_data_dir)
+}
+
+#[tauri::command]
+pub async fn get_profile_modifiers(
+    app: tauri::AppHandle,
+    template_id: String,
+) -> Result<Vec<crate::services::profile_service::ProfileModifier>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::profile_service::get_modifiers_for_template(app_data_dir, &template_id)
+}
+
+#[tauri::command]
+pub async fn get_active_profile(
+    app: tauri::AppHandle,
+) -> Result<Option<crate::services::profile_service::ActiveProfileConfig>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::profile_service::get_active_profile_config(app_data_dir)
+}
+
+#[tauri::command]
+pub async fn set_active_profile_template(
+    app: tauri::AppHandle,
+    template_id: String,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::profile_service::set_active_template(app_data_dir, &template_id)
+}
+
+#[tauri::command]
+pub async fn toggle_profile_modifier(
+    app: tauri::AppHandle,
+    modifier_id: String,
+) -> Result<Vec<String>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::profile_service::toggle_modifier(app_data_dir, &modifier_id)
+}
+
+#[tauri::command]
+pub async fn set_profile_custom_notes(
+    app: tauri::AppHandle,
+    notes: String,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::profile_service::set_custom_notes(app_data_dir, &notes)
+}

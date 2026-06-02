@@ -14,6 +14,7 @@ import {
   Layers,
   Eye,
   Settings2,
+  UserCog,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "@/contexts";
@@ -52,6 +53,11 @@ export const useMenuItems = () => {
           icon: MessagesSquare,
           label: t("sidebar_chats"),
           href: "/chats",
+        },
+        {
+          icon: UserCog,
+          label: t("sidebar_profiles"),
+          href: "/profiles",
         },
         {
           icon: WandSparkles,

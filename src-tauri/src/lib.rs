@@ -26,6 +26,11 @@ pub struct AudioState {
     pub sample_rate: Arc<Mutex<Option<u32>>>,
 }
 
+#[derive(Default)]
+pub struct LlmOrchestratorState {
+    pub active_llm_task: Arc<Mutex<Option<JoinHandle<()>>>>,
+}
+
 #[tauri::command]
 fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
@@ -44,6 +49,7 @@ pub fn run() {
         .manage(AudioState::default())
         .manage(DeepgramStreamState::default())
         .manage(CaptureState::default())
+        .manage(LlmOrchestratorState::default())
         .manage(shortcuts::WindowVisibility {
             is_hidden: Mutex::new(false),
         })
@@ -129,6 +135,14 @@ pub fn run() {
             api::insert_transcript_segment,
             api::get_combined_session_timeline,
             api::end_active_session,
+            api::on_transcript_received,
+            api::cancel_active_llm_task_cmd,
+            api::get_profile_templates,
+            api::get_profile_modifiers,
+            api::get_active_profile,
+            api::set_active_profile_template,
+            api::toggle_profile_modifier,
+            api::set_profile_custom_notes,
             speaker::start_system_audio_capture,
             speaker::stop_system_audio_capture,
             speaker::manual_stop_continuous,

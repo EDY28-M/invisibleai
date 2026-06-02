@@ -61,6 +61,7 @@ pub struct CurrentScreenContext {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AiContext {
     pub profile: Option<AiProfile>,
+    pub compiled_profile: Option<crate::services::profile_service::CompiledProfile>,
     pub knowledge: Vec<AppKnowledge>,
     pub features: Vec<AppFeature>,
     pub user_memory: Vec<UserMemory>,
@@ -242,7 +243,7 @@ pub fn build_ai_context(
         ).ok();
 
         let timeline = crate::services::session_service::get_combined_session_timeline(
-            app_data_dir,
+            app_data_dir.clone(),
             sid,
             30
         ).unwrap_or_default();
@@ -252,8 +253,12 @@ pub fn build_ai_context(
         (None, Vec::new())
     };
 
+    // Cargar perfil modular compilado (si hay uno activo)
+    let compiled_profile = crate::services::profile_service::get_compiled_profile(app_data_dir).ok().flatten();
+
     Ok(AiContext {
         profile,
+        compiled_profile,
         knowledge,
         features,
         user_memory,
@@ -272,8 +277,13 @@ pub fn build_ai_context(
 pub fn build_system_prompt(context: AiContext, user_message: &str) -> String {
     let mut prompt = String::new();
 
-    // 1. Identidad y Perfil
-    if let Some(prof) = context.profile {
+    // 1. Identidad y Perfil (Modular con fallback a legacy)
+    if let Some(ref compiled) = context.compiled_profile {
+        // Perfil modular activo → usar el compilador optimizado
+        let profile_block = crate::services::profile_service::compile_profile_prompt(compiled);
+        prompt.push_str(&profile_block);
+    } else if let Some(prof) = context.profile {
+        // Fallback al perfil legacy de ai_profile
         prompt.push_str(&format!(
             "[IDENTIDAD DEL ASISTENTE]\n\
              Nombre: {}\n\

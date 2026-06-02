@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/contexts";
 import { safeLocalStorage, getLocalCache, setLocalCache } from "@/lib";
-import { STORAGE_KEYS } from "@/config";
+import { STORAGE_KEYS, DEFAULT_SYSTEM_PROMPT } from "@/config";
 import moment from "moment";
 import { useTranslation } from "@/hooks";
 
@@ -155,20 +155,28 @@ export const InvisibleAIPrompts = () => {
   const handleSelectInvisibleAIPrompt = async (prompt: InvisibleAIPrompt) => {
     if (!hasActiveLicense) return;
     try {
-      setSystemPrompt(prompt.prompt);
-      setSelectedInvisibleAIPrompt(prompt);
-      safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID);
-      safeLocalStorage.setItem(STORAGE_KEYS.SYSTEM_PROMPT, prompt.prompt);
-      safeLocalStorage.setItem(STORAGE_KEYS.SELECTED_INVISIBLEAI_PROMPT, JSON.stringify(prompt));
+      if (isPromptSelected(prompt)) {
+        setSystemPrompt(DEFAULT_SYSTEM_PROMPT);
+        setSelectedInvisibleAIPrompt(null);
+        safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID);
+        safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_INVISIBLEAI_PROMPT);
+        safeLocalStorage.setItem(STORAGE_KEYS.SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT);
+      } else {
+        setSystemPrompt(prompt.prompt);
+        setSelectedInvisibleAIPrompt(prompt);
+        safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID);
+        safeLocalStorage.setItem(STORAGE_KEYS.SYSTEM_PROMPT, prompt.prompt);
+        safeLocalStorage.setItem(STORAGE_KEYS.SELECTED_INVISIBLEAI_PROMPT, JSON.stringify(prompt));
 
-      const matchingModel = models.find((model) => model.model === prompt.modelId || model.id === prompt.modelId);
-      if (matchingModel) {
-        if (invisibleaiApiEnabled) {
-          setSupportsImages((matchingModel.modality?.includes("image") || matchingModel.modality?.includes("vision")) ?? false);
+        const matchingModel = models.find((model) => model.model === prompt.modelId || model.id === prompt.modelId);
+        if (matchingModel) {
+          if (invisibleaiApiEnabled) {
+            setSupportsImages((matchingModel.modality?.includes("image") || matchingModel.modality?.includes("vision")) ?? false);
+          }
+          await invoke("secure_storage_save", {
+            items: [{ key: SELECTED_INVISIBLEAI_MODEL_STORAGE_KEY, value: JSON.stringify(matchingModel) }],
+          });
         }
-        await invoke("secure_storage_save", {
-          items: [{ key: SELECTED_INVISIBLEAI_MODEL_STORAGE_KEY, value: JSON.stringify(matchingModel) }],
-        });
       }
     } catch (error) {
       console.error("Failed to select InvisibleAI prompt:", error);

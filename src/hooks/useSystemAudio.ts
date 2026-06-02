@@ -5,13 +5,9 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useApp } from "@/contexts";
 import {
-  appendStreamingCopilotContext,
-  buildStreamingCopilotDecision,
-  shouldSuppressSmartSystemResponse,
   fetchSTT,
   fetchAIResponse,
   DeepgramStreamManager,
-  type StreamingChannel,
   type StreamingCopilotBuffers,
   type StreamingSmartSystemResponseRecord,
 } from "@/lib/functions";
@@ -277,6 +273,41 @@ export function useSystemAudio() {
       if (throttle.system.timer !== null) window.clearTimeout(throttle.system.timer);
     };
   }, []);
+
+  // Listen to backend LLM stream events
+  useEffect(() => {
+    const unlistenStart = listen("ai-stream-start", () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      setIsAIProcessing(true);
+      setLastAIResponse("");
+    });
+    
+    const unlistenChunk = listen("ai-stream-chunk", (event: any) => {
+      setLastAIResponse((prev) => prev + event.payload);
+    });
+    
+    const unlistenEnd = listen("ai-stream-end", () => {
+      setIsAIProcessing(false);
+      const activeSessionId = sessionIdRef.current;
+      if (activeSessionId) {
+        refreshTimelineFromDb(activeSessionId);
+      }
+    });
+    
+    const unlistenError = listen("ai-stream-error", (event: any) => {
+      setIsAIProcessing(false);
+      setError(event.payload || "Error en la consulta de IA del backend");
+    });
+
+    return () => {
+      unlistenStart.then((fn) => fn());
+      unlistenChunk.then((fn) => fn());
+      unlistenEnd.then((fn) => fn());
+      unlistenError.then((fn) => fn());
+    };
+  }, [refreshTimelineFromDb]);
 
   const screenshotInitiatedByAudioRef = useRef<boolean>(false);
 
@@ -1034,6 +1065,11 @@ export function useSystemAudio() {
       abortControllerRef.current = new AbortController();
       const signal = abortControllerRef.current.signal;
 
+      // Cancelar cualquier llamada LLM activa en el backend
+      invoke("cancel_active_llm_task_cmd").catch((err) => {
+        console.error("Failed to cancel active backend LLM task:", err);
+      });
+
       try {
         setIsAIProcessing(true);
         setLastAIResponse("");
@@ -1303,392 +1339,37 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     };
   }, [customizable]);
 
-  const handleStreamingCopilotTranscription = useCallback(async (
-    channel: StreamingChannel,
-    text: string
-  ) => {
-    if (!capturingRef.current || !isStreamingModeRef.current) return;
 
-    const trimmedText = text.trim();
-    if (!trimmedText) return;
-
-    setError("");
-
-    const now = Date.now();
-    const displayTranscription =
-      channel === "mic" ? `[Tú]: ${trimmedText}` : `[Sistema]: ${trimmedText}`;
-    const effectiveSystemPrompt = useSystemPromptRef.current
-      ? systemPromptRef.current || DEFAULT_SYSTEM_PROMPT
-      : contextContentRef.current || DEFAULT_SYSTEM_PROMPT;
-
-    const decision = buildStreamingCopilotDecision({
-      channel,
-      text: trimmedText,
-      userPreparationContext: effectiveSystemPrompt,
-      buffers: streamingCopilotBuffersRef.current,
-      systemDetectionMode: streamingSmartModeRef.current ? "smart" : "standard",
-      now,
-    });
-
-    streamingCopilotBuffersRef.current = appendStreamingCopilotContext(
-      streamingCopilotBuffersRef.current,
-      {
-        channel,
-        text: trimmedText,
-        timestamp: now,
-      },
-      now
-    );
-
-    if (channel === "system") {
-      const prevAccumulated = accumulatedSystemTextRef.current;
-      const newAccumulated = prevAccumulated
-        ? `${prevAccumulated} ${trimmedText}`
-        : trimmedText;
-      setAccumulatedSystemText(newAccumulated);
-      accumulatedSystemTextRef.current = newAccumulated;
-    } else {
-      setAccumulatedSystemText("");
-      accumulatedSystemTextRef.current = "";
-    }
-
-    const prevTranscription = lastTranscriptionRef.current;
-    const prevAIResponse = lastAIResponseRef.current;
-
-    // Guardar el mensaje del micrófono en el historial sin disparar la IA (Opción A)
-    if (channel === "mic" && isDualChannelRef.current && hasActiveLicense) {
-      let currentMessages = [...conversationRef.current.messages];
-      if (prevTranscription && !isLastTranscriptionSavedRef.current) {
-        const timestamp = Date.now() - 10;
-        const userMsg = {
-          id: generateMessageId("user", timestamp),
-          role: "user" as const,
-          content: prevTranscription,
-          timestamp,
-        };
-        const assistantMsg = {
-          id: generateMessageId("assistant", timestamp + 1),
-          role: "assistant" as const,
-          content: prevAIResponse,
-          timestamp: timestamp + 1,
-        };
-        currentMessages.push(userMsg, assistantMsg);
-        conversationRef.current = {
-          ...conversationRef.current,
-          messages: currentMessages,
-          updatedAt: timestamp + 1,
-          title: conversationRef.current.title || generateConversationTitle(prevTranscription),
-        };
-      }
-
-      const nowTimestamp = Date.now();
-      const micMsg = {
-        id: generateMessageId("user", nowTimestamp),
-        role: "user" as const,
-        content: displayTranscription,
-        timestamp: nowTimestamp,
-      };
-
-      conversationRef.current = {
-        ...conversationRef.current,
-        messages: [...conversationRef.current.messages, micMsg],
-        updatedAt: nowTimestamp,
-      };
-
-      setConversation(conversationRef.current);
-      isLastTranscriptionSavedRef.current = true;
-      setLastTranscription(displayTranscription);
-      setLastAIResponse("");
-      return;
-    }
-
-    if (!decision.shouldRespond) {
-      return;
-    }
-
-    if (channel === "system") {
-      const shouldSuppress = shouldSuppressSmartSystemResponse({
-        currentText: trimmedText,
-        decision,
-        previous: streamingLastSmartSystemResponseRef.current,
-        now,
-      });
-
-      if (shouldSuppress) {
-        return;
-      }
-
-      streamingLastSmartSystemResponseRef.current = {
-        text: trimmedText,
-        timestamp: now,
-        currentEventKind: decision.currentEventKind,
-        triggerScore: decision.triggerScore,
-        confidence: decision.confidence,
-      };
-    }
-
-    const hasPendingMicResponse =
-      channel === "system" &&
-      prevTranscription.startsWith("[Tú]:") &&
-      !isLastTranscriptionSavedRef.current;
-
-    if (hasPendingMicResponse) {
-      return;
-    }
-
-    let updatedMessages = [...conversationRef.current.messages];
-
-    if (prevTranscription && !isLastTranscriptionSavedRef.current) {
-      const timestamp = Date.now();
-      const userMsg = {
-        id: generateMessageId("user", timestamp),
-        role: "user" as const,
-        content: prevTranscription,
-        timestamp,
-      };
-      const assistantMsg = {
-        id: generateMessageId("assistant", timestamp + 1),
-        role: "assistant" as const,
-        content: prevAIResponse,
-        timestamp: timestamp + 1,
-      };
-      updatedMessages.push(userMsg, assistantMsg);
-
-      conversationRef.current = {
-        ...conversationRef.current,
-        messages: [...conversationRef.current.messages, userMsg, assistantMsg],
-        updatedAt: timestamp,
-        title: conversationRef.current.title || generateConversationTitle(prevTranscription),
-      };
-
-      setConversation(conversationRef.current);
-      isLastTranscriptionSavedRef.current = true;
-    }
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    setLastTranscription(displayTranscription);
-    setLastAIResponse("");
-    isLastTranscriptionSavedRef.current = !decision.shouldSaveToDb;
-
-    const previousMessagesForAI = updatedMessages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-
-    await processWithAI(
-      decision.aiUserMessage,
-      decision.aiSystemPrompt,
-      previousMessagesForAI,
-      decision.shouldSaveToDb,
-      displayTranscription
-    );
-  }, [processWithAI, hasActiveLicense]);
 
   const handleNewTranscription = useCallback(async (formattedText: string) => {
     if (!capturingRef.current) return;
 
     setError("");
 
-    // Guardar segmento en SQLite de la sesión activa
     const activeSessionId = sessionIdRef.current || sessionId;
-    if (activeSessionId) {
-      const isSystem = formattedText.startsWith("[Sistema]: ");
-      const isUser = formattedText.startsWith("[Tú]: ");
-      if (isSystem || isUser) {
-        const sourceType = isUser ? "microphone" : "system_audio";
-        const speakerLabel = isUser ? "Tú" : "Sistema";
-        const content = isUser ? formattedText.replace(/^\[Tú\]:\s*/, "") : formattedText.replace(/^\[Sistema\]:\s*/, "");
-        invoke("insert_transcript_segment", {
-          sessionId: activeSessionId,
-          conversationId: conversationRef.current.id || null,
-          sourceType,
-          speakerLabel,
-          content,
-          isFinal: true
-        })
-        .then(() => refreshTimelineFromDb(activeSessionId))
-        .catch(err => console.error("Failed to insert transcript segment:", err));
-      }
-    }
+    if (!activeSessionId) return;
 
-    if (isStreamingModeRef.current) {
-      if (formattedText.startsWith("[Tú]: ")) {
-        await handleStreamingCopilotTranscription(
-          "mic",
-          formattedText.replace(/^\[Tú\]:\s*/, "")
-        );
-        return;
-      }
+    const isSystem = formattedText.startsWith("[Sistema]: ");
+    const isUser = formattedText.startsWith("[Tú]: ");
+    if (!isSystem && !isUser) return;
 
-      if (formattedText.startsWith("[Sistema]: ")) {
-        await handleStreamingCopilotTranscription(
-          "system",
-          formattedText.replace(/^\[Sistema\]:\s*/, "")
-        );
-        return;
-      }
-    }
+    const channel = isUser ? "mic" : "system";
+    const text = isUser ? formattedText.replace(/^\[Tú\]:\s*/, "") : formattedText.replace(/^\[Sistema\]:\s*/, "");
 
-    let updatedMessages = [...conversationRef.current.messages];
-    const prevTranscription = lastTranscriptionRef.current;
-    const prevAIResponse = lastAIResponseRef.current;
-
-    // Check if the current transcription is system loopback audio
-    const isSystemText = formattedText.startsWith("[Sistema]: ");
-
-    if (isSystemText) {
-      const segmentText = formattedText.slice(11).trim();
-      if (segmentText) {
-        // Append to accumulated system text
-        const prevAccumulated = accumulatedSystemTextRef.current;
-        const newAccumulated = prevAccumulated ? `${prevAccumulated} ${segmentText}` : segmentText;
-        setAccumulatedSystemText(newAccumulated);
-        accumulatedSystemTextRef.current = newAccumulated;
-
-        // Trigger AI processing with the fully accumulated system text so far!
-        // But do NOT save it to database/history!
-        const fullSystemTranscription = `[Sistema]: ${newAccumulated}`;
-
-        if (prevTranscription && !isLastTranscriptionSavedRef.current) {
-          const timestamp = Date.now();
-          const userMsg = {
-            id: generateMessageId("user", timestamp),
-            role: "user" as const,
-            content: prevTranscription,
-            timestamp,
-          };
-          const assistantMsg = {
-            id: generateMessageId("assistant", timestamp + 1),
-            role: "assistant" as const,
-            content: prevAIResponse,
-            timestamp: timestamp + 1,
-          };
-          updatedMessages.push(userMsg, assistantMsg);
-
-          conversationRef.current = {
-            ...conversationRef.current,
-            messages: [...conversationRef.current.messages, userMsg, assistantMsg],
-            updatedAt: timestamp,
-            title: conversationRef.current.title || generateConversationTitle(prevTranscription),
-          };
-
-          setConversation(conversationRef.current);
-          isLastTranscriptionSavedRef.current = true;
-        }
-
-        if (abortControllerRef.current) {
-          abortControllerRef.current.abort();
-        }
-
-        setLastTranscription(fullSystemTranscription);
-        setLastAIResponse("");
-        setAccumulatedSystemText("");
-        accumulatedSystemTextRef.current = "";
-        setSystemInterimTranscription("");
-        isLastTranscriptionSavedRef.current = true; // Set to true so we don't accidentally save it later
-
-        const effectiveSystemPrompt = useSystemPromptRef.current
-          ? systemPromptRef.current || DEFAULT_SYSTEM_PROMPT
-          : contextContentRef.current || DEFAULT_SYSTEM_PROMPT;
-
-        const previousMessagesForAI = updatedMessages.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        }));
-
-        await processWithAI(
-          fullSystemTranscription,
-          effectiveSystemPrompt,
-          previousMessagesForAI,
-          false // shouldSaveToDb = false
-        );
-      }
-      return;
-    }
-
-    // Otherwise, it is mic audio ([Tú]: ...) or standard mode
-    const isMicText = formattedText.startsWith("[Tú]: ");
-    if (isMicText) {
-      // Flush accumulated system text as a persistent message in conversation history!
-      const accumulatedSystemToSave = accumulatedSystemTextRef.current;
-      if (accumulatedSystemToSave && accumulatedSystemToSave.trim()) {
-        // Clear accumulated system state
-        setAccumulatedSystemText("");
-        accumulatedSystemTextRef.current = "";
-
-        const systemTimestamp = Date.now() - 5;
-        const systemMsg = {
-          id: generateMessageId("user", systemTimestamp),
-          role: "user" as const,
-          content: `[Sistema]: ${accumulatedSystemToSave.trim()}`,
-          timestamp: systemTimestamp,
-        };
-
-        updatedMessages.push(systemMsg);
-
-        conversationRef.current = {
-          ...conversationRef.current,
-          messages: [...conversationRef.current.messages, systemMsg],
-          updatedAt: systemTimestamp,
-        };
-        setConversation(conversationRef.current);
-      }
-    }
-
-    if (prevTranscription && !isLastTranscriptionSavedRef.current) {
-      const timestamp = Date.now();
-      const userMsg = {
-        id: generateMessageId("user", timestamp),
-        role: "user" as const,
-        content: prevTranscription,
-        timestamp,
-      };
-      const assistantMsg = {
-        id: generateMessageId("assistant", timestamp + 1),
-        role: "assistant" as const,
-        content: prevAIResponse,
-        timestamp: timestamp + 1,
-      };
-      updatedMessages.push(userMsg, assistantMsg);
-
-      conversationRef.current = {
-        ...conversationRef.current,
-        messages: [...conversationRef.current.messages, userMsg, assistantMsg],
-        updatedAt: timestamp,
-        title: conversationRef.current.title || generateConversationTitle(prevTranscription),
-      };
-
-      setConversation(conversationRef.current);
-      isLastTranscriptionSavedRef.current = true;
-    }
-
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
+    // Actualizar la interfaz local de inmediato con lo que se acaba de hablar
     setLastTranscription(formattedText);
     setLastAIResponse("");
-    isLastTranscriptionSavedRef.current = false;
 
-    const effectiveSystemPrompt = useSystemPromptRef.current
-      ? systemPromptRef.current || DEFAULT_SYSTEM_PROMPT
-      : contextContentRef.current || DEFAULT_SYSTEM_PROMPT;
-
-    const previousMessagesForAI = updatedMessages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-
-    await processWithAI(
-      formattedText,
-      effectiveSystemPrompt,
-      previousMessagesForAI,
-      true // shouldSaveToDb = true
-    );
-  }, [handleStreamingCopilotTranscription, processWithAI]);
+    invoke("on_transcript_received", {
+      sessionId: activeSessionId,
+      channel,
+      text,
+      isFinal: true,
+      isSmartMode: streamingSmartModeRef.current
+    })
+    .then(() => refreshTimelineFromDb(activeSessionId))
+    .catch(err => console.error("Failed to send transcript to backend cognitive router:", err));
+  }, [sessionId, sessionIdRef, refreshTimelineFromDb]);
 
   const handleNewTranscriptionRef = useRef(handleNewTranscription);
   useEffect(() => {

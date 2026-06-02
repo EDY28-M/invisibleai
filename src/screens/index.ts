@@ -10,3 +10,5 @@ export { default as Audio } from "./audio";
 export { default as Screenshot } from "./screenshot";
 export { default as Responses } from "./responses";
 export { default as MemoryAdmin } from "./memory-admin";
+export { default as Profiles } from "./profiles";
+

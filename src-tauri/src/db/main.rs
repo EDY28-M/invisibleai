@@ -35,5 +35,11 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/session-schema.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "create_profile_templates_modifiers_and_config",
+            sql: include_str!("migrations/profile-templates.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
