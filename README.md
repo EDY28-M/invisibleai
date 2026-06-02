@@ -12,7 +12,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![Rust](https://img.shields.io/badge/Core-Rust-brown)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.4.0-green)](https://github.com/EDY28-M/invisibleai/releases)
+[![Version](https://img.shields.io/badge/version-1.5.0-green)](https://github.com/EDY28-M/invisibleai/releases)
 
 > Proyecto en construcción. InvisibleAI es una app de escritorio multiplataforma para asistencia con IA en reuniones, entrevistas, clases, auditorías, videos y conversaciones en tiempo real.
 
@@ -24,6 +24,21 @@ La aplicación permite trabajar en dos caminos separados:
 
 - **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
 - **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
+
+## Novedades en v1.5.0
+
+### Refinamiento de Perfiles Modulares e Interacciones de Deselección (Toggle)
+
+Se mejoró la experiencia de usuario y la consistencia de la configuración del sistema de prompts y perfiles:
+
+- **Alternancia y Deselección en Prompts (Toggle)**:
+  - **Presets y Personalizados**: Habilitada la funcionalidad para deseleccionar prompts tanto predeterminados como creados por el usuario en la pantalla de System Prompts. Al hacer clic sobre un prompt que ya está seleccionado, se desactivará, limpiando las llaves en localStorage (`selected_system_prompt_id`, `selected_invisibleai_prompt`) y restableciendo el prompt global de la IA al valor predeterminado del sistema (`DEFAULT_SYSTEM_PROMPT`).
+- **Deselección de Perfiles Modulares**:
+  - En la pantalla `/profiles`, hacer clic sobre la tarjeta de un perfil modular activo ahora lo desactiva. Esta acción se sincroniza en caliente con SQLite estableciendo el `template_id` a `NULL` y limpiando la lista de modificadores en la tabla `active_profile_config`, provocando un fallback inmediato al perfil general de la aplicación.
+- **Resolución de Errores en Compilación Rust**:
+  - Se solventó el error de propiedad (`E0382: use of moved value`) en el constructor de contexto (`context_builder.rs`), clonando de forma segura la variable de entorno `app_data_dir` antes de la obtención de la línea de tiempo de la sesión para evitar bloqueos y fallos del compilador.
+- **Validación Completa sin Errores**:
+  - Verificación del tipado TypeScript exitosa con `tsc --noEmit` y empaquetado de producción exitoso con `pnpm run build` sin advertencias críticas en el bundle principal.
 
 ## Novedades en v1.4.0
 
@@ -331,7 +346,7 @@ Para usar IA local:
 
 ## Release y despliegue
 
-La versión actual es **1.4.0**.
+La versión actual es **1.5.0**.
 
 Los archivos que deben mantenerse sincronizados para release son:
 
@@ -350,7 +365,7 @@ app-v<VERSION>
 Para esta versión, GitHub Actions generará el release como:
 
 ```text
-app-v1.4.0
+app-v1.5.0
 ```
 
 ## Estructura del proyecto
