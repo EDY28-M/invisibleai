@@ -464,6 +464,7 @@ pub async fn chat_stream_response(
     current_route: Option<String>,
     app_version: Option<String>,
     selected_feature: Option<String>,
+    session_id: Option<String>,
 ) -> Result<String, String> {
     let app_endpoint = get_app_endpoint()?;
     let api_access_key = get_api_access_key()?;
@@ -502,6 +503,7 @@ pub async fn chat_stream_response(
                 app_data_dir,
                 uid,
                 cid,
+                session_id.as_deref(),
                 screen_ctx,
                 &user_message,
                 intent
@@ -1232,6 +1234,7 @@ pub async fn get_enriched_system_prompt(
     current_route: Option<String>,
     app_version: Option<String>,
     selected_feature: Option<String>,
+    session_id: Option<String>,
 ) -> Result<String, String> {
     let mut final_system_prompt = system_prompt.clone().unwrap_or_default();
     if let (Some(uid), Some(cid), Some(screen), Some(route)) = (&user_id, &conversation_id, &current_screen, &current_route) {
@@ -1251,6 +1254,7 @@ pub async fn get_enriched_system_prompt(
                 app_data_dir,
                 uid,
                 cid,
+                session_id.as_deref(),
                 screen_ctx,
                 &user_message,
                 intent
@@ -1265,6 +1269,70 @@ pub async fn get_enriched_system_prompt(
         }
     }
     Ok(final_system_prompt)
+}
+
+#[tauri::command]
+pub async fn create_or_get_active_session(
+    app: AppHandle,
+    user_id: String,
+    session_type: String,
+    title: String,
+) -> Result<crate::services::session_service::LiveSession, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::session_service::create_or_get_active_session(
+        app_data_dir,
+        &user_id,
+        &session_type,
+        &title,
+    )
+}
+
+#[tauri::command]
+pub async fn insert_transcript_segment(
+    app: AppHandle,
+    session_id: String,
+    conversation_id: Option<String>,
+    source_type: String,
+    speaker_label: String,
+    content: String,
+    is_final: bool,
+) -> Result<crate::services::session_service::TranscriptSegment, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::session_service::insert_transcript_segment(
+        app_data_dir,
+        &session_id,
+        conversation_id.as_deref(),
+        &source_type,
+        &speaker_label,
+        &content,
+        is_final,
+    )
+}
+
+#[tauri::command]
+pub async fn get_combined_session_timeline(
+    app: AppHandle,
+    session_id: String,
+    limit: i32,
+) -> Result<Vec<crate::services::session_service::TranscriptSegment>, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::session_service::get_combined_session_timeline(
+        app_data_dir,
+        &session_id,
+        limit,
+    )
+}
+
+#[tauri::command]
+pub async fn end_active_session(
+    app: AppHandle,
+    session_id: String,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::session_service::end_active_session(
+        app_data_dir,
+        &session_id,
+    )
 }
 
 

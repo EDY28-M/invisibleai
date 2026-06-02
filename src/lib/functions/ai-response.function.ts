@@ -99,6 +99,7 @@ async function* fetchInvisibleAIAIResponse(params: {
   currentRoute?: string;
   appVersion?: string;
   selectedFeature?: string;
+  sessionId?: string | null;
 }): AsyncIterable<string> {
   try {
     const {
@@ -107,6 +108,7 @@ async function* fetchInvisibleAIAIResponse(params: {
       imagesBase64 = [],
       history = [],
       signal,
+      sessionId,
     } = params;
 
     if (signal?.aborted) {
@@ -279,6 +281,7 @@ async function* fetchInvisibleAIAIResponse(params: {
         currentRoute,
         appVersion,
         selectedFeature,
+        sessionId,
       });
 
       let lastIndex = 0;
@@ -344,6 +347,7 @@ export async function* fetchAIResponse(params: {
   currentRoute?: string;
   appVersion?: string;
   selectedFeature?: string;
+  sessionId?: string | null;
 }): AsyncIterable<string> {
   try {
     const {
@@ -361,6 +365,7 @@ export async function* fetchAIResponse(params: {
       currentRoute,
       appVersion,
       selectedFeature,
+      sessionId,
     } = params;
 
     if (signal?.aborted) {
@@ -393,6 +398,7 @@ export async function* fetchAIResponse(params: {
         currentRoute: currentRouteVal,
         appVersion: appVersionVal,
         selectedFeature: selectedFeatureVal,
+        sessionId,
       });
     } catch (err) {
       console.error("Failed to enrich system prompt via Tauri:", err);
@@ -411,6 +417,7 @@ export async function* fetchAIResponse(params: {
         currentRoute,
         appVersion,
         selectedFeature,
+        sessionId,
       });
       return;
     }
@@ -430,6 +437,7 @@ export async function* fetchAIResponse(params: {
         currentRoute,
         appVersion,
         selectedFeature,
+        sessionId,
       });
       return;
     }

@@ -29,5 +29,11 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/memory-schema.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "create_live_session_and_transcript_segment_tables",
+            sql: include_str!("migrations/session-schema.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

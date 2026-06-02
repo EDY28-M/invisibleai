@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useWindowResize, useGlobalShortcuts } from ".";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useApp } from "@/contexts";
 import {
   appendStreamingCopilotContext,
@@ -110,6 +111,17 @@ export interface SpeechUtterance {
 }
 
 export function useSystemAudio() {
+  const {
+    selectedSttProvider,
+    allSttProviders,
+    selectedAIProvider,
+    allAiProviders,
+    systemPrompt,
+    selectedAudioDevices,
+    invisibleaiApiEnabled,
+    hasActiveLicense,
+    customizable,
+  } = useApp();
   const { resizeWindow } = useWindowResize();
   const globalShortcuts = useGlobalShortcuts();
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -139,6 +151,48 @@ export function useSystemAudio() {
   const [screenshotImage, setScreenshotImage] = useState<string | null>(null);
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState<boolean>(false);
   const [accumulatedSystemText, setAccumulatedSystemText] = useState<string>("");
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  const refreshTimelineFromDb = useCallback(async (activeSessId: string) => {
+    try {
+      const segments = await invoke<any[]>("get_combined_session_timeline", {
+        sessionId: activeSessId,
+        limit: 100,
+      });
+
+      const messages = segments.map((seg) => {
+        let role: "user" | "assistant" | "system" = "user";
+        let content = seg.content;
+
+        if (seg.source_type === "assistant") {
+          role = "assistant";
+        } else if (seg.source_type === "microphone") {
+          content = `[Tú]: ${seg.content}`;
+        } else if (seg.source_type === "system_audio") {
+          content = `[Sistema]: ${seg.content}`;
+        }
+
+        return {
+          id: seg.id,
+          role,
+          content,
+          timestamp: seg.created_at * 1000,
+        };
+      });
+
+      setConversation((prev) => ({
+        ...prev,
+        messages,
+        updatedAt: Date.now(),
+      }));
+    } catch (err) {
+      console.error("Failed to refresh timeline from DB:", err);
+    }
+  }, []);
 
   const deepgramManagerRef = useRef<DeepgramStreamManager | null>(null);
   const deepgramTokenCacheRef = useRef<{ token: DeepgramTokenResponse; fetchedAt: number } | null>(null);
@@ -224,6 +278,10 @@ export function useSystemAudio() {
     };
   }, []);
 
+  const screenshotInitiatedByAudioRef = useRef<boolean>(false);
+
+
+
   const resetStreamingCopilotBuffers = useCallback(() => {
     streamingCopilotBuffersRef.current = {
       mic: [],
@@ -236,20 +294,37 @@ export function useSystemAudio() {
     if (isCapturingScreenshot) return;
 
     setIsCapturingScreenshot(true);
+    screenshotInitiatedByAudioRef.current = true;
+
+    const isStealthMode = customizable?.contentProtected?.isEnabled;
+    const windowObj = getCurrentWebviewWindow();
+    let captureLaunched = false;
+
     try {
       await requestScreenRecordingPermissionIfNeeded();
 
-      const base64: string = await invoke("capture_to_base64");
+      if (isStealthMode) {
+        await windowObj.hide();
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
 
-      // Compress the image to reduce payload size (max 1280px wide, JPEG 75%)
-      const compressedBase64 = await compressBase64Image(base64, 1280, 0.75);
-      setScreenshotImage(compressedBase64);
+      await invoke("start_screen_capture");
+      captureLaunched = true;
     } catch (err) {
       console.error(await getScreenCaptureErrorMessage(err), err);
-    } finally {
       setIsCapturingScreenshot(false);
+      screenshotInitiatedByAudioRef.current = false;
+    } finally {
+      if (isStealthMode && !captureLaunched) {
+        try {
+          await windowObj.show();
+          await windowObj.setFocus();
+        } catch (showErr) {
+          console.error("Failed to restore window on capture start error:", showErr);
+        }
+      }
     }
-  }, [isCapturingScreenshot]);
+  }, [isCapturingScreenshot, customizable]);
 
   /** Compress a base64 image via canvas — reduces size for AI vision payloads */
   function compressBase64Image(base64: string, maxWidth: number, quality: number): Promise<string> {
@@ -290,16 +365,6 @@ export function useSystemAudio() {
   const [contextContent, setContextContent] = useState<string>("");
   const [useConversationalMemory, setUseConversationalMemory] = useState<boolean>(false);
 
-  const {
-    selectedSttProvider,
-    allSttProviders,
-    selectedAIProvider,
-    allAiProviders,
-    systemPrompt,
-    selectedAudioDevices,
-    invisibleaiApiEnabled,
-    hasActiveLicense,
-  } = useApp();
   const abortControllerRef = useRef<AbortController | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef<boolean>(false);
@@ -959,7 +1024,8 @@ export function useSystemAudio() {
       prompt: string,
       previousMessages: Message[],
       shouldSaveToDb: boolean = true,
-      persistedTranscription?: string
+      persistedTranscription?: string,
+      screenshotOverride?: string | null
     ) => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -977,7 +1043,9 @@ export function useSystemAudio() {
         // to prevent background system streams from consuming it.
         const visibleTranscription = persistedTranscription ?? transcription;
         const isSystemStreamingMessage = !shouldSaveToDb && visibleTranscription.startsWith("[Sistema]:");
-        const activeScreenshot = isSystemStreamingMessage ? null : screenshotImage;
+        const activeScreenshot = isSystemStreamingMessage
+          ? null
+          : (screenshotOverride !== undefined ? screenshotOverride : screenshotImage);
         if (!isSystemStreamingMessage) {
           setScreenshotImage(null);
         }
@@ -1032,6 +1100,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             useInvisibleAIAPI,
             signal,
             conversationId: conversation.id,
+            sessionId: sessionIdRef.current || sessionId,
           })) {
             if (signal.aborted) {
               break;
@@ -1042,6 +1111,22 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         } catch (aiError: any) {
           if (aiError.name !== "AbortError") {
             setError(aiError.message || "Failed to get AI response");
+          }
+        }
+
+        if (fullResponse) {
+          const activeSessionId = sessionIdRef.current || sessionId;
+          if (activeSessionId) {
+            invoke("insert_transcript_segment", {
+              sessionId: activeSessionId,
+              conversationId: conversationRef.current.id || null,
+              sourceType: "assistant",
+              speakerLabel: "Asistente",
+              content: fullResponse,
+              isFinal: true
+            })
+            .then(() => refreshTimelineFromDb(activeSessionId))
+            .catch(err => console.error("Failed to insert assistant transcript segment:", err));
           }
         }
 
@@ -1078,6 +1163,145 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     },
     [selectedAIProvider, allAiProviders, isDualChannel, screenshotImage, invisibleaiApiEnabled]
   );
+
+  useEffect(() => {
+    let unlisten: any;
+
+    const setupListener = async () => {
+      unlisten = await listen("captured-selection", async (event: any) => {
+        if (!screenshotInitiatedByAudioRef.current) {
+          return;
+        }
+
+        const base64 = event.payload;
+
+        // Restore window if stealth mode was active
+        const isStealthMode = customizable?.contentProtected?.isEnabled;
+        if (isStealthMode) {
+          try {
+            const windowObj = getCurrentWebviewWindow();
+            await windowObj.show();
+            await windowObj.setFocus();
+          } catch (showErr) {
+            console.error("Failed to restore window in selection listener:", showErr);
+          }
+        }
+
+        try {
+          const compressed = await compressBase64Image(base64, 1280, 0.75);
+          setScreenshotImage(compressed);
+
+          const displayMsgText = "Analiza la captura de pantalla seleccionada.";
+          const effectiveSystemPrompt = useSystemPromptRef.current
+            ? systemPromptRef.current || DEFAULT_SYSTEM_PROMPT
+            : contextContentRef.current || DEFAULT_SYSTEM_PROMPT;
+
+          // Re-calculate previous messages history
+          let updatedMessages = [...conversationRef.current.messages];
+          const prevTranscription = lastTranscriptionRef.current;
+          const prevAIResponse = lastAIResponseRef.current;
+
+          if (prevTranscription && !isLastTranscriptionSavedRef.current) {
+            const timestamp = Date.now();
+            const userMsg = {
+              id: generateMessageId("user", timestamp),
+              role: "user" as const,
+              content: prevTranscription,
+              timestamp,
+            };
+            const assistantMsg = {
+              id: generateMessageId("assistant", timestamp + 1),
+              role: "assistant" as const,
+              content: prevAIResponse,
+              timestamp: timestamp + 1,
+            };
+            updatedMessages.push(userMsg, assistantMsg);
+
+            conversationRef.current = {
+              ...conversationRef.current,
+              messages: updatedMessages,
+              updatedAt: timestamp,
+              title: conversationRef.current.title || generateConversationTitle(prevTranscription),
+            };
+            setConversation(conversationRef.current);
+            isLastTranscriptionSavedRef.current = true;
+          }
+
+          setLastTranscription(`[Tú]: ${displayMsgText}`);
+          setLastAIResponse("");
+          isLastTranscriptionSavedRef.current = false;
+
+          const previousMessagesForAI = updatedMessages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          }));
+
+          // Guardar el segmento del screenshot en SQLite de la sesión activa
+          const activeSessionId = sessionIdRef.current;
+          if (activeSessionId) {
+            invoke("insert_transcript_segment", {
+              sessionId: activeSessionId,
+              conversationId: conversationRef.current.id || null,
+              sourceType: "microphone",
+              speakerLabel: "Tú",
+              content: displayMsgText,
+              isFinal: true
+            })
+            .then(() => refreshTimelineFromDb(activeSessionId))
+            .catch(err => console.error("Failed to insert screenshot segment:", err));
+          }
+
+          // Trigger AI immediately passing the compressed screenshot as override
+          await processWithAI(
+            displayMsgText,
+            effectiveSystemPrompt,
+            previousMessagesForAI,
+            true,
+            `[Tú]: ${displayMsgText}`,
+            compressed
+          );
+        } catch (err) {
+          console.error("Failed to process captured selection:", err);
+        } finally {
+          setIsCapturingScreenshot(false);
+          screenshotInitiatedByAudioRef.current = false;
+        }
+      });
+    };
+
+    setupListener();
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, [processWithAI, refreshTimelineFromDb, customizable]);
+
+  useEffect(() => {
+    const unlisten = listen("capture-closed", async () => {
+      if (screenshotInitiatedByAudioRef.current) {
+        setIsCapturingScreenshot(false);
+        screenshotInitiatedByAudioRef.current = false;
+
+        // Restore window if stealth mode was active
+        const isStealthMode = customizable?.contentProtected?.isEnabled;
+        if (isStealthMode) {
+          try {
+            const windowObj = getCurrentWebviewWindow();
+            await windowObj.show();
+            await windowObj.setFocus();
+          } catch (showErr) {
+            console.error("Failed to restore window in closed listener:", showErr);
+          }
+        }
+      }
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [customizable]);
 
   const handleStreamingCopilotTranscription = useCallback(async (
     channel: StreamingChannel,
@@ -1267,6 +1491,28 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     if (!capturingRef.current) return;
 
     setError("");
+
+    // Guardar segmento en SQLite de la sesión activa
+    const activeSessionId = sessionIdRef.current || sessionId;
+    if (activeSessionId) {
+      const isSystem = formattedText.startsWith("[Sistema]: ");
+      const isUser = formattedText.startsWith("[Tú]: ");
+      if (isSystem || isUser) {
+        const sourceType = isUser ? "microphone" : "system_audio";
+        const speakerLabel = isUser ? "Tú" : "Sistema";
+        const content = isUser ? formattedText.replace(/^\[Tú\]:\s*/, "") : formattedText.replace(/^\[Sistema\]:\s*/, "");
+        invoke("insert_transcript_segment", {
+          sessionId: activeSessionId,
+          conversationId: conversationRef.current.id || null,
+          sourceType,
+          speakerLabel,
+          content,
+          isFinal: true
+        })
+        .then(() => refreshTimelineFromDb(activeSessionId))
+        .catch(err => console.error("Failed to insert transcript segment:", err));
+      }
+    }
 
     if (isStreamingModeRef.current) {
       if (formattedText.startsWith("[Tú]: ")) {
@@ -2063,6 +2309,20 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         updatedAt: 0,
       });
 
+      // Crear o recuperar sesión activa
+      const instanceIdVal = localStorage.getItem("invisibleai_instance_id") || "default_user";
+      try {
+        const sess = await invoke<{ id: string }>("create_or_get_active_session", {
+          userId: instanceIdVal,
+          sessionType: "interview",
+          title: `Session ${new Date().toLocaleString()}`,
+        });
+        setSessionId(sess.id);
+        sessionIdRef.current = sess.id;
+      } catch (sessErr) {
+        console.error("Failed to create active session in DB:", sessErr);
+      }
+
       setCapturing(true);
       capturingRef.current = true;
       setIsPopoverOpen(true);
@@ -2139,6 +2399,17 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
   const stopCapture = useCallback(async () => {
     try {
       stopStreamingUsageReporting();
+
+      // Finalizar la sesión activa en SQLite
+      if (sessionIdRef.current) {
+        try {
+          await invoke("end_active_session", { sessionId: sessionIdRef.current });
+        } catch (endErr) {
+          console.error("Failed to end active session in DB:", endErr);
+        }
+        setSessionId(null);
+        sessionIdRef.current = null;
+      }
 
       if (deepgramManagerRef.current) {
         deepgramManagerRef.current.destroy();

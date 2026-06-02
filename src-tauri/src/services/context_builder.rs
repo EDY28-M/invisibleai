@@ -69,6 +69,9 @@ pub struct AiContext {
     pub screen: CurrentScreenContext,
     pub user_message: String,
     pub has_license: bool,
+    pub license_expires_at: Option<String>,
+    pub session_type: Option<String>,
+    pub session_timeline: Vec<crate::services::session_service::TranscriptSegment>,
 }
 
 // Función helper para obtener conexión a la base de datos local de SQLite
@@ -82,6 +85,7 @@ pub fn build_ai_context(
     app_data_dir: PathBuf,
     user_id: &str,
     conversation_id: &str,
+    session_id: Option<&str>,
     screen_ctx: CurrentScreenContext,
     user_message: &str,
     _intent: &str,
@@ -90,20 +94,24 @@ pub fn build_ai_context(
 
     // Obtener estado de la licencia de secure_storage.json
     let credentials_path = app_data_dir.join("secure_storage.json");
-    let has_license = if credentials_path.exists() {
+    let (has_license, license_expires_at) = if credentials_path.exists() {
         if let Ok(content) = std::fs::read_to_string(&credentials_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                json.get("license_key")
+                let has_lk = json.get("license_key")
                     .and_then(|k| k.as_str())
-                    .map_or(false, |k| !k.trim().is_empty())
+                    .map_or(false, |k| !k.trim().is_empty());
+                let expires_at = json.get("license_expires_at")
+                    .and_then(|e| e.as_str())
+                    .map(|e| e.to_string());
+                (has_lk, expires_at)
             } else {
-                false
+                (false, None)
             }
         } else {
-            false
+            (false, None)
         }
     } else {
-        false
+        (false, None)
     };
 
     // 1. Obtener Perfil de IA
@@ -225,6 +233,25 @@ pub fn build_ai_context(
         }
     }
 
+    // 7. Cargar contexto de la sesión en vivo si está provisto
+    let (session_type, session_timeline) = if let Some(sid) = session_id {
+        let stype: Option<String> = conn.query_row(
+            "SELECT session_type FROM live_sessions WHERE id = ?",
+            [sid],
+            |row| row.get(0)
+        ).ok();
+
+        let timeline = crate::services::session_service::get_combined_session_timeline(
+            app_data_dir,
+            sid,
+            30
+        ).unwrap_or_default();
+
+        (stype, timeline)
+    } else {
+        (None, Vec::new())
+    };
+
     Ok(AiContext {
         profile,
         knowledge,
@@ -235,6 +262,9 @@ pub fn build_ai_context(
         screen: screen_ctx,
         user_message: user_message.to_string(),
         has_license,
+        license_expires_at,
+        session_type,
+        session_timeline,
     })
 }
 
@@ -260,8 +290,14 @@ pub fn build_system_prompt(context: AiContext, user_message: &str) -> String {
     prompt.push_str("[LICENCIA Y VERSIÓN DE INVISIBLEAI]\n");
     if context.has_license {
         prompt.push_str("Estado de la Licencia del Usuario: ACTIVA (Versión PRO / Licencia de Paga)\n");
+        if let Some(ref expiry) = context.license_expires_at {
+            prompt.push_str(&format!("Fecha de Vencimiento de la Licencia: {}\n", expiry));
+        }
     } else {
         prompt.push_str("Estado de la Licencia del Usuario: INACTIVA (Versión FREE / Gratuita)\n");
+        if let Some(ref expiry) = context.license_expires_at {
+            prompt.push_str(&format!("Nota: El usuario tuvo una licencia previamente que venció o fue desactivada en: {}\n", expiry));
+        }
     }
     prompt.push_str(
         "Características e información sobre las Versiones de InvisibleAI:\n\
@@ -328,6 +364,51 @@ pub fn build_system_prompt(context: AiContext, user_message: &str) -> String {
         prompt.push_str("\n");
     }
 
+    // 6.5. Contexto de Sesión en Vivo
+    if let Some(stype) = &context.session_type {
+        prompt.push_str(&format!(
+            "[CONTEXTO DE SESIÓN EN VIVO]\n\
+             Tipo de sesión activa: {}\n\n",
+            stype
+        ));
+    }
+
+    if !context.session_timeline.is_empty() {
+        prompt.push_str("[SECUENCIA TEMPORAL RECIENTE DE LA SESIÓN]\n");
+        for (idx, seg) in context.session_timeline.iter().enumerate() {
+            prompt.push_str(&format!(
+                "{}. [{}] {}: {}\n",
+                idx + 1,
+                seg.source_type,
+                seg.speaker_label,
+                seg.content
+            ));
+        }
+        prompt.push_str("\n");
+        
+        let mic_segments: Vec<_> = context.session_timeline.iter()
+            .filter(|s| s.source_type == "microphone")
+            .collect();
+        if !mic_segments.is_empty() {
+            prompt.push_str("[TRANSCRIPCIÓN RECIENTE DEL MICRÓFONO DEL USUARIO]\n");
+            for seg in &mic_segments {
+                prompt.push_str(&format!("* {}\n", seg.content));
+            }
+            prompt.push_str("\n");
+        }
+
+        let system_segments: Vec<_> = context.session_timeline.iter()
+            .filter(|s| s.source_type == "system_audio")
+            .collect();
+        if !system_segments.is_empty() {
+            prompt.push_str("[TRANSCRIPCIÓN RECIENTE DEL AUDIO DEL SISTEMA]\n");
+            for seg in &system_segments {
+                prompt.push_str(&format!("* {}\n", seg.content));
+            }
+            prompt.push_str("\n");
+        }
+    }
+
     // 7. Estado e Interfaz Actual (Contexto de Pantalla)
     prompt.push_str(&format!(
         "[CONTEXTO DE PANTALLA ACTUAL]\n\
@@ -355,7 +436,11 @@ pub fn build_system_prompt(context: AiContext, user_message: &str) -> String {
          2. Nunca inventes funciones que no estén listadas en [FUNCIONES DISPONIBLES].\n\
          3. Mantente coherente con la memoria del usuario.\n\
          4. Si cometes un error previamente registrado en [ERRORES ANTERIORES], cambia tu lógica para no repetirlo.\n\
-         5. Responde con pasos accionables y directos de InvisibleAI."
+         5. NO ignores lo que dijo el usuario por micrófono ni el audio del sistema; analiza ambas fuentes de manera unificada y cronológica.\n\
+         6. Si la sesión parece ser una entrevista de trabajo, ayuda al usuario a responder preguntas técnicas de forma profesional usando su contexto y experiencia.\n\
+         7. Si parece una reunión, resume acuerdos, tareas y próximos pasos.\n\
+         8. Si parece una clase o video, resume y explica conceptos según las dos fuentes.\n\
+         9. Responde con pasos accionables y directos de InvisibleAI."
     );
 
     prompt
