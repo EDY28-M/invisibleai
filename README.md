@@ -12,7 +12,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![Rust](https://img.shields.io/badge/Core-Rust-brown)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.3.0-green)](https://github.com/EDY28-M/invisibleai/releases)
+[![Version](https://img.shields.io/badge/version-1.4.0-green)](https://github.com/EDY28-M/invisibleai/releases)
 
 > Proyecto en construcción. InvisibleAI es una app de escritorio multiplataforma para asistencia con IA en reuniones, entrevistas, clases, auditorías, videos y conversaciones en tiempo real.
 
@@ -24,6 +24,78 @@ La aplicación permite trabajar en dos caminos separados:
 
 - **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
 - **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
+
+## Novedades en v1.4.0
+
+### Motor de IA nativo en Rust (backend)
+
+Se implementó un motor de IA completo directamente en el backend Rust de Tauri, sin depender del frontend para orquestar las llamadas al modelo.
+
+**Servicios nuevos en `src-tauri/src/services/`:**
+
+- **`cognitive_router.rs`** — Router cognitivo que clasifica cada evento de audio (`ExternalQuestion`, `ExternalObjection`, `ExternalRequest`, `ExternalProposal`, `ExternalDecision`, `ExternalDebateClaim`, `ExternalOpinion`, `ExternalContext`, `ExternalNoise`) y decide la estrategia de respuesta según el tipo de evento y el perfil activo. Orquesta las llamadas al LLM con streaming y emite los chunks vía eventos Tauri.
+- **`context_builder.rs`** — Constructor de contexto que ensambla el prompt para el modelo combinando el perfil activo, el historial de la sesión, los segmentos de transcripción relevantes y los resúmenes de contexto previos.
+- **`intent_classifier.rs`** — Clasificador local de intenciones que determina si el contenido de audio merece procesar o ignorar antes de invocar el modelo.
+- **`memory_service.rs`** — Servicio de memoria persistente con filtrado de ruido integrado: descarta fragmentos cortos o irrelevantes ("hola", "ok", "de acuerdo") y almacena solo información semánticamente útil en SQLite.
+- **`session_service.rs`** — Servicio de sesiones en vivo con soporte para `LiveSession`, `TranscriptSegment` (transcripción por segmentos con timestamps, speaker label, confianza y secuencia), y `SessionContextSummary` (resúmenes periódicos de contexto para no saturar el historial).
+- **`profile_service.rs`** — Servicio de perfiles que carga `ProfileTemplate` y `ProfileModifier` desde SQLite y compila el perfil activo (`CompiledProfile`) para inyectarlo al `context_builder`.
+
+**Migraciones de base de datos:**
+
+- `memory-schema.sql` — Esquema para hechos de memoria global y memoria por sesión.
+- `session-schema.sql` — Esquema para sesiones en vivo, segmentos de transcripción y resúmenes de contexto.
+- `profile-templates.sql` — Plantillas y modificadores de perfiles de IA con categorías y sort order.
+
+### Sistema de Perfiles de IA
+
+Nueva pantalla de gestión de perfiles (`screens/profiles/index.tsx`) y hook `useProfiles.ts` que permiten configurar el comportamiento del modelo por contexto de uso:
+
+- Plantillas base con rol, personalidad e instrucciones propias.
+- Modificadores apilables por categoría (ej. "Desarrollador Senior", "Modo entrevista", "Lenguaje formal").
+- Campo de notas personalizadas sobre la plantilla elegida.
+- El perfil compilado se inyecta en cada llamada al LLM como parte del system prompt enriquecido.
+
+### Modo multihilo — Comportamiento del AI corregido
+
+En modo Multihilo (dual-channel, VAD clásico no-streaming), el AI ahora opera como copiloto pasivo hasta que hay contenido accionable:
+
+- **`[Tú]:`** ya no dispara respuesta. Las palabras del candidato se guardan en el historial como contexto pero no invocan al modelo.
+- **`isActionableSystemAudio()`** — nuevo gate de accionabilidad para mensajes del sistema: solo responde cuando detecta pregunta (`?`) o frases directivas en español e inglés. Fragmentos no-accionables se acumulan silenciosamente hasta que llega una pregunta real, momento en el que el modelo recibe el contexto acumulado completo.
+- El historial de la conversación ahora incluye ambos canales en orden cronológico, dando al modelo visibilidad completa de lo hablado desde el inicio.
+- Nota de doble canal activa en todos los modos (no solo no-streaming).
+
+### Captura de pantalla en macOS 26 corregida
+
+`CGWindowListCreateImage` (CoreGraphics legacy) fue degradada por Apple en macOS 26 — devolvía solo el wallpaper aunque la app tuviera permiso de Screen Recording. Se reemplazó por `/usr/sbin/screencapture` (usa ScreenCaptureKit internamente) tanto para el botón de cámara (`capture_to_base64`) como para el modo recorte con licencia (`start_screen_capture`). Windows y Linux no cambian. La protección de contenido (modo sigilo) continúa funcionando de forma nativa.
+
+### Screenshot en modo streaming
+
+El botón de cámara ahora funciona de forma activa en modo streaming:
+
+- Al hacer click, captura la pantalla, comprime la imagen y llama a `processWithAI` inmediatamente, sin esperar al siguiente evento de audio.
+- Si había texto acumulado del entrevistador, se usa como contexto adicional junto con la imagen.
+- `processWithAI` acepta `screenshotOverride` que bypasea el guard `isSystemStreamingMessage` — la imagen llega al modelo aunque el canal sea del sistema.
+- Se añade instrucción explícita al system prompt para que el modelo priorice el análisis visual sobre el persona prompt cuando hay screenshot activo.
+
+### Pantalla de administración de memoria
+
+Nueva pantalla `screens/memory-admin/index.tsx` que permite ver, buscar y administrar los hechos de memoria almacenados por la app. Integra con el `memory_service` del backend para mostrar qué recuerda el modelo entre sesiones.
+
+### Botón de captura disponible en todos los planes
+
+Removido el requisito de licencia activa (`hasActiveLicense`) del botón Screenshot. La captura de pantalla está disponible para usuarios gratuitos y con licencia por igual.
+
+### Optimizaciones y limpieza (v1.4.0 base)
+
+- Eliminadas dependencias no utilizadas (`package-lock.json`, `chart.tsx`, `ui/index.ts`).
+- `CustomCursor` y `Markdown` simplificados.
+- `DashboardLayout` limpiado de refs sin uso.
+- `deepgram-stream.ts` depurado.
+- `vite.config.ts` optimizado.
+- `useCompletion.ts` sin imports muertos.
+- `skipFormatting` en `buildEnhancedSystemPrompt`: el modo audio no añade instrucciones de markdown al system prompt, produciendo respuestas de chat más naturales sin bloques de código ni símbolos LaTeX innecesarios.
+
+---
 
 ## Novedades en v1.3.0
 
@@ -259,7 +331,7 @@ Para usar IA local:
 
 ## Release y despliegue
 
-La versión actual es **1.3.0**.
+La versión actual es **1.4.0**.
 
 Los archivos que deben mantenerse sincronizados para release son:
 
@@ -278,7 +350,7 @@ app-v<VERSION>
 Para esta versión, GitHub Actions generará el release como:
 
 ```text
-app-v1.3.0
+app-v1.4.0
 ```
 
 ## Estructura del proyecto
