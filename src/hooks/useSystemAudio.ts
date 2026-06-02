@@ -1127,11 +1127,61 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       accumulatedSystemTextRef.current = "";
     }
 
+    const prevTranscription = lastTranscriptionRef.current;
+    const prevAIResponse = lastAIResponseRef.current;
+
+    // Guardar el mensaje del micrófono en el historial sin disparar la IA (Opción A)
+    if (channel === "mic" && isDualChannelRef.current && hasActiveLicense) {
+      let currentMessages = [...conversationRef.current.messages];
+      if (prevTranscription && !isLastTranscriptionSavedRef.current) {
+        const timestamp = Date.now() - 10;
+        const userMsg = {
+          id: generateMessageId("user", timestamp),
+          role: "user" as const,
+          content: prevTranscription,
+          timestamp,
+        };
+        const assistantMsg = {
+          id: generateMessageId("assistant", timestamp + 1),
+          role: "assistant" as const,
+          content: prevAIResponse,
+          timestamp: timestamp + 1,
+        };
+        currentMessages.push(userMsg, assistantMsg);
+        conversationRef.current = {
+          ...conversationRef.current,
+          messages: currentMessages,
+          updatedAt: timestamp + 1,
+          title: conversationRef.current.title || generateConversationTitle(prevTranscription),
+        };
+      }
+
+      const nowTimestamp = Date.now();
+      const micMsg = {
+        id: generateMessageId("user", nowTimestamp),
+        role: "user" as const,
+        content: displayTranscription,
+        timestamp: nowTimestamp,
+      };
+
+      conversationRef.current = {
+        ...conversationRef.current,
+        messages: [...conversationRef.current.messages, micMsg],
+        updatedAt: nowTimestamp,
+      };
+
+      setConversation(conversationRef.current);
+      isLastTranscriptionSavedRef.current = true;
+      setLastTranscription(displayTranscription);
+      setLastAIResponse("");
+      return;
+    }
+
     if (!decision.shouldRespond) {
       return;
     }
 
-    if (channel === "system" && streamingSmartModeRef.current) {
+    if (channel === "system") {
       const shouldSuppress = shouldSuppressSmartSystemResponse({
         currentText: trimmedText,
         decision,
@@ -1152,8 +1202,6 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       };
     }
 
-    const prevTranscription = lastTranscriptionRef.current;
-    const prevAIResponse = lastAIResponseRef.current;
     const hasPendingMicResponse =
       channel === "system" &&
       prevTranscription.startsWith("[Tú]:") &&
@@ -1212,7 +1260,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       decision.shouldSaveToDb,
       displayTranscription
     );
-  }, [processWithAI]);
+  }, [processWithAI, hasActiveLicense]);
 
   const handleNewTranscription = useCallback(async (formattedText: string) => {
     if (!capturingRef.current) return;
