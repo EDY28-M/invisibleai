@@ -3,6 +3,7 @@ mod activate;
 mod api;
 mod capture;
 mod db;
+mod services;
 mod shortcuts;
 mod window;
 use std::sync::{Arc, Mutex};
@@ -107,6 +108,23 @@ pub fn run() {
             api::create_system_prompt,
             api::check_license_status,
             api::get_activity,
+            api::get_user_memories,
+            api::create_user_memory,
+            api::update_user_memory,
+            api::delete_user_memory,
+            api::get_app_knowledge,
+            api::create_app_knowledge,
+            api::update_app_knowledge,
+            api::delete_app_knowledge,
+            api::get_app_features,
+            api::create_app_feature,
+            api::update_app_feature,
+            api::delete_app_feature,
+            api::get_ai_feedback,
+            api::resolve_ai_feedback,
+            api::save_conversation_summary,
+            api::save_ai_feedback,
+            api::get_enriched_system_prompt,
             speaker::start_system_audio_capture,
             speaker::stop_system_audio_capture,
             speaker::manual_stop_continuous,

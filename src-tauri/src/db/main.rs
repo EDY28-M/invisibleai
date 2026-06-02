@@ -23,5 +23,11 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/global-memory.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "create_assistant_context_and_memory_tables",
+            sql: include_str!("migrations/memory-schema.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

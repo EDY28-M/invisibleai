@@ -11,6 +11,7 @@ import {
   Screenshot,
   Chats,
   Responses,
+  MemoryAdmin,
 } from "@/screens";
 import { DashboardLayout } from "@/layouts";
 
@@ -29,6 +30,7 @@ export default function AppRoutes() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/audio" element={<Audio />} />
           <Route path="/responses" element={<Responses />} />
+          <Route path="/memory-admin" element={<MemoryAdmin />} />
           <Route path="/dev-space" element={<DevSpace />} />
         </Route>
       </Routes>

@@ -458,6 +458,12 @@ pub async fn chat_stream_response(
     system_prompt: Option<String>,
     image_base64: Option<serde_json::Value>,
     history: Option<String>,
+    user_id: Option<String>,
+    conversation_id: Option<String>,
+    current_screen: Option<String>,
+    current_route: Option<String>,
+    app_version: Option<String>,
+    selected_feature: Option<String>,
 ) -> Result<String, String> {
     let app_endpoint = get_app_endpoint()?;
     let api_access_key = get_api_access_key()?;
@@ -475,11 +481,46 @@ pub async fn chat_stream_response(
             .unwrap_or_else(|| "meta-llama/llama-4-scout-17b-16e-instruct".to_string())
     };
 
+    // ── LÓGICA DE MEMORIA E INTELIGENCIA CONTEXTUAL ──
+    let mut final_system_prompt = system_prompt.clone();
+    let is_already_enriched = system_prompt.as_ref().map_or(false, |p| p.contains("[IDENTIDAD DEL ASISTENTE]"));
+    if !is_already_enriched {
+        if let (Some(uid), Some(cid), Some(screen), Some(route)) = (&user_id, &conversation_id, &current_screen, &current_route) {
+            use crate::services::context_builder::{build_ai_context, build_system_prompt, CurrentScreenContext};
+            use crate::services::intent_classifier::classify_user_intent;
+
+        if let Ok(app_data_dir) = app.path().app_data_dir() {
+            let intent = classify_user_intent(&user_message);
+            let screen_ctx = CurrentScreenContext {
+                current_screen: screen.clone(),
+                current_route: route.clone(),
+                app_version: app_version.clone().unwrap_or_else(|| "1.0.0".to_string()),
+                selected_feature: selected_feature.clone(),
+            };
+
+            if let Ok(context) = build_ai_context(
+                app_data_dir,
+                uid,
+                cid,
+                screen_ctx,
+                &user_message,
+                intent
+            ) {
+                let enriched = build_system_prompt(context, &user_message);
+                if let Some(existing) = system_prompt {
+                    final_system_prompt = Some(format!("{}\n\n[INSTRUCCIONES ADICIONALES]\n{}", enriched, existing));
+                } else {
+                    final_system_prompt = Some(enriched);
+                }
+            }
+        }
+    }
+}
 
     // Construir mensajes OpenAI-compatible
     let mut messages: Vec<serde_json::Value> = Vec::new();
 
-    if let Some(sys_prompt) = system_prompt {
+    if let Some(sys_prompt) = final_system_prompt {
         messages.push(serde_json::json!({
             "role": "system",
             "content": sys_prompt
@@ -846,3 +887,384 @@ pub async fn get_activity(app: AppHandle) -> Result<serde_json::Value, String> {
         .await
         .map_err(|e| format!("Failed to parse activity response: {}", e))
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UserMemoryItem {
+    pub id: String,
+    pub user_id: String,
+    pub memory_type: String,
+    pub content: String,
+    pub importance: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppKnowledgeItem {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    pub category: String,
+    pub importance: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppFeatureItem {
+    pub id: String,
+    pub feature_name: String,
+    pub description: String,
+    pub status: String,
+    pub route: Option<String>,
+    pub frontend_component: Option<String>,
+    pub backend_module: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AiFeedbackItem {
+    pub id: String,
+    pub conversation_id: String,
+    pub issue_detected: String,
+    pub bad_behavior: String,
+    pub expected_behavior: String,
+    pub severity: String,
+    pub resolved: bool,
+}
+
+fn get_conn(app: &AppHandle) -> std::result::Result<rusqlite::Connection, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    rusqlite::Connection::open(app_data_dir.join("invisibleai.db")).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn get_user_memories(app: AppHandle, user_id: String) -> Result<Vec<UserMemoryItem>, String> {
+    let conn = get_conn(&app)?;
+    let mut stmt = conn
+        .prepare("SELECT id, user_id, memory_type, content, importance FROM user_memory WHERE user_id = ? ORDER BY importance DESC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([user_id], |row| {
+        Ok(UserMemoryItem {
+            id: row.get(0)?,
+            user_id: row.get(1)?,
+            memory_type: row.get(2)?,
+            content: row.get(3)?,
+            importance: row.get(4)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut list = Vec::new();
+    for r in rows {
+        if let Ok(item) = r {
+            list.push(item);
+        }
+    }
+    Ok(list)
+}
+
+#[tauri::command]
+pub async fn create_user_memory(
+    app: AppHandle,
+    user_id: String,
+    memory_type: String,
+    content: String,
+    importance: i32,
+) -> Result<(), String> {
+    if !crate::services::memory_service::should_store_memory(&content) {
+        return Err("La memoria contiene palabras irrelevantes o es muy corta.".to_string());
+    }
+
+    let conn = get_conn(&app)?;
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO user_memory (id, user_id, memory_type, content, importance, created_at, updated_at) VALUES (?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))",
+        rusqlite::params![id, user_id, memory_type, content, importance],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_user_memory(
+    app: AppHandle,
+    id: String,
+    content: String,
+    importance: i32,
+) -> Result<(), String> {
+    if !crate::services::memory_service::should_store_memory(&content) {
+        return Err("La memoria contiene palabras irrelevantes o es muy corta.".to_string());
+    }
+
+    let conn = get_conn(&app)?;
+    conn.execute(
+        "UPDATE user_memory SET content = ?, importance = ?, updated_at = strftime('%s', 'now') WHERE id = ?",
+        rusqlite::params![content, importance, id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_user_memory(app: AppHandle, id: String) -> Result<(), String> {
+    let conn = get_conn(&app)?;
+    conn.execute("DELETE FROM user_memory WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_app_knowledge(app: AppHandle) -> Result<Vec<AppKnowledgeItem>, String> {
+    let conn = get_conn(&app)?;
+    let mut stmt = conn
+        .prepare("SELECT id, title, content, category, importance FROM app_knowledge ORDER BY category ASC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| {
+        Ok(AppKnowledgeItem {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            content: row.get(2)?,
+            category: row.get(3)?,
+            importance: row.get(4)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut list = Vec::new();
+    for r in rows {
+        if let Ok(item) = r {
+            list.push(item);
+        }
+    }
+    Ok(list)
+}
+
+#[tauri::command]
+pub async fn create_app_knowledge(
+    app: AppHandle,
+    title: String,
+    content: String,
+    category: String,
+    importance: i32,
+) -> Result<(), String> {
+    let conn = get_conn(&app)?;
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO app_knowledge (id, title, content, category, importance, created_at, updated_at) VALUES (?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))",
+        rusqlite::params![id, title, content, category, importance],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_app_knowledge(
+    app: AppHandle,
+    id: String,
+    title: String,
+    content: String,
+    category: String,
+    importance: i32,
+) -> Result<(), String> {
+    let conn = get_conn(&app)?;
+    conn.execute(
+        "UPDATE app_knowledge SET title = ?, content = ?, category = ?, importance = ?, updated_at = strftime('%s', 'now') WHERE id = ?",
+        rusqlite::params![title, content, category, importance, id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_app_knowledge(app: AppHandle, id: String) -> Result<(), String> {
+    let conn = get_conn(&app)?;
+    conn.execute("DELETE FROM app_knowledge WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_app_features(app: AppHandle) -> Result<Vec<AppFeatureItem>, String> {
+    let conn = get_conn(&app)?;
+    let mut stmt = conn
+        .prepare("SELECT id, feature_name, description, status, route, frontend_component, backend_module FROM app_features ORDER BY feature_name ASC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| {
+        Ok(AppFeatureItem {
+            id: row.get(0)?,
+            feature_name: row.get(1)?,
+            description: row.get(2)?,
+            status: row.get(3)?,
+            route: row.get(4)?,
+            frontend_component: row.get(5)?,
+            backend_module: row.get(6)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut list = Vec::new();
+    for r in rows {
+        if let Ok(item) = r {
+            list.push(item);
+        }
+    }
+    Ok(list)
+}
+
+#[tauri::command]
+pub async fn create_app_feature(
+    app: AppHandle,
+    feature_name: String,
+    description: String,
+    status: String,
+    route: Option<String>,
+    frontend_component: Option<String>,
+    backend_module: Option<String>,
+) -> Result<(), String> {
+    let conn = get_conn(&app)?;
+    let id = uuid::Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO app_features (id, feature_name, description, status, route, frontend_component, backend_module, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%s', 'now'), strftime('%s', 'now'))",
+        rusqlite::params![id, feature_name, description, status, route, frontend_component, backend_module],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn update_app_feature(
+    app: AppHandle,
+    id: String,
+    feature_name: String,
+    description: String,
+    status: String,
+    route: Option<String>,
+    frontend_component: Option<String>,
+    backend_module: Option<String>,
+) -> Result<(), String> {
+    let conn = get_conn(&app)?;
+    conn.execute(
+        "UPDATE app_features SET feature_name = ?, description = ?, status = ?, route = ?, frontend_component = ?, backend_module = ?, updated_at = strftime('%s', 'now') WHERE id = ?",
+        rusqlite::params![feature_name, description, status, route, frontend_component, backend_module, id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_app_feature(app: AppHandle, id: String) -> Result<(), String> {
+    let conn = get_conn(&app)?;
+    conn.execute("DELETE FROM app_features WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_ai_feedback(app: AppHandle) -> Result<Vec<AiFeedbackItem>, String> {
+    let conn = get_conn(&app)?;
+    let mut stmt = conn
+        .prepare("SELECT id, conversation_id, issue_detected, bad_behavior, expected_behavior, severity, resolved FROM ai_feedback ORDER BY created_at DESC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt.query_map([], |row| {
+        let resolved_int: i32 = row.get(6)?;
+        Ok(AiFeedbackItem {
+            id: row.get(0)?,
+            conversation_id: row.get(1)?,
+            issue_detected: row.get(2)?,
+            bad_behavior: row.get(3)?,
+            expected_behavior: row.get(4)?,
+            severity: row.get(5)?,
+            resolved: resolved_int != 0,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut list = Vec::new();
+    for r in rows {
+        if let Ok(item) = r {
+            list.push(item);
+        }
+    }
+    Ok(list)
+}
+
+#[tauri::command]
+pub async fn resolve_ai_feedback(app: AppHandle, id: String) -> Result<(), String> {
+    let conn = get_conn(&app)?;
+    conn.execute(
+        "UPDATE ai_feedback SET resolved = 1, updated_at = strftime('%s', 'now') WHERE id = ?",
+        [id],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn save_conversation_summary(
+    app: AppHandle,
+    conversation_id: String,
+    user_id: String,
+    summary: String,
+    problems: Option<String>,
+    context: Option<String>,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::memory_service::store_conversation_summary(
+        app_data_dir,
+        &conversation_id,
+        &user_id,
+        &summary,
+        problems.as_deref(),
+        context.as_deref(),
+    )
+}
+
+#[tauri::command]
+pub async fn save_ai_feedback(
+    app: AppHandle,
+    conversation_id: String,
+    issue: String,
+    bad_behavior: String,
+    expected_behavior: String,
+    severity: String,
+) -> Result<(), String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    crate::services::memory_service::store_ai_feedback(
+        app_data_dir,
+        &conversation_id,
+        &issue,
+        &bad_behavior,
+        &expected_behavior,
+        &severity,
+    )
+}
+
+#[tauri::command]
+pub async fn get_enriched_system_prompt(
+    app: AppHandle,
+    user_message: String,
+    system_prompt: Option<String>,
+    user_id: Option<String>,
+    conversation_id: Option<String>,
+    current_screen: Option<String>,
+    current_route: Option<String>,
+    app_version: Option<String>,
+    selected_feature: Option<String>,
+) -> Result<String, String> {
+    let mut final_system_prompt = system_prompt.clone().unwrap_or_default();
+    if let (Some(uid), Some(cid), Some(screen), Some(route)) = (&user_id, &conversation_id, &current_screen, &current_route) {
+        use crate::services::context_builder::{build_ai_context, build_system_prompt, CurrentScreenContext};
+        use crate::services::intent_classifier::classify_user_intent;
+
+        if let Ok(app_data_dir) = app.path().app_data_dir() {
+            let intent = classify_user_intent(&user_message);
+            let screen_ctx = CurrentScreenContext {
+                current_screen: screen.clone(),
+                current_route: route.clone(),
+                app_version: app_version.clone().unwrap_or_else(|| "1.0.0".to_string()),
+                selected_feature: selected_feature.clone(),
+            };
+
+            if let Ok(context) = build_ai_context(
+                app_data_dir,
+                uid,
+                cid,
+                screen_ctx,
+                &user_message,
+                intent
+            ) {
+                let enriched = build_system_prompt(context, &user_message);
+                if let Some(existing) = system_prompt {
+                    final_system_prompt = format!("{}\n\n[INSTRUCCIONES ADICIONALES]\n{}", enriched, existing);
+                } else {
+                    final_system_prompt = enriched;
+                }
+            }
+        }
+    }
+    Ok(final_system_prompt)
+}
+
+

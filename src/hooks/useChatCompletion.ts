@@ -260,6 +260,7 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
             imagesBase64,
             signal,
             useInvisibleAIAPI,
+            conversationId,
           })) {
 
             if (currentRequestIdRef.current !== requestId) {

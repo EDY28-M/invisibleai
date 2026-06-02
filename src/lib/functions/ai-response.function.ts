@@ -93,6 +93,12 @@ async function* fetchInvisibleAIAIResponse(params: {
   imagesBase64?: string[];
   history?: Message[];
   signal?: AbortSignal;
+  userId?: string;
+  conversationId?: string;
+  currentScreen?: string;
+  currentRoute?: string;
+  appVersion?: string;
+  selectedFeature?: string;
 }): AsyncIterable<string> {
   try {
     const {
@@ -248,11 +254,31 @@ async function* fetchInvisibleAIAIResponse(params: {
         return;
       }
 
+      const conversationId = params.conversationId || "default_conv";
+      const userId = params.userId || localStorage.getItem("invisibleai_instance_id") || "default_user";
+      const currentRoute = params.currentRoute || window.location.pathname;
+      const currentScreen = params.currentScreen || (
+        currentRoute === "/chat" ? "ChatPage" :
+        currentRoute === "/settings" ? "SettingsPage" :
+        currentRoute === "/memory-admin" ? "MemoryAdminPage" : "DashboardPage"
+      );
+      const appVersion = params.appVersion || "1.2.3";
+      const selectedFeature = params.selectedFeature || (
+        currentRoute === "/chat" ? "chat" :
+        currentRoute === "/memory-admin" ? "mem_admin" : undefined
+      );
+
       await invoke("chat_stream_response", {
         userMessage,
         systemPrompt,
         imageBase64,
         history: historyString,
+        userId,
+        conversationId,
+        currentScreen,
+        currentRoute,
+        appVersion,
+        selectedFeature,
       });
 
       let lastIndex = 0;
@@ -312,6 +338,12 @@ export async function* fetchAIResponse(params: {
   signal?: AbortSignal;
 
   useInvisibleAIAPI?: boolean;
+  userId?: string;
+  conversationId?: string;
+  currentScreen?: string;
+  currentRoute?: string;
+  appVersion?: string;
+  selectedFeature?: string;
 }): AsyncIterable<string> {
   try {
     const {
@@ -323,21 +355,62 @@ export async function* fetchAIResponse(params: {
       imagesBase64 = [],
       signal,
       useInvisibleAIAPI,
+      userId,
+      conversationId,
+      currentScreen,
+      currentRoute,
+      appVersion,
+      selectedFeature,
     } = params;
 
     if (signal?.aborted) {
       return;
     }
 
-    const enhancedSystemPrompt = buildEnhancedSystemPrompt(systemPrompt);
+    let enrichedSystemPrompt = buildEnhancedSystemPrompt(systemPrompt);
+
+    try {
+      const conversationIdVal = conversationId || "default_conv";
+      const userIdVal = userId || localStorage.getItem("invisibleai_instance_id") || "default_user";
+      const currentRouteVal = currentRoute || window.location.pathname;
+      const currentScreenVal = currentScreen || (
+        currentRouteVal === "/chat" ? "ChatPage" :
+        currentRouteVal === "/settings" ? "SettingsPage" :
+        currentRouteVal === "/memory-admin" ? "MemoryAdminPage" : "DashboardPage"
+      );
+      const appVersionVal = appVersion || "1.2.3";
+      const selectedFeatureVal = selectedFeature || (
+        currentRouteVal === "/chat" ? "chat" :
+        currentRouteVal === "/memory-admin" ? "mem_admin" : undefined
+      );
+
+      enrichedSystemPrompt = await invoke<string>("get_enriched_system_prompt", {
+        userMessage,
+        systemPrompt: enrichedSystemPrompt,
+        userId: userIdVal,
+        conversationId: conversationIdVal,
+        currentScreen: currentScreenVal,
+        currentRoute: currentRouteVal,
+        appVersion: appVersionVal,
+        selectedFeature: selectedFeatureVal,
+      });
+    } catch (err) {
+      console.error("Failed to enrich system prompt via Tauri:", err);
+    }
 
     if (useInvisibleAIAPI) {
       yield* fetchInvisibleAIAIResponse({
-        systemPrompt: enhancedSystemPrompt,
+        systemPrompt: enrichedSystemPrompt,
         userMessage,
         imagesBase64,
         history,
         signal,
+        userId,
+        conversationId,
+        currentScreen,
+        currentRoute,
+        appVersion,
+        selectedFeature,
       });
       return;
     }
@@ -346,11 +419,17 @@ export async function* fetchAIResponse(params: {
       // the locally stored key before giving up. Falls back gracefully to the
       // Render proxy inside fetchInvisibleAIAIResponse if no local key exists.
       yield* fetchInvisibleAIAIResponse({
-        systemPrompt: enhancedSystemPrompt,
+        systemPrompt: enrichedSystemPrompt,
         userMessage,
         imagesBase64,
         history,
         signal,
+        userId,
+        conversationId,
+        currentScreen,
+        currentRoute,
+        appVersion,
+        selectedFeature,
       });
       return;
     }
@@ -417,7 +496,7 @@ export async function* fetchAIResponse(params: {
           value,
         ])
       ),
-      SYSTEM_PROMPT: enhancedSystemPrompt || "",
+      SYSTEM_PROMPT: enrichedSystemPrompt || "",
     };
 
     bodyObj = deepVariableReplacer(bodyObj, allVariables);

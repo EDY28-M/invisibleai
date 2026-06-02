@@ -1031,6 +1031,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             imagesBase64: activeScreenshot ? [activeScreenshot] : [],
             useInvisibleAIAPI,
             signal,
+            conversationId: conversation.id,
           })) {
             if (signal.aborted) {
               break;
