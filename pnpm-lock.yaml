@@ -83,6 +83,9 @@ importers:
       iconoir-react:
         specifier: ^7.11.0
         version: 7.11.0(react@19.2.6)
+      katex:
+        specifier: ^0.16.0
+        version: 0.16.47
       lucide-react:
         specifier: ^0.539.0
         version: 0.539.0(react@19.2.6)
