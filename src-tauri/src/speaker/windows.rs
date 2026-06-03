@@ -115,7 +115,6 @@ pub struct SpeakerInput {
 
 impl SpeakerInput {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-
         let device_id = device_id.filter(|id| !id.is_empty() && id != "default");
         Ok(Self { device_id })
     }
@@ -271,7 +270,6 @@ impl SpeakerStream {
                     }
 
                     if !samples.is_empty() {
-
                         let dropped = {
                             let mut queue = sample_queue.lock().unwrap();
                             let max_buffer_size = 131072;

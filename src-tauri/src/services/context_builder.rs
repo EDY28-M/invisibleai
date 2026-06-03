@@ -98,10 +98,12 @@ pub fn build_ai_context(
     let (has_license, license_expires_at) = if credentials_path.exists() {
         if let Ok(content) = std::fs::read_to_string(&credentials_path) {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                let has_lk = json.get("license_key")
+                let has_lk = json
+                    .get("license_key")
                     .and_then(|k| k.as_str())
                     .map_or(false, |k| !k.trim().is_empty());
-                let expires_at = json.get("license_expires_at")
+                let expires_at = json
+                    .get("license_expires_at")
                     .and_then(|e| e.as_str())
                     .map(|e| e.to_string());
                 (has_lk, expires_at)
@@ -135,15 +137,17 @@ pub fn build_ai_context(
     let mut stmt = conn
         .prepare("SELECT title, content, category FROM app_knowledge WHERE importance >= 3 ORDER BY importance DESC")
         .map_err(|e| e.to_string())?;
-    
-    let knowledge_iter = stmt.query_map([], |row| {
-        Ok(AppKnowledge {
-            title: row.get(0)?,
-            content: row.get(1)?,
-            category: row.get(2)?,
+
+    let knowledge_iter = stmt
+        .query_map([], |row| {
+            Ok(AppKnowledge {
+                title: row.get(0)?,
+                content: row.get(1)?,
+                category: row.get(2)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
-    
+        .map_err(|e| e.to_string())?;
+
     let mut knowledge = Vec::new();
     for k in knowledge_iter {
         if let Ok(item) = k {
@@ -155,17 +159,19 @@ pub fn build_ai_context(
     let mut stmt = conn
         .prepare("SELECT feature_name, description, status, route, frontend_component, backend_module FROM app_features WHERE status = 'active'")
         .map_err(|e| e.to_string())?;
-    
-    let features_iter = stmt.query_map([], |row| {
-        Ok(AppFeature {
-            feature_name: row.get(0)?,
-            description: row.get(1)?,
-            status: row.get(2)?,
-            route: row.get(3)?,
-            frontend_component: row.get(4)?,
-            backend_module: row.get(5)?,
+
+    let features_iter = stmt
+        .query_map([], |row| {
+            Ok(AppFeature {
+                feature_name: row.get(0)?,
+                description: row.get(1)?,
+                status: row.get(2)?,
+                route: row.get(3)?,
+                frontend_component: row.get(4)?,
+                backend_module: row.get(5)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut features = Vec::new();
     for f in features_iter {
@@ -178,14 +184,16 @@ pub fn build_ai_context(
     let mut stmt = conn
         .prepare("SELECT memory_type, content, importance FROM user_memory WHERE user_id = ? ORDER BY importance DESC LIMIT 5")
         .map_err(|e| e.to_string())?;
-    
-    let user_memory_iter = stmt.query_map([user_id], |row| {
-        Ok(UserMemory {
-            memory_type: row.get(0)?,
-            content: row.get(1)?,
-            importance: row.get(2)?,
+
+    let user_memory_iter = stmt
+        .query_map([user_id], |row| {
+            Ok(UserMemory {
+                memory_type: row.get(0)?,
+                content: row.get(1)?,
+                importance: row.get(2)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut user_memory = Vec::new();
     for m in user_memory_iter {
@@ -198,14 +206,16 @@ pub fn build_ai_context(
     let mut stmt = conn
         .prepare("SELECT summary, detected_problems, useful_context FROM conversation_summaries WHERE conversation_id = ? LIMIT 1")
         .map_err(|e| e.to_string())?;
-    
-    let summaries_iter = stmt.query_map([conversation_id], |row| {
-        Ok(ConversationSummary {
-            summary: row.get(0)?,
-            detected_problems: row.get(1)?,
-            useful_context: row.get(2)?,
+
+    let summaries_iter = stmt
+        .query_map([conversation_id], |row| {
+            Ok(ConversationSummary {
+                summary: row.get(0)?,
+                detected_problems: row.get(1)?,
+                useful_context: row.get(2)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut summaries = Vec::new();
     for s in summaries_iter {
@@ -218,14 +228,16 @@ pub fn build_ai_context(
     let mut stmt = conn
         .prepare("SELECT issue_detected, bad_behavior, expected_behavior FROM ai_feedback WHERE resolved = 0 LIMIT 3")
         .map_err(|e| e.to_string())?;
-    
-    let feedback_iter = stmt.query_map([], |row| {
-        Ok(AiFeedback {
-            issue_detected: row.get(0)?,
-            bad_behavior: row.get(1)?,
-            expected_behavior: row.get(2)?,
+
+    let feedback_iter = stmt
+        .query_map([], |row| {
+            Ok(AiFeedback {
+                issue_detected: row.get(0)?,
+                bad_behavior: row.get(1)?,
+                expected_behavior: row.get(2)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut feedback = Vec::new();
     for f in feedback_iter {
@@ -236,17 +248,20 @@ pub fn build_ai_context(
 
     // 7. Cargar contexto de la sesión en vivo si está provisto
     let (session_type, session_timeline) = if let Some(sid) = session_id {
-        let stype: Option<String> = conn.query_row(
-            "SELECT session_type FROM live_sessions WHERE id = ?",
-            [sid],
-            |row| row.get(0)
-        ).ok();
+        let stype: Option<String> = conn
+            .query_row(
+                "SELECT session_type FROM live_sessions WHERE id = ?",
+                [sid],
+                |row| row.get(0),
+            )
+            .ok();
 
         let timeline = crate::services::session_service::get_combined_session_timeline(
             app_data_dir.clone(),
             sid,
-            30
-        ).unwrap_or_default();
+            30,
+        )
+        .unwrap_or_default();
 
         (stype, timeline)
     } else {
@@ -254,7 +269,9 @@ pub fn build_ai_context(
     };
 
     // Cargar perfil modular compilado (si hay uno activo)
-    let compiled_profile = crate::services::profile_service::get_compiled_profile(app_data_dir).ok().flatten();
+    let compiled_profile = crate::services::profile_service::get_compiled_profile(app_data_dir)
+        .ok()
+        .flatten();
 
     Ok(AiContext {
         profile,
@@ -292,16 +309,26 @@ pub fn build_system_prompt(context: AiContext, user_message: &str) -> String {
              Personalidad: {}\n\
              Reglas de Comportamiento:\n{}\n\
              Limitaciones:\n{}\n\n",
-            prof.name, prof.role, prof.main_objective, prof.personality, prof.behavior_rules, prof.limitations
+            prof.name,
+            prof.role,
+            prof.main_objective,
+            prof.personality,
+            prof.behavior_rules,
+            prof.limitations
         ));
     }
 
     // 1.5 Licencia y Versión de la Aplicación
     prompt.push_str("[LICENCIA Y VERSIÓN DE INVISIBLEAI]\n");
     if context.has_license {
-        prompt.push_str("Estado de la Licencia del Usuario: ACTIVA (Versión PRO / Licencia de Paga)\n");
+        prompt.push_str(
+            "Estado de la Licencia del Usuario: ACTIVA (Versión PRO / Licencia de Paga)\n",
+        );
         if let Some(ref expiry) = context.license_expires_at {
-            prompt.push_str(&format!("Fecha de Vencimiento de la Licencia: {}\n", expiry));
+            prompt.push_str(&format!(
+                "Fecha de Vencimiento de la Licencia: {}\n",
+                expiry
+            ));
         }
     } else {
         prompt.push_str("Estado de la Licencia del Usuario: INACTIVA (Versión FREE / Gratuita)\n");
@@ -395,8 +422,10 @@ pub fn build_system_prompt(context: AiContext, user_message: &str) -> String {
             ));
         }
         prompt.push_str("\n");
-        
-        let mic_segments: Vec<_> = context.session_timeline.iter()
+
+        let mic_segments: Vec<_> = context
+            .session_timeline
+            .iter()
             .filter(|s| s.source_type == "microphone")
             .collect();
         if !mic_segments.is_empty() {
@@ -407,7 +436,9 @@ pub fn build_system_prompt(context: AiContext, user_message: &str) -> String {
             prompt.push_str("\n");
         }
 
-        let system_segments: Vec<_> = context.session_timeline.iter()
+        let system_segments: Vec<_> = context
+            .session_timeline
+            .iter()
             .filter(|s| s.source_type == "system_audio")
             .collect();
         if !system_segments.is_empty() {

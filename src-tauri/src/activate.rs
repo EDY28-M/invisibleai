@@ -14,7 +14,7 @@ fn get_payment_endpoint() -> Result<String, String> {
 
     match option_env!("PAYMENT_ENDPOINT") {
         Some(endpoint) => Ok(endpoint.to_string()),
-        None => Ok("https://serverai.keraai.online/api".to_string())
+        None => Ok("https://serverai.keraai.online/api".to_string()),
     }
 }
 
@@ -25,7 +25,7 @@ fn get_api_access_key() -> Result<String, String> {
 
     match option_env!("API_ACCESS_KEY") {
         Some(key) => Ok(key.to_string()),
-        None => Ok("dummy-local-key".to_string())
+        None => Ok("dummy-local-key".to_string()),
     }
 }
 
@@ -259,7 +259,6 @@ pub async fn activate_license_api(
     app: AppHandle,
     license_key: String,
 ) -> Result<ActivationResponse, String> {
-
     if license_key == "invisibleai-admin-local" {
         let instance_name = Uuid::new_v4().to_string();
         return Ok(ActivationResponse {
@@ -303,7 +302,6 @@ pub async fn activate_license_api(
         .map_err(|e| {
             let error_msg = format!("{}", e);
             if error_msg.contains("url (") {
-
                 let parts: Vec<&str> = error_msg.split(" for url (").collect();
                 if parts.len() > 1 {
                     format!("Failed to make chat request: {}", parts[0])
@@ -334,12 +332,42 @@ pub async fn activate_license_api(
     if activation_response.activated {
         if let Some(ref creds) = activation_response.credentials {
             let mut items: Vec<StorageItem> = Vec::new();
-            if let Some(ref v) = creds.groq_api_key      { items.push(StorageItem { key: "groq_api_key".into(),      value: v.clone() }); }
-            if let Some(ref v) = creds.model             { items.push(StorageItem { key: "groq_model".into(),        value: v.clone() }); }
-            if let Some(ref v) = creds.deepgram_api_key  { items.push(StorageItem { key: "deepgram_api_key".into(),  value: v.clone() }); }
-            if let Some(ref v) = creds.deepgram_model    { items.push(StorageItem { key: "deepgram_model".into(),    value: v.clone() }); }
-            if let Some(ref v) = creds.deepgram_language { items.push(StorageItem { key: "deepgram_language".into(), value: v.clone() }); }
-            if let Some(ref v) = creds.license_expires_at { items.push(StorageItem { key: "license_expires_at".into(), value: v.clone() }); }
+            if let Some(ref v) = creds.groq_api_key {
+                items.push(StorageItem {
+                    key: "groq_api_key".into(),
+                    value: v.clone(),
+                });
+            }
+            if let Some(ref v) = creds.model {
+                items.push(StorageItem {
+                    key: "groq_model".into(),
+                    value: v.clone(),
+                });
+            }
+            if let Some(ref v) = creds.deepgram_api_key {
+                items.push(StorageItem {
+                    key: "deepgram_api_key".into(),
+                    value: v.clone(),
+                });
+            }
+            if let Some(ref v) = creds.deepgram_model {
+                items.push(StorageItem {
+                    key: "deepgram_model".into(),
+                    value: v.clone(),
+                });
+            }
+            if let Some(ref v) = creds.deepgram_language {
+                items.push(StorageItem {
+                    key: "deepgram_language".into(),
+                    value: v.clone(),
+                });
+            }
+            if let Some(ref v) = creds.license_expires_at {
+                items.push(StorageItem {
+                    key: "license_expires_at".into(),
+                    value: v.clone(),
+                });
+            }
             if !items.is_empty() {
                 let _ = secure_storage_save(app, items).await;
             }
@@ -351,7 +379,6 @@ pub async fn activate_license_api(
 
 #[tauri::command]
 pub async fn deactivate_license_api(app: AppHandle) -> Result<DeactivationResponse, String> {
-
     let payment_endpoint = get_payment_endpoint()?;
     let api_access_key = get_api_access_key()?;
     let (license_key, instance_id, _, _, _) = get_stored_credentials(&app).await?;
@@ -380,7 +407,6 @@ pub async fn deactivate_license_api(app: AppHandle) -> Result<DeactivationRespon
         .map_err(|e| {
             let error_msg = format!("{}", e);
             if error_msg.contains("url (") {
-
                 let parts: Vec<&str> = error_msg.split(" for url (").collect();
                 if parts.len() > 1 {
                     format!("Failed to make chat request: {}", parts[0])
@@ -394,7 +420,6 @@ pub async fn deactivate_license_api(app: AppHandle) -> Result<DeactivationRespon
     let deactivation_response: DeactivationResponse = response.json().await.map_err(|e| {
         let error_msg = format!("{}", e);
         if error_msg.contains("url (") {
-
             let parts: Vec<&str> = error_msg.split(" for url (").collect();
             if parts.len() > 1 {
                 format!("Failed to make chat request: {}", parts[0])
@@ -443,7 +468,6 @@ pub fn mask_license_key_cmd(license_key: String) -> String {
 
 #[tauri::command]
 pub async fn get_checkout_url() -> Result<CheckoutResponse, String> {
-
     let payment_endpoint = get_payment_endpoint()?;
     let api_access_key = get_api_access_key()?;
 
@@ -460,7 +484,6 @@ pub async fn get_checkout_url() -> Result<CheckoutResponse, String> {
         .map_err(|e| {
             let error_msg = format!("{}", e);
             if error_msg.contains("url (") {
-
                 let parts: Vec<&str> = error_msg.split(" for url (").collect();
                 if parts.len() > 1 {
                     format!("Failed to make chat request: {}", parts[0])
@@ -475,7 +498,6 @@ pub async fn get_checkout_url() -> Result<CheckoutResponse, String> {
     let checkout_response: CheckoutResponse = response.json().await.map_err(|e| {
         let error_msg = format!("{}", e);
         if error_msg.contains("url (") {
-
             let parts: Vec<&str> = error_msg.split(" for url (").collect();
             if parts.len() > 1 {
                 format!("Failed to make chat request: {}", parts[0])

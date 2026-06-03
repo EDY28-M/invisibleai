@@ -38,7 +38,6 @@ fn get_app_version() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-
     let posthog_api_key = option_env!("POSTHOG_API_KEY").unwrap_or("").to_string();
     let mut builder = tauri::Builder::default()
         .plugin(
@@ -64,7 +63,6 @@ pub fn run() {
         .plugin(posthog_init(PostHogConfig {
             api_key: posthog_api_key,
             options: Some(PostHogOptions {
-
                 disable_session_recording: Some(true),
 
                 capture_pageview: Some(false),
@@ -159,7 +157,6 @@ pub fn run() {
             speaker::get_system_stream_status,
         ])
         .setup(|app| {
-
             window::setup_main_window(app).expect("Failed to setup main window");
             #[cfg(target_os = "macos")]
             init(app.app_handle());

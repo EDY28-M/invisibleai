@@ -71,7 +71,6 @@ pub struct SpeakerInput {
 }
 
 impl SpeakerInput {
-
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
     pub fn new() -> Result<Self> {
         let inner = PlatformSpeakerInput::new(None)?;
@@ -134,7 +133,6 @@ impl Stream for SpeakerStream {
 }
 
 impl SpeakerStream {
-
     pub fn sample_rate(&self) -> u32 {
         #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
         return self.inner.sample_rate();

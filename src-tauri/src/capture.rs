@@ -39,7 +39,6 @@ impl Default for CaptureState {
 
 #[tauri::command]
 pub async fn start_screen_capture(app: tauri::AppHandle) -> Result<(), String> {
-
     let capture_monitors = Monitor::all().map_err(|e| format!("Failed to get monitors: {}", e))?;
 
     if capture_monitors.is_empty() {
@@ -60,7 +59,6 @@ pub async fn start_screen_capture(app: tauri::AppHandle) -> Result<(), String> {
 
     let state = app.state::<CaptureState>();
     if state.overlay_active.load(Ordering::SeqCst) {
-
         let _ = close_overlay_window(app.clone());
     }
     state.overlay_active.store(true, Ordering::SeqCst);
@@ -101,7 +99,6 @@ pub async fn start_screen_capture(app: tauri::AppHandle) -> Result<(), String> {
 
                 (width, height, x, y)
             } else {
-
                 (
                     monitor.width() as f64,
                     monitor.height() as f64,
@@ -164,7 +161,6 @@ pub async fn start_screen_capture(app: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn close_overlay_window(app: tauri::AppHandle) -> Result<(), String> {
-
     let webview_windows = app.webview_windows();
 
     for (label, window) in webview_windows.iter() {
@@ -190,7 +186,6 @@ pub async fn capture_selected_area(
     coords: SelectionCoords,
     monitor_index: usize,
 ) -> Result<String, String> {
-
     let state = app.state::<CaptureState>();
     let mut captured_monitors = state.captured_monitors.lock().unwrap();
 

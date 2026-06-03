@@ -11,8 +11,19 @@ pub fn should_store_memory(content: &str) -> bool {
 
     // Lista de palabras basura a omitir
     let garbage_keywords = vec![
-        "hola", "gracias", "ok", "adiós", "puto", "mierda", "basura", 
-        "tonto", "estúpido", "asistente de mierda", "no me sirves", "de acuerdo", "bien"
+        "hola",
+        "gracias",
+        "ok",
+        "adiós",
+        "puto",
+        "mierda",
+        "basura",
+        "tonto",
+        "estúpido",
+        "asistente de mierda",
+        "no me sirves",
+        "de acuerdo",
+        "bien",
     ];
 
     for word in garbage_keywords {
@@ -20,7 +31,7 @@ pub fn should_store_memory(content: &str) -> bool {
             return false;
         }
     }
-    
+
     true
 }
 

@@ -190,8 +190,7 @@ async fn run_vad_capture(
             let _ = app.emit("system-audio-chunk", &raw_mono);
 
             // Speech detection uses RAW metrics only — noise gate must NOT suppress detection
-            let is_speech =
-                raw_rms > config.sensitivity_rms || raw_peak > config.peak_threshold;
+            let is_speech = raw_rms > config.sensitivity_rms || raw_peak > config.peak_threshold;
 
             // Update last strong audio timestamp to detect real audio vs background noise
             if raw_rms > strong_speech_rms {
@@ -369,7 +368,6 @@ async fn run_continuous_capture(
     app.unlisten(stop_listener);
 
     if !audio_buffer.is_empty() {
-
         let cleaned_audio = apply_noise_gate(&audio_buffer, config.noise_gate_threshold);
         let cleaned_audio = normalize_audio_level(&cleaned_audio, 0.1);
 
@@ -469,7 +467,6 @@ fn normalize_audio_level(samples: &[f32], target_rms: f32) -> Vec<f32> {
 }
 
 fn samples_to_wav_b64(sample_rate: u32, mono_f32: &[f32]) -> Result<String, String> {
-
     if !(8000..=96000).contains(&sample_rate) {
         error!("Invalid sample rate: {}", sample_rate);
         return Err(format!(
@@ -612,7 +609,6 @@ pub async fn get_vad_config(app: AppHandle) -> Result<VadConfig, String> {
 
 #[tauri::command]
 pub async fn update_vad_config(app: AppHandle, config: VadConfig) -> Result<(), String> {
-
     if config.sensitivity_rms < 0.0 || config.sensitivity_rms > 1.0 {
         return Err("Invalid sensitivity_rms: must be 0.0-1.0".to_string());
     }

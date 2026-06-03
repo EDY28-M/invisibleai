@@ -328,7 +328,6 @@ fn process_audio_data(ctx: &mut Ctx, data: &[f32]) {
             return;
         }
     } else {
-
         ctx.consecutive_drops.store(0, Ordering::Release);
     }
 

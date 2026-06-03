@@ -268,6 +268,27 @@ Disponible para proveedores STT tradicionales.
 
 Este flujo no usa el copiloto streaming ni el Modo inteligente. Su objetivo es ser simple y estable: capturar audio, transcribirlo con el proveedor elegido y enviarlo al chat.
 
+## Funcionamiento del Micrófono e IA (Manual de Usuario)
+
+Para garantizar una experiencia fluida y evitar respuestas no deseadas, la aplicación maneja el micrófono y el procesamiento del modelo de IA bajo ciertas reglas de control de concurrencia y filtrado:
+
+### 1. Palabras Clave de Activación (Trigger Words)
+Cuando hablas por el micrófono (`[Tú]`), tu voz siempre se transcribe y se añade a la línea de tiempo cronológica para servir como contexto de la conversación. Sin embargo, **la IA solo se activará y responderá directamente a tu voz si inicias o incluyes alguna de las siguientes palabras clave** al hablar:
+- `invisible`
+- `asistente`
+- `sugiere`
+- `oye`
+- `corrige`
+- `ayuda`
+- `dime`
+
+*Ejemplo de uso:* *"Oye, ¿cuál sería la mejor alternativa para esta arquitectura?"* o *"Invisible, ayuda a refactorizar este método"*. Si hablas sin emplear estas palabras clave, tu intervención se guardará en el historial de manera silenciosa para enriquecer el contexto del copiloto sin interrumpirte.
+
+### 2. Control de Concurrencia (Turnos y Cancelación)
+La aplicación procesa las respuestas del modelo de forma secuencial (toma de turnos) en lugar de múltiples flujos desordenados en paralelo:
+- **Interrupción Inteligente**: Si la IA está generando texto en tiempo real y decides hablar usando una palabra clave (por ejemplo: *"oye, detente y cambia el enfoque"*), la aplicación aborta inmediatamente la tarea de streaming en curso e inicia la nueva respuesta en el acto.
+- **Captura Concurrente**: La transcripción de tu voz (Micrófono) y las voces de terceros (Audio del Sistema) se procesan de manera simultánea en segundo plano. Esto asegura que la línea de tiempo mantenga un registro cronológico fiel de toda la reunión.
+
 ## Proveedores soportados
 
 ### IA / LLM

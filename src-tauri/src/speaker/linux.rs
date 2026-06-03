@@ -1,6 +1,8 @@
 use super::AudioDevice;
 use anyhow::{anyhow, Result};
 use futures_util::Stream;
+use libpulse_binding as pulse;
+use libpulse_simple_binding as psimple;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
@@ -9,8 +11,6 @@ use std::task::{Poll, Waker};
 use std::thread;
 use tracing::error;
 use tracing::warn;
-use libpulse_binding as pulse;
-use libpulse_simple_binding as psimple;
 
 use psimple::Simple;
 use pulse::context::introspect::Introspector;
@@ -223,7 +223,6 @@ pub struct SpeakerInput {
 
 impl SpeakerInput {
     pub fn new(device_id: Option<String>) -> Result<Self> {
-
         let source_name = match device_id {
             Some(ref id) if !id.is_empty() && id != "default" => {
                 let monitor = format!("{}.monitor", id);
@@ -368,7 +367,6 @@ impl SpeakerStream {
 
                     match simple.read(&mut buffer) {
                         Ok(_) => {
-
                             let samples: Vec<f32> = buffer
                                 .chunks_exact(4)
                                 .map(|chunk| {
@@ -377,7 +375,6 @@ impl SpeakerStream {
                                 .collect();
 
                             if !samples.is_empty() {
-
                                 let dropped = {
                                     let mut queue = sample_queue.lock().unwrap();
                                     let max_buffer_size = 131072;

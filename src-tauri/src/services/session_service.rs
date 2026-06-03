@@ -91,7 +91,7 @@ pub fn create_or_get_active_session(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
-    
+
     conn.execute(
         "INSERT INTO live_sessions (id, user_id, session_type, title, status, started_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)",
         params![id, user_id, session_type, title, now, now, now],
@@ -187,23 +187,25 @@ pub fn get_combined_session_timeline(
          LIMIT ?"
     ).map_err(|e| e.to_string())?;
 
-    let rows = stmt.query_map(params![session_id, limit], |row| {
-        let is_final_int: i32 = row.get(7)?;
-        Ok(TranscriptSegment {
-            id: row.get(0)?,
-            session_id: row.get(1)?,
-            conversation_id: row.get(2)?,
-            source_type: row.get(3)?,
-            speaker_label: row.get(4)?,
-            content: row.get(5)?,
-            start_time_ms: 0,
-            end_time_ms: 0,
-            sequence_number: row.get(6)?,
-            confidence: 1.0,
-            is_final: is_final_int != 0,
-            created_at: row.get(8)?,
+    let rows = stmt
+        .query_map(params![session_id, limit], |row| {
+            let is_final_int: i32 = row.get(7)?;
+            Ok(TranscriptSegment {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                conversation_id: row.get(2)?,
+                source_type: row.get(3)?,
+                speaker_label: row.get(4)?,
+                content: row.get(5)?,
+                start_time_ms: 0,
+                end_time_ms: 0,
+                sequence_number: row.get(6)?,
+                confidence: 1.0,
+                is_final: is_final_int != 0,
+                created_at: row.get(8)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut list = Vec::new();
     for r in rows {
@@ -231,7 +233,8 @@ pub fn end_active_session(
     conn.execute(
         "UPDATE live_sessions SET status = 'ended', ended_at = ?, updated_at = ? WHERE id = ?",
         params![now, now, session_id],
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(())
 }

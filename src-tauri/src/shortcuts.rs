@@ -80,7 +80,6 @@ pub struct ShortcutsConfig {
 pub fn setup_global_shortcuts<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-
     let state = app.state::<RegisteredShortcuts>();
     let _registered = match state.shortcuts.lock() {
         Ok(guard) => guard,
@@ -107,7 +106,6 @@ pub fn handle_shortcut_action<R: Runtime>(app: &AppHandle<R>, action_id: &str) {
         "screenshot" => handle_screenshot_shortcut(app),
         "system_audio" => handle_system_audio_shortcut(app),
         custom_action => {
-
             if let Some(window) = app.get_webview_window("main") {
                 if let Err(e) = window.emit(
                     "custom-shortcut-triggered",
@@ -183,7 +181,6 @@ pub fn stop_all_move_windows<R: Runtime>(app: &AppHandle<R>) {
 }
 
 fn handle_toggle_window<R: Runtime>(app: &AppHandle<R>) {
-
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
@@ -226,7 +223,6 @@ fn handle_toggle_window<R: Runtime>(app: &AppHandle<R>) {
             }
         }
         Ok(false) => {
-
             if let Err(e) = window.show() {
                 eprintln!("Failed to show window: {}", e);
             }
@@ -251,7 +247,6 @@ fn handle_toggle_window<R: Runtime>(app: &AppHandle<R>) {
 
 fn handle_audio_shortcut<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
-
         if let Ok(false) = window.is_visible() {
             if let Err(_e) = window.show() {
                 return;
@@ -269,7 +264,6 @@ fn handle_audio_shortcut<R: Runtime>(app: &AppHandle<R>) {
 
 fn handle_screenshot_shortcut<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
-
         if let Err(e) = window.emit("trigger-screenshot", json!({})) {
             eprintln!("Failed to emit screenshot event: {}", e);
         }
@@ -278,7 +272,6 @@ fn handle_screenshot_shortcut<R: Runtime>(app: &AppHandle<R>) {
 
 fn handle_system_audio_shortcut<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
-
         if let Ok(false) = window.is_visible() {
             if let Err(e) = window.show() {
                 eprintln!("Failed to show window: {}", e);
@@ -500,7 +493,6 @@ pub fn set_license_status<R: Runtime>(app: AppHandle<R>, has_license: bool) -> R
 pub fn set_app_icon_visibility<R: Runtime>(app: AppHandle<R>, visible: bool) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-
         let policy = if visible {
             tauri::ActivationPolicy::Regular
         } else {
@@ -515,7 +507,6 @@ pub fn set_app_icon_visibility<R: Runtime>(app: AppHandle<R>, visible: bool) -> 
 
     #[cfg(target_os = "windows")]
     {
-
         if let Some(window) = app.get_webview_window("main") {
             window
                 .set_skip_taskbar(!visible)
@@ -527,7 +518,6 @@ pub fn set_app_icon_visibility<R: Runtime>(app: AppHandle<R>, visible: bool) -> 
 
     #[cfg(target_os = "linux")]
     {
-
         if let Some(window) = app.get_webview_window("main") {
             window
                 .set_skip_taskbar(!visible)
@@ -557,13 +547,11 @@ fn handle_toggle_dashboard<R: Runtime>(app: &AppHandle<R>) {
     if let Some(dashboard_window) = app.get_webview_window("dashboard") {
         match dashboard_window.is_visible() {
             Ok(true) => {
-
                 if let Err(e) = dashboard_window.hide() {
                     eprintln!("Failed to hide dashboard window: {}", e);
                 }
             }
             Ok(false) => {
-
                 if let Err(e) = dashboard_window.show() {
                     eprintln!("Failed to show dashboard window: {}", e);
                 }
@@ -576,7 +564,6 @@ fn handle_toggle_dashboard<R: Runtime>(app: &AppHandle<R>) {
             }
         }
     } else {
-
         match show_dashboard_window(app) {
             Ok(_) => eprintln!("Dashboard window created and shown successfully"),
             Err(e) => eprintln!("Failed to create/show dashboard window: {}", e),
@@ -586,7 +573,6 @@ fn handle_toggle_dashboard<R: Runtime>(app: &AppHandle<R>) {
 
 fn handle_focus_input<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
-
         if let Ok(false) = window.is_visible() {
             let _ = window.show();
         }

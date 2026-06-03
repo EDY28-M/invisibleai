@@ -5,14 +5,10 @@ use tauri::{App, AppHandle, Manager, Runtime, WebviewWindow, WebviewWindowBuilde
 const TOP_OFFSET: i32 = 60; // Safe logical Y offset below macOS menu bar
 
 pub fn setup_main_window(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
-
     let window = app
         .get_webview_window("main")
         .or_else(|| app.get_webview_window("invisibleai"))
-        .or_else(|| {
-
-            app.webview_windows().values().next().cloned()
-        })
+        .or_else(|| app.webview_windows().values().next().cloned())
         .ok_or("No window found")?;
 
     position_window_top_center(&window, TOP_OFFSET)?;
@@ -24,7 +20,6 @@ pub fn position_window_top_center(
     window: &WebviewWindow,
     y_offset_logical: i32,
 ) -> Result<(), Box<dyn std::error::Error>> {
-
     if let Some(monitor) = window.primary_monitor()? {
         let scale_factor = monitor.scale_factor();
         let monitor_size = monitor.size();
@@ -82,13 +77,11 @@ pub fn toggle_dashboard(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(dashboard_window) = app.get_webview_window("dashboard") {
         match dashboard_window.is_visible() {
             Ok(true) => {
-
                 dashboard_window
                     .hide()
                     .map_err(|e| format!("Failed to hide dashboard window: {}", e))?;
             }
             Ok(false) => {
-
                 dashboard_window
                     .show()
                     .map_err(|e| format!("Failed to show dashboard window: {}", e))?;
@@ -101,7 +94,6 @@ pub fn toggle_dashboard(app: tauri::AppHandle) -> Result<(), String> {
             }
         }
     } else {
-
         show_dashboard_window(&app)?;
     }
 
@@ -139,8 +131,11 @@ pub fn move_window(app: tauri::AppHandle, direction: String, step: i32) -> Resul
 pub fn create_dashboard_window<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<WebviewWindow<R>, tauri::Error> {
-    let base_builder =
-        WebviewWindowBuilder::new(app, "dashboard", tauri::WebviewUrl::App("/dashboard".into()));
+    let base_builder = WebviewWindowBuilder::new(
+        app,
+        "dashboard",
+        tauri::WebviewUrl::App("/dashboard".into()),
+    );
 
     #[cfg(target_os = "macos")]
     let base_builder = base_builder
@@ -207,7 +202,6 @@ fn setup_dashboard_close_handler<R: Runtime>(window: &WebviewWindow<R>) {
     let window_clone = window.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-
             api.prevent_close();
 
             if let Err(e) = window_clone.hide() {
@@ -236,7 +230,6 @@ pub fn set_content_protected(app: tauri::AppHandle, enabled: bool) -> Result<(),
 
 pub fn show_dashboard_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     if let Some(dashboard_window) = app.get_webview_window("dashboard") {
-
         dashboard_window
             .show()
             .map_err(|e| format!("Failed to show dashboard window: {}", e))?;
@@ -244,7 +237,6 @@ pub fn show_dashboard_window<R: Runtime>(app: &AppHandle<R>) -> Result<(), Strin
             .set_focus()
             .map_err(|e| format!("Failed to focus dashboard window: {}", e))?;
     } else {
-
         let window = create_dashboard_window(app)
             .map_err(|e| format!("Failed to create dashboard window: {}", e))?;
         window

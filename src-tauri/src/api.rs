@@ -17,7 +17,7 @@ pub(crate) fn get_app_endpoint() -> Result<String, String> {
 
     match option_env!("APP_ENDPOINT") {
         Some(endpoint) => Ok(endpoint.to_string()),
-        None => Ok("https://invisibleai.onrender.com".to_string())
+        None => Ok("https://invisibleai.onrender.com".to_string()),
     }
 }
 
@@ -28,7 +28,7 @@ pub(crate) fn get_api_access_key() -> Result<String, String> {
 
     match option_env!("API_ACCESS_KEY") {
         Some(key) => Ok(key.to_string()),
-        None => Ok("dummy-local-key".to_string())
+        None => Ok("dummy-local-key".to_string()),
     }
 }
 
@@ -59,7 +59,16 @@ struct SecureStorage {
 
 pub async fn get_stored_credentials(
     app: &AppHandle,
-) -> Result<(String, String, Option<Model>, Option<String>, Option<String>), String> {
+) -> Result<
+    (
+        String,
+        String,
+        Option<Model>,
+        Option<String>,
+        Option<String>,
+    ),
+    String,
+> {
     let storage_path = get_secure_storage_path(app)?;
 
     let mut storage = if storage_path.exists() {
@@ -91,7 +100,13 @@ pub async fn get_stored_credentials(
         .selected_invisibleai_model
         .and_then(|json_str| serde_json::from_str(&json_str).ok());
 
-    Ok((license_key, instance_id, selected_model, storage.groq_api_key, storage.groq_model))
+    Ok((
+        license_key,
+        instance_id,
+        selected_model,
+        storage.groq_api_key,
+        storage.groq_model,
+    ))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -210,18 +225,22 @@ pub async fn transcribe_audio(
     let app_endpoint = get_app_endpoint()?;
     let api_access_key = get_api_access_key()?;
 
-    let (license_key, instance_id, _, local_groq_key, local_groq_model) = match get_stored_credentials(&app).await {
-        Ok((lk, id, sm, gk, gm)) => (Some(lk), Some(id), sm, gk, gm),
-        Err(_) => (None, None, None, None, None),
-    };
+    let (license_key, instance_id, _, local_groq_key, local_groq_model) =
+        match get_stored_credentials(&app).await {
+            Ok((lk, id, sm, gk, gm)) => (Some(lk), Some(id), sm, gk, gm),
+            Err(_) => (None, None, None, None, None),
+        };
 
     let audio_bytes = decode_audio_base64(&audio_base64)?;
     let client = reqwest::Client::new();
 
     // ── MODO DIRECTO: Groq API key guardada localmente Y es modo FREE ──
-    // Si el usuario tiene una licencia activa, debe pasar por el proxy del servidor 
+    // Si el usuario tiene una licencia activa, debe pasar por el proxy del servidor
     // para usar el tier premium/streaming y consumir créditos.
-    let is_licensed = license_key.as_ref().map(|lk| !lk.is_empty()).unwrap_or(false);
+    let is_licensed = license_key
+        .as_ref()
+        .map(|lk| !lk.is_empty())
+        .unwrap_or(false);
     if let (Some(groq_key), false) = (local_groq_key, is_licensed) {
         let url = "https://api.groq.com/openai/v1/audio/transcriptions";
 
@@ -269,9 +288,10 @@ pub async fn transcribe_audio(
             text: String,
         }
 
-        let groq_resp: GroqSttResponse = response.json().await.map_err(|e| {
-            format!("Failed to parse Groq STT response: {}", e)
-        })?;
+        let groq_resp: GroqSttResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse Groq STT response: {}", e))?;
 
         return Ok(AudioResponse {
             success: true,
@@ -326,9 +346,10 @@ pub async fn transcribe_audio(
         transcription: String,
     }
 
-    let server_resp: ServerSttResponse = response.json().await.map_err(|e| {
-        format!("Failed to parse transcription response: {}", e)
-    })?;
+    let server_resp: ServerSttResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse transcription response: {}", e))?;
 
     Ok(AudioResponse {
         success: true,
@@ -469,8 +490,8 @@ pub async fn chat_stream_response(
     let app_endpoint = get_app_endpoint()?;
     let api_access_key = get_api_access_key()?;
 
-    let (license_key, instance_id, selected_model, local_groq_key, local_groq_model)
-        = get_stored_credentials(&app).await?;
+    let (license_key, instance_id, selected_model, local_groq_key, local_groq_model) =
+        get_stored_credentials(&app).await?;
 
     // Modelo: usar el guardado localmente si existe; si no, el default
     let model_id = if license_key.is_empty() {
@@ -484,40 +505,49 @@ pub async fn chat_stream_response(
 
     // ── LÓGICA DE MEMORIA E INTELIGENCIA CONTEXTUAL ──
     let mut final_system_prompt = system_prompt.clone();
-    let is_already_enriched = system_prompt.as_ref().map_or(false, |p| p.contains("[IDENTIDAD DEL ASISTENTE]"));
+    let is_already_enriched = system_prompt
+        .as_ref()
+        .map_or(false, |p| p.contains("[IDENTIDAD DEL ASISTENTE]"));
     if !is_already_enriched {
-        if let (Some(uid), Some(cid), Some(screen), Some(route)) = (&user_id, &conversation_id, &current_screen, &current_route) {
-            use crate::services::context_builder::{build_ai_context, build_system_prompt, CurrentScreenContext};
+        if let (Some(uid), Some(cid), Some(screen), Some(route)) =
+            (&user_id, &conversation_id, &current_screen, &current_route)
+        {
+            use crate::services::context_builder::{
+                build_ai_context, build_system_prompt, CurrentScreenContext,
+            };
             use crate::services::intent_classifier::classify_user_intent;
 
-        if let Ok(app_data_dir) = app.path().app_data_dir() {
-            let intent = classify_user_intent(&user_message);
-            let screen_ctx = CurrentScreenContext {
-                current_screen: screen.clone(),
-                current_route: route.clone(),
-                app_version: app_version.clone().unwrap_or_else(|| "1.0.0".to_string()),
-                selected_feature: selected_feature.clone(),
-            };
+            if let Ok(app_data_dir) = app.path().app_data_dir() {
+                let intent = classify_user_intent(&user_message);
+                let screen_ctx = CurrentScreenContext {
+                    current_screen: screen.clone(),
+                    current_route: route.clone(),
+                    app_version: app_version.clone().unwrap_or_else(|| "1.0.0".to_string()),
+                    selected_feature: selected_feature.clone(),
+                };
 
-            if let Ok(context) = build_ai_context(
-                app_data_dir,
-                uid,
-                cid,
-                session_id.as_deref(),
-                screen_ctx,
-                &user_message,
-                intent
-            ) {
-                let enriched = build_system_prompt(context, &user_message);
-                if let Some(existing) = system_prompt {
-                    final_system_prompt = Some(format!("{}\n\n[INSTRUCCIONES ADICIONALES]\n{}", enriched, existing));
-                } else {
-                    final_system_prompt = Some(enriched);
+                if let Ok(context) = build_ai_context(
+                    app_data_dir,
+                    uid,
+                    cid,
+                    session_id.as_deref(),
+                    screen_ctx,
+                    &user_message,
+                    intent,
+                ) {
+                    let enriched = build_system_prompt(context, &user_message);
+                    if let Some(existing) = system_prompt {
+                        final_system_prompt = Some(format!(
+                            "{}\n\n[INSTRUCCIONES ADICIONALES]\n{}",
+                            enriched, existing
+                        ));
+                    } else {
+                        final_system_prompt = Some(enriched);
+                    }
                 }
             }
         }
     }
-}
 
     // Construir mensajes OpenAI-compatible
     let mut messages: Vec<serde_json::Value> = Vec::new();
@@ -668,11 +698,16 @@ async fn stream_sse_response(
                             break;
                         }
                         if !json_str.is_empty() {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json_str) {
-                                if let Some(choices) = parsed.get("choices").and_then(|c| c.as_array()) {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json_str)
+                            {
+                                if let Some(choices) =
+                                    parsed.get("choices").and_then(|c| c.as_array())
+                                {
                                     if let Some(first_choice) = choices.first() {
                                         if let Some(delta) = first_choice.get("delta") {
-                                            if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
+                                            if let Some(content) =
+                                                delta.get("content").and_then(|c| c.as_str())
+                                            {
                                                 full_response.push_str(content);
                                                 let _ = app.emit("chat_stream_chunk", content);
                                             }
@@ -936,20 +971,25 @@ fn get_conn(app: &AppHandle) -> std::result::Result<rusqlite::Connection, String
 }
 
 #[tauri::command]
-pub async fn get_user_memories(app: AppHandle, user_id: String) -> Result<Vec<UserMemoryItem>, String> {
+pub async fn get_user_memories(
+    app: AppHandle,
+    user_id: String,
+) -> Result<Vec<UserMemoryItem>, String> {
     let conn = get_conn(&app)?;
     let mut stmt = conn
         .prepare("SELECT id, user_id, memory_type, content, importance FROM user_memory WHERE user_id = ? ORDER BY importance DESC")
         .map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([user_id], |row| {
-        Ok(UserMemoryItem {
-            id: row.get(0)?,
-            user_id: row.get(1)?,
-            memory_type: row.get(2)?,
-            content: row.get(3)?,
-            importance: row.get(4)?,
+    let rows = stmt
+        .query_map([user_id], |row| {
+            Ok(UserMemoryItem {
+                id: row.get(0)?,
+                user_id: row.get(1)?,
+                memory_type: row.get(2)?,
+                content: row.get(3)?,
+                importance: row.get(4)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut list = Vec::new();
     for r in rows {
@@ -1003,7 +1043,8 @@ pub async fn update_user_memory(
 #[tauri::command]
 pub async fn delete_user_memory(app: AppHandle, id: String) -> Result<(), String> {
     let conn = get_conn(&app)?;
-    conn.execute("DELETE FROM user_memory WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM user_memory WHERE id = ?", [id])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1013,15 +1054,17 @@ pub async fn get_app_knowledge(app: AppHandle) -> Result<Vec<AppKnowledgeItem>, 
     let mut stmt = conn
         .prepare("SELECT id, title, content, category, importance FROM app_knowledge ORDER BY category ASC")
         .map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| {
-        Ok(AppKnowledgeItem {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            content: row.get(2)?,
-            category: row.get(3)?,
-            importance: row.get(4)?,
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(AppKnowledgeItem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                category: row.get(3)?,
+                importance: row.get(4)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut list = Vec::new();
     for r in rows {
@@ -1069,7 +1112,8 @@ pub async fn update_app_knowledge(
 #[tauri::command]
 pub async fn delete_app_knowledge(app: AppHandle, id: String) -> Result<(), String> {
     let conn = get_conn(&app)?;
-    conn.execute("DELETE FROM app_knowledge WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM app_knowledge WHERE id = ?", [id])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1079,17 +1123,19 @@ pub async fn get_app_features(app: AppHandle) -> Result<Vec<AppFeatureItem>, Str
     let mut stmt = conn
         .prepare("SELECT id, feature_name, description, status, route, frontend_component, backend_module FROM app_features ORDER BY feature_name ASC")
         .map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| {
-        Ok(AppFeatureItem {
-            id: row.get(0)?,
-            feature_name: row.get(1)?,
-            description: row.get(2)?,
-            status: row.get(3)?,
-            route: row.get(4)?,
-            frontend_component: row.get(5)?,
-            backend_module: row.get(6)?,
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(AppFeatureItem {
+                id: row.get(0)?,
+                feature_name: row.get(1)?,
+                description: row.get(2)?,
+                status: row.get(3)?,
+                route: row.get(4)?,
+                frontend_component: row.get(5)?,
+                backend_module: row.get(6)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut list = Vec::new();
     for r in rows {
@@ -1141,7 +1187,8 @@ pub async fn update_app_feature(
 #[tauri::command]
 pub async fn delete_app_feature(app: AppHandle, id: String) -> Result<(), String> {
     let conn = get_conn(&app)?;
-    conn.execute("DELETE FROM app_features WHERE id = ?", [id]).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM app_features WHERE id = ?", [id])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1151,18 +1198,20 @@ pub async fn get_ai_feedback(app: AppHandle) -> Result<Vec<AiFeedbackItem>, Stri
     let mut stmt = conn
         .prepare("SELECT id, conversation_id, issue_detected, bad_behavior, expected_behavior, severity, resolved FROM ai_feedback ORDER BY created_at DESC")
         .map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], |row| {
-        let resolved_int: i32 = row.get(6)?;
-        Ok(AiFeedbackItem {
-            id: row.get(0)?,
-            conversation_id: row.get(1)?,
-            issue_detected: row.get(2)?,
-            bad_behavior: row.get(3)?,
-            expected_behavior: row.get(4)?,
-            severity: row.get(5)?,
-            resolved: resolved_int != 0,
+    let rows = stmt
+        .query_map([], |row| {
+            let resolved_int: i32 = row.get(6)?;
+            Ok(AiFeedbackItem {
+                id: row.get(0)?,
+                conversation_id: row.get(1)?,
+                issue_detected: row.get(2)?,
+                bad_behavior: row.get(3)?,
+                expected_behavior: row.get(4)?,
+                severity: row.get(5)?,
+                resolved: resolved_int != 0,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let mut list = Vec::new();
     for r in rows {
@@ -1179,7 +1228,8 @@ pub async fn resolve_ai_feedback(app: AppHandle, id: String) -> Result<(), Strin
     conn.execute(
         "UPDATE ai_feedback SET resolved = 1, updated_at = strftime('%s', 'now') WHERE id = ?",
         [id],
-    ).map_err(|e| e.to_string())?;
+    )
+    .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1237,8 +1287,12 @@ pub async fn get_enriched_system_prompt(
     session_id: Option<String>,
 ) -> Result<String, String> {
     let mut final_system_prompt = system_prompt.clone().unwrap_or_default();
-    if let (Some(uid), Some(cid), Some(screen), Some(route)) = (&user_id, &conversation_id, &current_screen, &current_route) {
-        use crate::services::context_builder::{build_ai_context, build_system_prompt, CurrentScreenContext};
+    if let (Some(uid), Some(cid), Some(screen), Some(route)) =
+        (&user_id, &conversation_id, &current_screen, &current_route)
+    {
+        use crate::services::context_builder::{
+            build_ai_context, build_system_prompt, CurrentScreenContext,
+        };
         use crate::services::intent_classifier::classify_user_intent;
 
         if let Ok(app_data_dir) = app.path().app_data_dir() {
@@ -1257,11 +1311,12 @@ pub async fn get_enriched_system_prompt(
                 session_id.as_deref(),
                 screen_ctx,
                 &user_message,
-                intent
+                intent,
             ) {
                 let enriched = build_system_prompt(context, &user_message);
                 if let Some(existing) = system_prompt {
-                    final_system_prompt = format!("{}\n\n[INSTRUCCIONES ADICIONALES]\n{}", enriched, existing);
+                    final_system_prompt =
+                        format!("{}\n\n[INSTRUCCIONES ADICIONALES]\n{}", enriched, existing);
                 } else {
                     final_system_prompt = enriched;
                 }
@@ -1324,15 +1379,9 @@ pub async fn get_combined_session_timeline(
 }
 
 #[tauri::command]
-pub async fn end_active_session(
-    app: AppHandle,
-    session_id: String,
-) -> Result<(), String> {
+pub async fn end_active_session(app: AppHandle, session_id: String) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    crate::services::session_service::end_active_session(
-        app_data_dir,
-        &session_id,
-    )
+    crate::services::session_service::end_active_session(app_data_dir, &session_id)
 }
 
 #[tauri::command]
@@ -1352,7 +1401,8 @@ pub async fn on_transcript_received(
             text,
             is_final,
             is_smart_mode,
-        ).await;
+        )
+        .await;
     });
     Ok(())
 }
@@ -1409,10 +1459,7 @@ pub async fn toggle_profile_modifier(
 }
 
 #[tauri::command]
-pub async fn set_profile_custom_notes(
-    app: tauri::AppHandle,
-    notes: String,
-) -> Result<(), String> {
+pub async fn set_profile_custom_notes(app: tauri::AppHandle, notes: String) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     crate::services::profile_service::set_custom_notes(app_data_dir, &notes)
 }
