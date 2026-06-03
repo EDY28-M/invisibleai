@@ -89,6 +89,7 @@ Personaliza la experiencia del asistente en segundos desde la sección de **Perf
 *   **Robustez de Licencia en Desarrollo**: Corregido el error que causaba la eliminación de la licencia al reiniciar la aplicación en local cuando el servidor de validación (`localhost:3000`) estaba offline.
 *   **Toggle de Desactivación**: Ahora es posible desactivar perfiles y prompts del sistema seleccionados simplemente haciendo clic sobre ellos nuevamente.
 *   **Código Limpio**: Eliminación completa de comentarios internos innecesarios y notas temporales obsoletas en el código para mejorar el rendimiento de la aplicación en producción.
+*   **Validaciones y Errores Amigables**: Los mensajes de error técnicos y crípticos (como fallos de red 502/503/504 o límites de tokens de base de datos) ahora se traducen y presentan al usuario de forma clara y en español (ej. informando sencillamente si no tiene licencia activa, si llegó al límite diario de mensajes o si el servidor está temporalmente fuera de línea).
 
 ---
 

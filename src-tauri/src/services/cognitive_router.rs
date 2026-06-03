@@ -567,7 +567,8 @@ pub async fn handle_incoming_transcript(
                 let _ = app_clone.emit("timeline-updated", &session_id_clone);
             }
             Err(e) => {
-                let _ = app_clone.emit("ai-stream-error", e);
+                let friendly_err = crate::api::format_friendly_error(&e);
+                let _ = app_clone.emit("ai-stream-error", friendly_err);
             }
         }
     });

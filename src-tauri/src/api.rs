@@ -617,17 +617,17 @@ pub async fn chat_stream_response(
             .json(&request_body)
             .send()
             .await
-            .map_err(|e| format!("Groq API error: {}", e))?;
+            .map_err(|e| format_friendly_error(&e.to_string()))?;
 
         if !response.status().is_success() {
-            let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
+            let mut err_msg = error_text.clone();
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&error_text) {
                 if let Some(msg) = json.pointer("/error/message").and_then(|v| v.as_str()) {
-                    return Err(msg.to_string());
+                    err_msg = msg.to_string();
                 }
             }
-            return Err(format!("Groq error ({}): {}", status, error_text));
+            return Err(format_friendly_error(&err_msg));
         }
 
         return stream_sse_response(app, response).await;
@@ -650,23 +650,27 @@ pub async fn chat_stream_response(
         .json(&request_body)
         .send()
         .await
-        .map_err(|e| format!("Failed to send chat request: {}", e))?;
+        .map_err(|e| format_friendly_error(&e.to_string()))?;
 
     if !response.status().is_success() {
-        let status = response.status();
         let error_text = response
             .text()
             .await
             .unwrap_or_else(|_| "Unknown server error".to_string());
 
-        if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&error_text) {
+        let err_msg = if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&error_text)
+        {
             if let Some(error_msg) = error_json.get("error").and_then(|e| e.as_str()) {
-                return Err(error_msg.to_string());
+                error_msg.to_string()
             } else if let Some(message) = error_json.get("message").and_then(|m| m.as_str()) {
-                return Err(message.to_string());
+                message.to_string()
+            } else {
+                error_text
             }
-        }
-        return Err(format!("Server error ({}): {}", status, error_text));
+        } else {
+            error_text
+        };
+        return Err(format_friendly_error(&err_msg));
     }
 
     stream_sse_response(app, response).await
@@ -1462,4 +1466,50 @@ pub async fn toggle_profile_modifier(
 pub async fn set_profile_custom_notes(app: tauri::AppHandle, notes: String) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     crate::services::profile_service::set_custom_notes(app_data_dir, &notes)
+}
+
+pub fn format_friendly_error(err: &str) -> String {
+    let lower = err.to_lowercase();
+    if lower.contains("licencia no encontrada")
+        || lower.contains("licencia inválida")
+        || lower.contains("licencia revocada")
+        || lower.contains("licencia expirada")
+        || lower.contains("licencia activa")
+        || lower.contains("no está registrado para esta licencia")
+        || lower.contains("license revoked")
+        || lower.contains("license_invalid")
+        || lower.contains("unauthorized")
+        || lower.contains("403")
+    {
+        return "Tu licencia de InvisibleAI no está activa o ha expirado. Por favor, verifica o reactiva tu licencia en el panel de control.".to_string();
+    }
+
+    if lower.contains("límite diario gratuito alcanzado")
+        || lower.contains("límite diario alcanzado")
+        || lower.contains("quota")
+        || lower.contains("limit")
+        || lower.contains("429")
+        || lower.contains("too many requests")
+    {
+        return "Has alcanzado el límite diario de mensajes. Si estás en la versión gratuita, puedes activar una licencia para aumentarlo. Los límites se reinician a la medianoche.".to_string();
+    }
+
+    if lower.contains("server error")
+        || lower.contains("failed to fetch")
+        || lower.contains("network error")
+        || lower.contains("connect")
+        || lower.contains("timeout")
+        || lower.contains("500")
+        || lower.contains("502")
+        || lower.contains("503")
+        || lower.contains("504")
+        || lower.contains("bad gateway")
+        || lower.contains("service unavailable")
+        || lower.contains("failed to send chat request")
+        || lower.contains("stream read error")
+    {
+        return "El servidor de InvisibleAI está temporalmente fuera de línea o se está reiniciando. Por favor, espera unos instantes e intenta nuevamente.".to_string();
+    }
+
+    err.to_string()
 }

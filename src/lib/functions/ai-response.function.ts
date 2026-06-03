@@ -30,7 +30,7 @@ function buildServerMessages(
   systemPrompt: string | undefined,
   history: Message[],
   userMessage: string,
-  imagesBase64: string[]
+  imagesBase64: string[],
 ): Array<{ role: string; content: any }> {
   const messages: Array<{ role: string; content: any }> = [];
 
@@ -69,14 +69,14 @@ function buildEnhancedSystemPrompt(baseSystemPrompt?: string): string {
   }
 
   const lengthOption = RESPONSE_LENGTHS.find(
-    (l) => l.id === responseSettings.responseLength
+    (l) => l.id === responseSettings.responseLength,
   );
   if (lengthOption?.prompt?.trim()) {
     prompts.push(lengthOption.prompt);
   }
 
   const languageOption = LANGUAGES.find(
-    (l) => l.id === responseSettings.language
+    (l) => l.id === responseSettings.language,
   );
   if (languageOption?.prompt?.trim()) {
     prompts.push(languageOption.prompt);
@@ -119,40 +119,51 @@ async function* fetchInvisibleAIAIResponse(params: {
     const storage = await invoke<{
       groq_api_key?: string;
       groq_model?: string;
-    }>("secure_storage_get").catch(() => ({} as { groq_api_key?: string; groq_model?: string }));
+    }>("secure_storage_get").catch(
+      () => ({}) as { groq_api_key?: string; groq_model?: string },
+    );
 
     if (storage.groq_api_key) {
-      const licenseStillValid = await serverApi.ensureLicensedCredentialsValid();
+      const licenseStillValid =
+        await serverApi.ensureLicensedCredentialsValid();
       if (!licenseStillValid) {
-        throw new Error("Tu licencia ya no está activa. Actívala nuevamente para usar InvisibleAI API.");
+        throw new Error(
+          "Tu licencia ya no está activa. Actívala nuevamente para usar InvisibleAI API.",
+        );
       }
 
       const messages = buildServerMessages(
         systemPrompt,
         history,
         userMessage,
-        imagesBase64
+        imagesBase64,
       );
-      const modelId = storage.groq_model || "meta-llama/llama-4-scout-17b-16e-instruct";
+      const modelId =
+        storage.groq_model || "meta-llama/llama-4-scout-17b-16e-instruct";
 
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${storage.groq_api_key}`,
+      const response = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${storage.groq_api_key}`,
+          },
+          body: JSON.stringify({
+            model: modelId,
+            messages,
+            stream: true,
+            stream_options: { include_usage: true },
+          }),
+          signal,
         },
-        body: JSON.stringify({
-          model: modelId,
-          messages,
-          stream: true,
-          stream_options: { include_usage: true },
-        }),
-        signal,
-      });
+      );
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
-        throw new Error(`Groq API Error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`);
+        throw new Error(
+          `Groq API Error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
+        );
       }
 
       if (!response.body) {
@@ -249,7 +260,6 @@ async function* fetchInvisibleAIAIResponse(params: {
     });
 
     try {
-
       if (signal?.aborted) {
         unlisten();
         unlistenComplete();
@@ -257,18 +267,28 @@ async function* fetchInvisibleAIAIResponse(params: {
       }
 
       const conversationId = params.conversationId || "default_conv";
-      const userId = params.userId || localStorage.getItem("invisibleai_instance_id") || "default_user";
+      const userId =
+        params.userId ||
+        localStorage.getItem("invisibleai_instance_id") ||
+        "default_user";
       const currentRoute = params.currentRoute || window.location.pathname;
-      const currentScreen = params.currentScreen || (
-        currentRoute === "/chat" ? "ChatPage" :
-        currentRoute === "/settings" ? "SettingsPage" :
-        currentRoute === "/memory-admin" ? "MemoryAdminPage" : "DashboardPage"
-      );
+      const currentScreen =
+        params.currentScreen ||
+        (currentRoute === "/chat"
+          ? "ChatPage"
+          : currentRoute === "/settings"
+            ? "SettingsPage"
+            : currentRoute === "/memory-admin"
+              ? "MemoryAdminPage"
+              : "DashboardPage");
       const appVersion = params.appVersion || "1.2.3";
-      const selectedFeature = params.selectedFeature || (
-        currentRoute === "/chat" ? "chat" :
-        currentRoute === "/memory-admin" ? "mem_admin" : undefined
-      );
+      const selectedFeature =
+        params.selectedFeature ||
+        (currentRoute === "/chat"
+          ? "chat"
+          : currentRoute === "/memory-admin"
+            ? "mem_admin"
+            : undefined);
 
       await invoke("chat_stream_response", {
         userMessage,
@@ -286,7 +306,6 @@ async function* fetchInvisibleAIAIResponse(params: {
 
       let lastIndex = 0;
       while (!streamComplete) {
-
         if (signal?.aborted) {
           unlisten();
           unlistenComplete();
@@ -294,7 +313,7 @@ async function* fetchInvisibleAIAIResponse(params: {
         }
 
         await new Promise((resolve) =>
-          setTimeout(resolve, CHUNK_POLL_INTERVAL_MS)
+          setTimeout(resolve, CHUNK_POLL_INTERVAL_MS),
         );
 
         if (signal?.aborted) {
@@ -323,8 +342,7 @@ async function* fetchInvisibleAIAIResponse(params: {
       unlistenComplete();
     }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    yield `InvisibleAI API Error: ${errorMessage}`;
+    yield formatFriendlyErrorMessage(error);
   }
 }
 
@@ -376,30 +394,43 @@ export async function* fetchAIResponse(params: {
 
     try {
       const conversationIdVal = conversationId || "default_conv";
-      const userIdVal = userId || localStorage.getItem("invisibleai_instance_id") || "default_user";
+      const userIdVal =
+        userId ||
+        localStorage.getItem("invisibleai_instance_id") ||
+        "default_user";
       const currentRouteVal = currentRoute || window.location.pathname;
-      const currentScreenVal = currentScreen || (
-        currentRouteVal === "/chat" ? "ChatPage" :
-        currentRouteVal === "/settings" ? "SettingsPage" :
-        currentRouteVal === "/memory-admin" ? "MemoryAdminPage" : "DashboardPage"
-      );
+      const currentScreenVal =
+        currentScreen ||
+        (currentRouteVal === "/chat"
+          ? "ChatPage"
+          : currentRouteVal === "/settings"
+            ? "SettingsPage"
+            : currentRouteVal === "/memory-admin"
+              ? "MemoryAdminPage"
+              : "DashboardPage");
       const appVersionVal = appVersion || "1.2.3";
-      const selectedFeatureVal = selectedFeature || (
-        currentRouteVal === "/chat" ? "chat" :
-        currentRouteVal === "/memory-admin" ? "mem_admin" : undefined
-      );
+      const selectedFeatureVal =
+        selectedFeature ||
+        (currentRouteVal === "/chat"
+          ? "chat"
+          : currentRouteVal === "/memory-admin"
+            ? "mem_admin"
+            : undefined);
 
-      enrichedSystemPrompt = await invoke<string>("get_enriched_system_prompt", {
-        userMessage,
-        systemPrompt: enrichedSystemPrompt,
-        userId: userIdVal,
-        conversationId: conversationIdVal,
-        currentScreen: currentScreenVal,
-        currentRoute: currentRouteVal,
-        appVersion: appVersionVal,
-        selectedFeature: selectedFeatureVal,
-        sessionId,
-      });
+      enrichedSystemPrompt = await invoke<string>(
+        "get_enriched_system_prompt",
+        {
+          userMessage,
+          systemPrompt: enrichedSystemPrompt,
+          userId: userIdVal,
+          conversationId: conversationIdVal,
+          currentScreen: currentScreenVal,
+          currentRoute: currentRouteVal,
+          appVersion: appVersionVal,
+          selectedFeature: selectedFeatureVal,
+          sessionId,
+        },
+      );
     } catch (err) {
       console.error("Failed to enrich system prompt via Tauri:", err);
     }
@@ -452,13 +483,13 @@ export async function* fetchAIResponse(params: {
       throw new Error(
         `Failed to parse curl: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
     }
 
     const extractedVariables = extractVariables(provider.curl);
     const requiredVars = extractedVariables.filter(
-      ({ key }) => key !== "SYSTEM_PROMPT" && key !== "TEXT" && key !== "IMAGE"
+      ({ key }) => key !== "SYSTEM_PROMPT" && key !== "TEXT" && key !== "IMAGE",
     );
     for (const { key } of requiredVars) {
       if (
@@ -466,7 +497,7 @@ export async function* fetchAIResponse(params: {
         selectedProvider.variables[key].trim() === ""
       ) {
         throw new Error(
-          `Missing required variable: ${key}. Please configure it in settings.`
+          `Missing required variable: ${key}. Please configure it in settings.`,
         );
       }
     }
@@ -476,7 +507,7 @@ export async function* fetchAIResponse(params: {
     }
     if (imagesBase64.length > 0 && !provider.curl.includes("{{IMAGE}}")) {
       throw new Error(
-        `Provider ${provider?.id ?? "unknown"} does not support image input`
+        `Provider ${provider?.id ?? "unknown"} does not support image input`,
       );
     }
 
@@ -484,7 +515,7 @@ export async function* fetchAIResponse(params: {
       ? JSON.parse(JSON.stringify(curlJson.data))
       : {};
     const messagesKey = Object.keys(bodyObj).find((key) =>
-      ["messages", "contents", "conversation", "history"].includes(key)
+      ["messages", "contents", "conversation", "history"].includes(key),
     );
 
     if (messagesKey && Array.isArray(bodyObj[messagesKey])) {
@@ -492,7 +523,7 @@ export async function* fetchAIResponse(params: {
         bodyObj[messagesKey],
         history,
         userMessage,
-        imagesBase64
+        imagesBase64,
       );
       bodyObj[messagesKey] = finalMessages;
     }
@@ -502,7 +533,7 @@ export async function* fetchAIResponse(params: {
         Object.entries(selectedProvider.variables).map(([key, value]) => [
           key.toUpperCase(),
           value,
-        ])
+        ]),
       ),
       SYSTEM_PROMPT: enrichedSystemPrompt || "",
     };
@@ -516,7 +547,7 @@ export async function* fetchAIResponse(params: {
     if (provider?.streaming) {
       if (typeof bodyObj === "object" && bodyObj !== null) {
         const streamKey = Object.keys(bodyObj).find(
-          (k) => k.toLowerCase() === "stream"
+          (k) => k.toLowerCase() === "stream",
         );
         if (streamKey) {
           bodyObj[streamKey] = true;
@@ -537,7 +568,6 @@ export async function* fetchAIResponse(params: {
         signal,
       });
     } catch (fetchError) {
-
       if (
         signal?.aborted ||
         (fetchError instanceof Error && fetchError.name === "AbortError")
@@ -587,7 +617,6 @@ export async function* fetchAIResponse(params: {
     let buffer = "";
 
     while (true) {
-
       if (signal?.aborted) {
         reader.cancel();
         return;
@@ -597,7 +626,6 @@ export async function* fetchAIResponse(params: {
       try {
         readResult = await reader.read();
       } catch (readError) {
-
         if (
           signal?.aborted ||
           (readError instanceof Error && readError.name === "AbortError")
@@ -629,22 +657,67 @@ export async function* fetchAIResponse(params: {
             const parsed = JSON.parse(trimmed);
             const delta = getStreamingContent(
               parsed,
-              provider?.responseContentPath || ""
+              provider?.responseContentPath || "",
             );
             if (delta) {
               yield delta;
             }
-          } catch (e) {
-
-          }
+          } catch (e) {}
         }
       }
     }
   } catch (error) {
-    throw new Error(
-      `Error in fetchAIResponse: ${
-        error instanceof Error ? error.message : "Unknown error"
-      }`
-    );
+    throw new Error(formatFriendlyErrorMessage(error));
   }
+}
+
+export function formatFriendlyErrorMessage(err: any): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const lowerMsg = message.toLowerCase();
+
+  if (
+    lowerMsg.includes("licencia no encontrada") ||
+    lowerMsg.includes("licencia inválida") ||
+    lowerMsg.includes("licencia revocada") ||
+    lowerMsg.includes("licencia expirada") ||
+    lowerMsg.includes("licencia activa") ||
+    lowerMsg.includes("no está registrado para esta licencia") ||
+    lowerMsg.includes("license revoked") ||
+    lowerMsg.includes("license_invalid") ||
+    lowerMsg.includes("unauthorized") ||
+    lowerMsg.includes("403")
+  ) {
+    return "Tu licencia de InvisibleAI no está activa o ha expirado. Por favor, verifica o reactiva tu licencia en el panel de control.";
+  }
+
+  if (
+    lowerMsg.includes("límite diario gratuito alcanzado") ||
+    lowerMsg.includes("límite diario alcanzado") ||
+    lowerMsg.includes("quota") ||
+    lowerMsg.includes("limit") ||
+    lowerMsg.includes("429") ||
+    lowerMsg.includes("too many requests")
+  ) {
+    return "Has alcanzado el límite diario de mensajes. Si estás en la versión gratuita, puedes activar una licencia para aumentarlo. Los límites se reinician a la medianoche.";
+  }
+
+  if (
+    lowerMsg.includes("server error") ||
+    lowerMsg.includes("failed to fetch") ||
+    lowerMsg.includes("network error") ||
+    lowerMsg.includes("connect") ||
+    lowerMsg.includes("timeout") ||
+    lowerMsg.includes("500") ||
+    lowerMsg.includes("502") ||
+    lowerMsg.includes("503") ||
+    lowerMsg.includes("504") ||
+    lowerMsg.includes("bad gateway") ||
+    lowerMsg.includes("service unavailable") ||
+    lowerMsg.includes("failed to send chat request") ||
+    lowerMsg.includes("stream read error")
+  ) {
+    return "El servidor de InvisibleAI está temporalmente fuera de línea o se está reiniciando. Por favor, espera unos instantes e intenta nuevamente.";
+  }
+
+  return message;
 }
