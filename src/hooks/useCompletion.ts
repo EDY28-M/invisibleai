@@ -54,6 +54,41 @@ interface CompletionState {
   conversationHistory: ChatMessage[];
 }
 
+/**
+ * Construye el system prompt enriquecido para el chat reutilizando la misma
+ * lógica del backend que usa el modo de audio (build_ai_context + build_system_prompt):
+ * identidad/perfil, memoria del usuario, estado de licencia, conocimiento y funciones.
+ * Devuelve `undefined` solo si el backend no entrega nada (para no romper la llamada).
+ */
+async function buildEnrichedSystemPrompt(
+  userMessage: string,
+  conversationId: string | null
+): Promise<string | undefined> {
+  const userId =
+    localStorage.getItem("invisibleai_instance_id") || "default_user";
+  try {
+    const enriched = await invoke<string>("build_chat_system_prompt", {
+      userMessage,
+      conversationId,
+      userId,
+    });
+    if (enriched?.trim()) return enriched;
+  } catch (err) {
+    console.error("Failed to build enriched chat system prompt:", err);
+    // Fallback: al menos inyectar el perfil/identidad compilado.
+    try {
+      const compiled = await invoke<string>("get_compiled_system_prompt");
+      if (compiled?.trim()) return compiled;
+    } catch (fallbackErr) {
+      console.error(
+        "Failed to load compiled profile prompt (fallback):",
+        fallbackErr
+      );
+    }
+  }
+  return undefined;
+}
+
 export const useCompletion = () => {
   const {
     selectedAIProvider,
@@ -190,16 +225,27 @@ export const useCompletion = () => {
           ? undefined
           : allAiProviders.find((p) => p.id === selectedAIProvider.provider);
 
+        // Construir el system prompt COMPLETO en el backend (identidad/perfil +
+        // memoria + licencia + conocimiento + funciones), igual que el modo de audio.
+        // Imprescindible: los usuarios con licencia salen por la API directa de Groq,
+        // que NO pasa por el backend, así que el contexto debe inyectarse aquí.
+        const systemPrompt = await buildEnrichedSystemPrompt(
+          input,
+          state.currentConversationId
+        );
+
         try {
 
           for await (const chunk of fetchAIResponse({
             provider: useInvisibleAIAPI ? undefined : provider,
             selectedProvider: selectedAIProvider,
+            systemPrompt,
             history: messageHistory,
             userMessage: input,
             imagesBase64,
             signal,
             useInvisibleAIAPI,
+            conversationId: state.currentConversationId || undefined,
           })) {
 
             if (currentRequestIdRef.current !== requestId) {
@@ -561,14 +607,21 @@ export const useCompletion = () => {
               response: "",
             }));
 
+            const systemPrompt = await buildEnrichedSystemPrompt(
+              prompt,
+              state.currentConversationId
+            );
+
             for await (const chunk of fetchAIResponse({
               provider: useInvisibleAIAPI ? undefined : provider,
               selectedProvider: selectedAIProvider,
+              systemPrompt,
               history: messageHistory,
               userMessage: prompt,
               imagesBase64: [base64],
               signal,
               useInvisibleAIAPI,
+              conversationId: state.currentConversationId || undefined,
             })) {
 
               if (currentRequestIdRef.current !== requestId || signal.aborted) {

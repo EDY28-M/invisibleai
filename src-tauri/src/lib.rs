@@ -139,6 +139,8 @@ pub fn run() {
             api::set_active_profile_template,
             api::toggle_profile_modifier,
             api::set_profile_custom_notes,
+            api::get_compiled_system_prompt,
+            api::build_chat_system_prompt,
             speaker::start_system_audio_capture,
             speaker::stop_system_audio_capture,
             speaker::manual_stop_continuous,

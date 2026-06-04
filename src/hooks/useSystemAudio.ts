@@ -761,7 +761,15 @@ export function useSystemAudio() {
   const handleQuickActionClick = async (action: string) => {
     setError("");
 
-    const effectiveSystemPrompt = contextContent || "";
+    let effectiveSystemPrompt = contextContent || "";
+    try {
+      const compiledProfilePrompt = await invoke<string>("get_compiled_system_prompt");
+      if (compiledProfilePrompt?.trim()) {
+        effectiveSystemPrompt = compiledProfilePrompt + (effectiveSystemPrompt ? "\n\n" + effectiveSystemPrompt : "");
+      }
+    } catch (profileErr) {
+      console.error("Failed to load compiled profile prompt:", profileErr);
+    }
 
     let updatedMessages = [...conversationRef.current.messages];
 
@@ -1120,6 +1128,15 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         }
 
         try {
+          const compiledProfilePrompt = await invoke<string>("get_compiled_system_prompt");
+          if (compiledProfilePrompt?.trim()) {
+            effectivePrompt = compiledProfilePrompt + (effectivePrompt ? "\n\n" + effectivePrompt : "");
+          }
+        } catch (profileErr) {
+          console.error("Failed to load compiled profile prompt:", profileErr);
+        }
+
+        try {
           for await (const chunk of fetchAIResponse({
             provider: useInvisibleAIAPI ? undefined : provider,
             selectedProvider: selectedAIProvider,
@@ -1222,7 +1239,15 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           setScreenshotImage(compressed);
 
           const displayMsgText = "Analiza la captura de pantalla seleccionada.";
-          const effectiveSystemPrompt = contextContentRef.current || "";
+          let effectiveSystemPrompt = contextContentRef.current || "";
+          try {
+            const compiledProfilePrompt = await invoke<string>("get_compiled_system_prompt");
+            if (compiledProfilePrompt?.trim()) {
+              effectiveSystemPrompt = compiledProfilePrompt + (effectiveSystemPrompt ? "\n\n" + effectiveSystemPrompt : "");
+            }
+          } catch (profileErr) {
+            console.error("Failed to load compiled profile prompt:", profileErr);
+          }
 
           // Re-calculate previous messages history
           let updatedMessages = [...conversationRef.current.messages];

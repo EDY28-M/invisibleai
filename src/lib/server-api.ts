@@ -15,6 +15,14 @@ function getServerUrl(): string {
 let _instanceId: string = "";
 let _licenseKey: string = "";
 let _onUsageUpdate: ((balance: UsageBalanceInfo) => void) | null = null;
+
+// Cache de validación de licencia para no golpear la red en CADA mensaje.
+// La revocación ya se cubre con la validación al arranque y el refresco en
+// segundo plano; aquí solo evitamos el round-trip bloqueante en el camino
+// crítico del chat/STT, que es lo que añadía latencia perceptible.
+let _lastLicenseValidationAt = 0;
+let _lastLicenseValidationOk = false;
+const LICENSE_VALIDATION_TTL_MS = 10 * 60 * 1000; // 10 minutos
 const LICENSE_STATE_UPDATED_EVENT = "license-state-updated";
 
 const PREMIUM_LICENSE_KEYS = [
@@ -181,6 +189,8 @@ async function clearServerCredentials(reason: string): Promise<void> {
   }).catch(() => {});
 
   _licenseKey = "";
+  _lastLicenseValidationOk = false;
+  _lastLicenseValidationAt = 0;
   emit(LICENSE_STATE_UPDATED_EVENT, { active: false, reason }).catch(() => {});
 }
 
@@ -188,6 +198,14 @@ async function validateStoredLicenseOrClear(): Promise<boolean> {
   const ready = await ensureCredentialsLoaded();
   if (!ready || !_licenseKey || !_instanceId) return false;
   if (_licenseKey === "invisibleai-admin-local") return true;
+
+  // Resultado cacheado: si validamos OK hace poco, evitamos el round-trip.
+  if (
+    _lastLicenseValidationOk &&
+    Date.now() - _lastLicenseValidationAt < LICENSE_VALIDATION_TTL_MS
+  ) {
+    return true;
+  }
 
   try {
     const validation = await apiFetch<ValidateResponse>("/api/validate", {
@@ -199,7 +217,11 @@ async function validateStoredLicenseOrClear(): Promise<boolean> {
       }),
     });
 
-    if (validation.valid) return true;
+    if (validation.valid) {
+      _lastLicenseValidationOk = true;
+      _lastLicenseValidationAt = Date.now();
+      return true;
+    }
     await clearServerCredentials(validation.error || "license_invalid");
     return false;
   } catch (error) {

@@ -291,31 +291,33 @@ pub fn build_ai_context(
 }
 
 /// Compone el System Prompt final estructurado que se inyectará en la llamada a la API del modelo LLM
-pub fn build_system_prompt(context: AiContext, user_message: &str) -> String {
+pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile: bool) -> String {
     let mut prompt = String::new();
 
     // 1. Identidad y Perfil (Modular con fallback a legacy)
-    if let Some(ref compiled) = context.compiled_profile {
-        // Perfil modular activo → usar el compilador optimizado
-        let profile_block = crate::services::profile_service::compile_profile_prompt(compiled);
-        prompt.push_str(&profile_block);
-    } else if let Some(prof) = context.profile {
-        // Fallback al perfil legacy de ai_profile
-        prompt.push_str(&format!(
-            "[IDENTIDAD DEL ASISTENTE]\n\
-             Nombre: {}\n\
-             Rol: {}\n\
-             Objetivo: {}\n\
-             Personalidad: {}\n\
-             Reglas de Comportamiento:\n{}\n\
-             Limitaciones:\n{}\n\n",
-            prof.name,
-            prof.role,
-            prof.main_objective,
-            prof.personality,
-            prof.behavior_rules,
-            prof.limitations
-        ));
+    if !skip_profile {
+        if let Some(ref compiled) = context.compiled_profile {
+            // Perfil modular activo → usar el compilador optimizado
+            let profile_block = crate::services::profile_service::compile_profile_prompt(compiled);
+            prompt.push_str(&profile_block);
+        } else if let Some(prof) = context.profile {
+            // Fallback al perfil legacy de ai_profile
+            prompt.push_str(&format!(
+                "[IDENTIDAD DEL ASISTENTE]\n\
+                 Nombre: {}\n\
+                 Rol: {}\n\
+                 Objetivo: {}\n\
+                 Personalidad: {}\n\
+                 Reglas de Comportamiento:\n{}\n\
+                 Limitaciones:\n{}\n\n",
+                prof.name,
+                prof.role,
+                prof.main_objective,
+                prof.personality,
+                prof.behavior_rules,
+                prof.limitations
+            ));
+        }
     }
 
     // 1.5 Licencia y Versión de la Aplicación
@@ -350,6 +352,25 @@ pub fn build_system_prompt(context: AiContext, user_message: &str) -> String {
            * Modo sigilo (Stealth Mode) para proteger visualmente la ventana en grabaciones.\n\
            * Atajos de teclado avanzados y personalización completa.\n\n"
     );
+
+    // 1.6 Identidad y manejo de la licencia en las RESPUESTAS (varía según el estado detectado)
+    if context.has_license {
+        prompt.push_str(
+            "[IDENTIDAD Y MANEJO DE TU LICENCIA EN LAS RESPUESTAS]\n\
+             - Te llamas InvisibleAI. Si te preguntan quién eres, qué eres, qué haces, para qué sirves o cómo se te usa, preséntate como InvisibleAI y explica tus capacidades reales apoyándote en [FUNCIONES DISPONIBLES DE LA APP], de forma clara y breve.\n\
+             - DATO CONFIRMADO POR EL SISTEMA: el usuario TIENE una LICENCIA ACTIVA (versión PRO). Cuando venga al caso, dilo con naturalidad: su licencia está activa y tiene desbloqueadas TODAS las funciones premium (STT multicanal en tiempo real ilimitado, guardado automático de transcripciones, supresión inteligente de su propia voz, panel de memoria contextual, modo sigilo y atajos avanzados).\n\
+             - NUNCA lo trates como usuario gratuito ni le sugieras \"activar una licencia\": ya es PRO.\n\
+             - VARÍA tu redacción en cada respuesta. Aunque te pregunten exactamente lo mismo dos veces, responde con palabras y estructura distintas, de forma natural; jamás repitas un texto idéntico.\n\n",
+        );
+    } else {
+        prompt.push_str(
+            "[IDENTIDAD Y MANEJO DE TU LICENCIA EN LAS RESPUESTAS]\n\
+             - Te llamas InvisibleAI. Ante un saludo (\"hola\") o si te preguntan quién eres, qué eres, qué haces, para qué sirves o cómo se te usa, preséntate como InvisibleAI y explica brevemente qué puedes hacer.\n\
+             - DATO CONFIRMADO POR EL SISTEMA: el usuario está en la versión FREE (gratuita). Explícale con amabilidad qué SÍ puede hacer gratis (chat básico y transcripción estándar, con límites diarios de uso) y qué funciones están LIMITADAS o bloqueadas en free: STT multicanal en tiempo real ilimitado, guardado automático de transcripciones, supresión inteligente de su propia voz, panel de administración de memoria contextual, modo sigilo y atajos avanzados.\n\
+             - Cuando menciones funciones bloqueadas o el usuario pida más capacidades, invítalo de forma breve y NO insistente a activar una licencia para desbloquear todo lo PRO.\n\
+             - VARÍA tu redacción en cada respuesta. Aunque te pregunten exactamente lo mismo dos veces, responde con palabras y estructura distintas, de forma natural; jamás repitas un texto idéntico.\n\n",
+        );
+    }
 
     // 2. Conocimiento General de InvisibleAI
     prompt.push_str("[CONTEXTO GENERAL DE INVISIBLEAI]\n");

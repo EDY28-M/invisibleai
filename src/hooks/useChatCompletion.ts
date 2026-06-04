@@ -246,6 +246,35 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
           }
         }
 
+        // Construir el system prompt COMPLETO en el backend (perfil + identidad +
+        // memoria del usuario + licencia + conocimiento + funciones), igual que el
+        // modo de audio (STT). Es imprescindible inyectarlo aquí porque los usuarios
+        // con licencia salen por la API directa de Groq, que NO pasa por el backend
+        // y por tanto nunca enriquecería el contexto por su cuenta.
+        try {
+          const userId =
+            safeLocalStorage.getItem("invisibleai_instance_id") || "default_user";
+          const enrichedPrompt = await invoke<string>("build_chat_system_prompt", {
+            userMessage: input,
+            conversationId,
+            userId,
+          });
+          if (enrichedPrompt?.trim()) {
+            effectiveSystemPrompt = enrichedPrompt + (effectiveSystemPrompt ? "\n\n" + effectiveSystemPrompt : "");
+          }
+        } catch (profileErr) {
+          console.error("Failed to build enriched chat system prompt:", profileErr);
+          // Fallback: al menos inyectar el perfil compilado para no perder identidad
+          try {
+            const compiledProfilePrompt = await invoke<string>("get_compiled_system_prompt");
+            if (compiledProfilePrompt?.trim()) {
+              effectiveSystemPrompt = compiledProfilePrompt + (effectiveSystemPrompt ? "\n\n" + effectiveSystemPrompt : "");
+            }
+          } catch (fallbackErr) {
+            console.error("Failed to load compiled profile prompt (fallback):", fallbackErr);
+          }
+        }
+
         let fullResponse = "";
 
         try {
@@ -253,6 +282,7 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
           for await (const chunk of fetchAIResponse({
             provider: useInvisibleAIAPI ? undefined : provider,
             selectedProvider: selectedAIProvider,
+            systemPrompt: effectiveSystemPrompt || undefined,
             history: extendedMessageHistory,
             userMessage: input,
             imagesBase64,
@@ -285,7 +315,7 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
 
             const lastMessage =
               updatedWithResponse.messages[
-                updatedWithResponse.messages.length - 1
+              updatedWithResponse.messages.length - 1
               ];
             if (lastMessage.role === "assistant") {
 

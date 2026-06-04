@@ -529,7 +529,8 @@ pub async fn chat_stream_response(
                     &user_message,
                     intent,
                 ) {
-                    let enriched = build_system_prompt(context, &user_message);
+                    let skip_profile = system_prompt.as_ref().map_or(false, |p| p.contains("[IDENTIDAD DEL ASISTENTE]"));
+                let enriched = build_system_prompt(context, &user_message, skip_profile);
                     if let Some(existing) = system_prompt {
                         final_system_prompt = Some(format!(
                             "{}\n\n[INSTRUCCIONES ADICIONALES]\n{}",
@@ -1353,6 +1354,156 @@ pub async fn toggle_profile_modifier(
 pub async fn set_profile_custom_notes(app: tauri::AppHandle, notes: String) -> Result<(), String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     crate::services::profile_service::set_custom_notes(app_data_dir, &notes)
+}
+
+#[tauri::command]
+pub async fn get_compiled_system_prompt(app: tauri::AppHandle) -> Result<String, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    // 1. Intentar perfil modular activo
+    match crate::services::profile_service::get_compiled_profile(app_data_dir.clone()) {
+        Ok(Some(compiled)) => {
+            return Ok(crate::services::profile_service::compile_profile_prompt(&compiled));
+        }
+        Ok(None) => {} // sin perfil modular → continúa al fallback
+        Err(e) => return Err(e),
+    }
+
+    // 2. Fallback: construir prompt desde ai_profile + app_knowledge + app_features de la BD
+    let db_path = app_data_dir.join("invisibleai.db");
+    let conn = match rusqlite::Connection::open(&db_path) {
+        Ok(c) => c,
+        Err(_) => return Ok(String::new()),
+    };
+
+    let mut prompt = String::with_capacity(2048);
+
+    // Identidad desde ai_profile
+    let profile_row: Option<(String, String, String, String, String, String)> = conn
+        .query_row(
+            "SELECT name, role, personality, main_objective, behavior_rules, limitations \
+             FROM ai_profile WHERE id = 'default'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+        )
+        .ok();
+
+    if let Some((name, role, personality, objective, rules, limits)) = profile_row {
+        prompt.push_str(&format!(
+            "[IDENTIDAD DEL ASISTENTE]\n\
+             Nombre: {}\n\
+             Rol: {}\n\
+             Personalidad: {}\n\
+             Objetivo Principal: {}\n\
+             Reglas de Comportamiento:\n{}\n\
+             Limitaciones:\n{}\n\n",
+            name, role, personality, objective, rules, limits
+        ));
+    } else {
+        // Si ni siquiera hay ai_profile, poner identidad mínima
+        prompt.push_str(
+            "[IDENTIDAD DEL ASISTENTE]\n\
+             Eres InvisibleAI, un asistente de escritorio inteligente integrado en la aplicación. \
+             Eres experto, conciso, proactivo y altamente contextualizado al entorno del usuario.\n\n",
+        );
+    }
+
+    // Conocimiento del producto
+    let mut stmt = conn
+        .prepare("SELECT title, content FROM app_knowledge ORDER BY importance DESC")
+        .unwrap_or_else(|_| conn.prepare("SELECT title, content FROM app_knowledge").unwrap());
+
+    let knowledge: Vec<(String, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map(|iter| iter.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+
+    if !knowledge.is_empty() {
+        prompt.push_str("[CONTEXTO DEL PRODUCTO]\n");
+        for (title, content) in &knowledge {
+            prompt.push_str(&format!("* {}: {}\n", title, content));
+        }
+        prompt.push('\n');
+    }
+
+    // Funcionalidades activas
+    let mut stmt2 = conn
+        .prepare("SELECT feature_name, description, status FROM app_features WHERE status = 'active'")
+        .unwrap_or_else(|_| conn.prepare("SELECT feature_name, description, status FROM app_features").unwrap());
+
+    let features: Vec<(String, String, String)> = stmt2
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map(|iter| iter.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default();
+
+    if !features.is_empty() {
+        prompt.push_str("[FUNCIONALIDADES DISPONIBLES]\n");
+        for (name, desc, status) in &features {
+            prompt.push_str(&format!("* {} ({}): {}\n", name, status, desc));
+        }
+        prompt.push('\n');
+    }
+
+    prompt.push_str(
+        "[INSTRUCCIONES DE COMPORTAMIENTO]\n\
+         - Responde siempre de forma específica y contextualizada.\n\
+         - Nunca actúes como un chatbot genérico desconectado del contexto.\n\
+         - Si el usuario pregunta quién eres, explica tu identidad y capacidades.\n\
+         - Sé directo, profesional y útil en cada respuesta.\n"
+    );
+
+    Ok(prompt)
+}
+
+/// Construye el system prompt COMPLETO y enriquecido para el chat de texto,
+/// reutilizando exactamente la misma lógica que usa el modo de audio (STT):
+/// `build_ai_context` + `build_system_prompt`. Así el chat recibe identidad/perfil,
+/// memoria del usuario, estado de licencia, conocimiento y funciones de la app,
+/// sin importar si la petición sale por la API directa de Groq (usuarios con
+/// licencia) o por el proxy de InvisibleAI. Es la pieza que faltaba: la rama de
+/// Groq directo nunca pasa por el backend, así que el contexto debe inyectarse
+/// aquí, en el system prompt, desde el frontend.
+#[tauri::command]
+pub async fn build_chat_system_prompt(
+    app: tauri::AppHandle,
+    user_message: String,
+    conversation_id: Option<String>,
+    user_id: Option<String>,
+) -> Result<String, String> {
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+
+    use crate::services::context_builder::{
+        build_ai_context, build_system_prompt, CurrentScreenContext,
+    };
+    use crate::services::intent_classifier::classify_user_intent;
+
+    let uid = user_id
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "default_user".to_string());
+    let cid = conversation_id
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "default_conversation".to_string());
+
+    let screen_ctx = CurrentScreenContext {
+        current_screen: "ChatPage".to_string(),
+        current_route: "/chat".to_string(),
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+        selected_feature: Some("chat".to_string()),
+    };
+
+    let intent = classify_user_intent(&user_message);
+
+    let context = build_ai_context(
+        app_data_dir,
+        &uid,
+        &cid,
+        None, // el chat de texto no pertenece a una sesión de audio en vivo
+        screen_ctx,
+        &user_message,
+        intent,
+    )?;
+
+    Ok(build_system_prompt(context, &user_message, false))
 }
 
 pub fn format_friendly_error(err: &str) -> String {

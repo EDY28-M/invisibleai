@@ -626,7 +626,7 @@ async fn run_llm_orchestration(
         "assistant_request",
     )?;
 
-    let system_prompt = build_system_prompt(context, triggering_text);
+    let system_prompt = build_system_prompt(context, triggering_text, false);
 
     let mut messages: Vec<serde_json::Value> = Vec::new();
     messages.push(serde_json::json!({
