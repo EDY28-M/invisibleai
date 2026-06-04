@@ -24,8 +24,6 @@ export interface UsageBalanceInfo {
 }
 
 export type IContextType = {
-  systemPrompt: string;
-  setSystemPrompt: Dispatch<SetStateAction<string>>;
   allAiProviders: TYPE_PROVIDER[];
   customAiProviders: TYPE_PROVIDER[];
   selectedAIProvider: {

@@ -58,7 +58,6 @@ export const useCompletion = () => {
   const {
     selectedAIProvider,
     allAiProviders,
-    systemPrompt,
     screenshotConfiguration,
     setScreenshotConfiguration,
     invisibleaiApiEnabled,
@@ -196,7 +195,6 @@ export const useCompletion = () => {
           for await (const chunk of fetchAIResponse({
             provider: useInvisibleAIAPI ? undefined : provider,
             selectedProvider: selectedAIProvider,
-            systemPrompt: systemPrompt || undefined,
             history: messageHistory,
             userMessage: input,
             imagesBase64,
@@ -269,7 +267,6 @@ export const useCompletion = () => {
       state.attachedFiles,
       selectedAIProvider,
       allAiProviders,
-      systemPrompt,
       state.conversationHistory,
       invisibleaiApiEnabled,
     ]
@@ -567,7 +564,6 @@ export const useCompletion = () => {
             for await (const chunk of fetchAIResponse({
               provider: useInvisibleAIAPI ? undefined : provider,
               selectedProvider: selectedAIProvider,
-              systemPrompt: systemPrompt || undefined,
               history: messageHistory,
               userMessage: prompt,
               imagesBase64: [base64],
@@ -652,7 +648,6 @@ export const useCompletion = () => {
       state.conversationHistory,
       selectedAIProvider,
       allAiProviders,
-      systemPrompt,
       saveCurrentConversation,
       inputRef,
       invisibleaiApiEnabled,

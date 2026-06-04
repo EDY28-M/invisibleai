@@ -6,7 +6,7 @@ export const AI_PROVIDERS = [
   -H "Authorization: Bearer {{API_KEY}}" \\
   -d '{
     "model": "{{MODEL}}",
-    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,
@@ -20,7 +20,6 @@ export const AI_PROVIDERS = [
   -H "content-type: application/json" \\
   -d '{
     "model": "{{MODEL}}",
-    "system": "{{SYSTEM_PROMPT}}",
     "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "{{IMAGE}}"}}]}],
     "max_tokens": 1024
   }'`,
@@ -34,7 +33,7 @@ export const AI_PROVIDERS = [
   -H "Authorization: Bearer {{API_KEY}}" \\
   -d '{
     "model": "{{MODEL}}",
-    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,
@@ -46,7 +45,7 @@ export const AI_PROVIDERS = [
   -H "Content-Type: application/json" \\
   -d '{
     "model": "{{MODEL}}",
-    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,
@@ -58,7 +57,7 @@ export const AI_PROVIDERS = [
   -H "Authorization: Bearer {{API_KEY}}" \\
   -d '{
     "model": "{{MODEL}}",
-    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,
@@ -70,7 +69,7 @@ export const AI_PROVIDERS = [
     -H "Content-Type: application/json" \\
     -d '{
       "model": "{{MODEL}}",
-      "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}]}]
+      "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}]}]
     }'`,
     responseContentPath: "message.content[0].text",
     streaming: true,
@@ -82,7 +81,7 @@ export const AI_PROVIDERS = [
     -H "Authorization: Bearer {{API_KEY}}" \\
     -d '{
       "model": "{{MODEL}}",
-      "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,{{IMAGE}}"}}]}],
+      "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,{{IMAGE}}"}}]}],
       "temperature": 1,
       "stream": true
     }'`,
@@ -96,7 +95,7 @@ export const AI_PROVIDERS = [
   -H "Content-Type: application/json" \\
   -d '{
     "model": "{{MODEL}}",
-    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,
@@ -108,7 +107,7 @@ export const AI_PROVIDERS = [
   -H "Authorization: Bearer {{API_KEY}}" \
   -d '{
     "model": "{{MODEL}}",
-    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,
@@ -120,7 +119,7 @@ export const AI_PROVIDERS = [
     -H "Content-Type: application/json" \\
     -d '{
     "model": "{{MODEL}}",
-    "messages": [{"role": "system", "content": "{{SYSTEM_PROMPT}}"}, {"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
+    "messages": [{"role": "user", "content": [{"type": "text", "text": "{{TEXT}}"}, {"type": "image_url", "image_url": {"url": "data:image/png;base64,{{IMAGE}}"}}]}]
   }'`,
     responseContentPath: "choices[0].message.content",
     streaming: true,

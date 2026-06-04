@@ -34,10 +34,6 @@ const aiCurlPlaceholder = `curl --location 'http://127.0.0.1:1337/v1/chat/comple
   "model": "{{MODEL}}",
   "messages": [
     {
-      "role": "system",
-      "content": "{{SYSTEM_PROMPT}}"
-    },
-    {
       "role": "user",
       "content": [
         {
@@ -124,7 +120,7 @@ export const CustomProviders = ({ allAiProviders }: UseSettingsReturn) => {
                     variant="ghost"
                     className="size-8 rounded-lg"
                     onClick={() => provider.id && handleEdit(provider.id)}
-                    title={t("prompts_edit")}
+                    title={t("edit")}
                   >
                     <EditIcon className="size-4" />
                   </Button>
@@ -133,7 +129,7 @@ export const CustomProviders = ({ allAiProviders }: UseSettingsReturn) => {
                     variant="ghost"
                     className="size-8 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => provider.id && handleDelete(provider.id)}
-                    title={t("prompts_delete")}
+                    title={t("delete")}
                   >
                     <TrashIcon className="size-4" />
                   </Button>
@@ -217,7 +213,7 @@ export const CustomProviders = ({ allAiProviders }: UseSettingsReturn) => {
             </Button>
             <Button onClick={handleSave} disabled={!formData.curl.trim()} className="h-9 rounded-xl gap-1.5 transition-all">
               <SaveIcon className="size-4" />
-              {editingProvider ? t("prompts_edit") : t("save")}
+              {editingProvider ? t("edit") : t("save")}
             </Button>
           </DialogFooter>
         </DialogContent>

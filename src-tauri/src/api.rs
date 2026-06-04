@@ -150,12 +150,6 @@ pub struct ModelsResponse {
     models: Vec<Model>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct SystemPromptResponse {
-    prompt_name: String,
-    system_prompt: String,
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InvisibleAIPrompt {
     title: String,
@@ -820,60 +814,6 @@ pub async fn fetch_prompts() -> Result<InvisibleAIPromptsResponse, String> {
 }
 
 #[tauri::command]
-pub async fn create_system_prompt(
-    app: AppHandle,
-    user_prompt: String,
-) -> Result<SystemPromptResponse, String> {
-    let app_endpoint = get_app_endpoint()?;
-    let api_access_key = get_api_access_key()?;
-    let (license_key, instance_id, _, _, _) = get_stored_credentials(&app).await?;
-    let machine_id: String = app.machine_uid().get_machine_uid().unwrap().id.unwrap();
-    let app_version: String = app.package_info().version.to_string();
-
-    let client = reqwest::Client::new();
-    let url = format!("{}/api/prompt", app_endpoint);
-
-    let response = client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", api_access_key))
-        .header("license_key", &license_key)
-        .header("instance", &instance_id)
-        .header("machine_id", &machine_id)
-        .header("app_version", &app_version)
-        .json(&serde_json::json!({
-            "user_prompt": user_prompt
-        }))
-        .send()
-        .await
-        .map_err(|e| format!("Failed to make prompt request: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unknown server error".to_string());
-
-        if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&error_text) {
-            if let Some(error_msg) = error_json.get("error").and_then(|e| e.as_str()) {
-                return Err(error_msg.to_string());
-            } else if let Some(message) = error_json.get("message").and_then(|m| m.as_str()) {
-                return Err(message.to_string());
-            }
-        }
-        return Err(format!("Server error ({}): {}", status, error_text));
-    }
-
-    let system_prompt_response: SystemPromptResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse system prompt response: {}", e))?;
-
-    Ok(system_prompt_response)
-}
-
-#[tauri::command]
 pub async fn check_license_status(app: AppHandle) -> Result<bool, String> {
     match get_stored_credentials(&app).await {
         Ok(_) => Ok(true),
@@ -1275,59 +1215,6 @@ pub async fn save_ai_feedback(
         &expected_behavior,
         &severity,
     )
-}
-
-#[tauri::command]
-pub async fn get_enriched_system_prompt(
-    app: AppHandle,
-    user_message: String,
-    system_prompt: Option<String>,
-    user_id: Option<String>,
-    conversation_id: Option<String>,
-    current_screen: Option<String>,
-    current_route: Option<String>,
-    app_version: Option<String>,
-    selected_feature: Option<String>,
-    session_id: Option<String>,
-) -> Result<String, String> {
-    let mut final_system_prompt = system_prompt.clone().unwrap_or_default();
-    if let (Some(uid), Some(cid), Some(screen), Some(route)) =
-        (&user_id, &conversation_id, &current_screen, &current_route)
-    {
-        use crate::services::context_builder::{
-            build_ai_context, build_system_prompt, CurrentScreenContext,
-        };
-        use crate::services::intent_classifier::classify_user_intent;
-
-        if let Ok(app_data_dir) = app.path().app_data_dir() {
-            let intent = classify_user_intent(&user_message);
-            let screen_ctx = CurrentScreenContext {
-                current_screen: screen.clone(),
-                current_route: route.clone(),
-                app_version: app_version.clone().unwrap_or_else(|| "1.0.0".to_string()),
-                selected_feature: selected_feature.clone(),
-            };
-
-            if let Ok(context) = build_ai_context(
-                app_data_dir,
-                uid,
-                cid,
-                session_id.as_deref(),
-                screen_ctx,
-                &user_message,
-                intent,
-            ) {
-                let enriched = build_system_prompt(context, &user_message);
-                if let Some(existing) = system_prompt {
-                    final_system_prompt =
-                        format!("{}\n\n[INSTRUCCIONES ADICIONALES]\n{}", enriched, existing);
-                } else {
-                    final_system_prompt = enriched;
-                }
-            }
-        }
-    }
-    Ok(final_system_prompt)
 }
 
 #[tauri::command]

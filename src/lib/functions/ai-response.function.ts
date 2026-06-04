@@ -139,7 +139,7 @@ async function* fetchInvisibleAIAIResponse(params: {
         imagesBase64,
       );
       const modelId =
-        storage.groq_model || "meta-llama/llama-4-scout-17b-16e-instruct";
+        storage.groq_model || "llama-3.3-70b-versatile";
 
       const response = await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
@@ -390,50 +390,7 @@ export async function* fetchAIResponse(params: {
       return;
     }
 
-    let enrichedSystemPrompt = buildEnhancedSystemPrompt(systemPrompt);
-
-    try {
-      const conversationIdVal = conversationId || "default_conv";
-      const userIdVal =
-        userId ||
-        localStorage.getItem("invisibleai_instance_id") ||
-        "default_user";
-      const currentRouteVal = currentRoute || window.location.pathname;
-      const currentScreenVal =
-        currentScreen ||
-        (currentRouteVal === "/chat"
-          ? "ChatPage"
-          : currentRouteVal === "/settings"
-            ? "SettingsPage"
-            : currentRouteVal === "/memory-admin"
-              ? "MemoryAdminPage"
-              : "DashboardPage");
-      const appVersionVal = appVersion || "1.2.3";
-      const selectedFeatureVal =
-        selectedFeature ||
-        (currentRouteVal === "/chat"
-          ? "chat"
-          : currentRouteVal === "/memory-admin"
-            ? "mem_admin"
-            : undefined);
-
-      enrichedSystemPrompt = await invoke<string>(
-        "get_enriched_system_prompt",
-        {
-          userMessage,
-          systemPrompt: enrichedSystemPrompt,
-          userId: userIdVal,
-          conversationId: conversationIdVal,
-          currentScreen: currentScreenVal,
-          currentRoute: currentRouteVal,
-          appVersion: appVersionVal,
-          selectedFeature: selectedFeatureVal,
-          sessionId,
-        },
-      );
-    } catch (err) {
-      console.error("Failed to enrich system prompt via Tauri:", err);
-    }
+    const enrichedSystemPrompt = buildEnhancedSystemPrompt(systemPrompt);
 
     if (useInvisibleAIAPI) {
       yield* fetchInvisibleAIAIResponse({
@@ -535,7 +492,6 @@ export async function* fetchAIResponse(params: {
           value,
         ]),
       ),
-      SYSTEM_PROMPT: enrichedSystemPrompt || "",
     };
 
     bodyObj = deepVariableReplacer(bodyObj, allVariables);
@@ -685,7 +641,9 @@ export function formatFriendlyErrorMessage(err: any): string {
     lowerMsg.includes("license revoked") ||
     lowerMsg.includes("license_invalid") ||
     lowerMsg.includes("unauthorized") ||
-    lowerMsg.includes("403")
+    lowerMsg.includes("server error 403") ||
+    lowerMsg.includes("status code: 403") ||
+    lowerMsg.includes("status: 403")
   ) {
     return "Tu licencia de InvisibleAI no está activa o ha expirado. Por favor, verifica o reactiva tu licencia en el panel de control.";
   }
@@ -694,7 +652,11 @@ export function formatFriendlyErrorMessage(err: any): string {
     lowerMsg.includes("límite diario gratuito alcanzado") ||
     lowerMsg.includes("límite diario alcanzado") ||
     lowerMsg.includes("quota") ||
-    lowerMsg.includes("limit") ||
+    lowerMsg.includes("rate limit") ||
+    lowerMsg.includes("daily limit") ||
+    lowerMsg.includes("limit reached") ||
+    lowerMsg.includes("limite alcanzado") ||
+    lowerMsg.includes("límite alcanzado") ||
     lowerMsg.includes("429") ||
     lowerMsg.includes("too many requests")
   ) {

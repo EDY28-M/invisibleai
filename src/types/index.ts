@@ -4,7 +4,6 @@ export * from "./context.type";
 export * from "./provider.type";
 export * from "./settings.hook";
 export * from "./completion";
-export * from "./system-prompts";
 export * from "./shortcuts";
 export * from "./memory";
 export * from "./session";

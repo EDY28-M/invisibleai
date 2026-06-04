@@ -73,7 +73,6 @@ export const useChatCompletion = (
   const {
     selectedAIProvider,
     allAiProviders,
-    systemPrompt,
     screenshotConfiguration,
     setScreenshotConfiguration,
     selectedSttProvider,
@@ -221,7 +220,7 @@ export const useChatCompletion = (
         setTimeout(scrollToBottom, 100);
 
         let extendedMessageHistory = [...messageHistory];
-        let effectiveSystemPrompt = systemPrompt || "";
+        let effectiveSystemPrompt = "";
 
         const useConversationalMemory =
           safeLocalStorage.getItem("system_audio_use_memory") === "true";
@@ -254,7 +253,6 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
           for await (const chunk of fetchAIResponse({
             provider: useInvisibleAIAPI ? undefined : provider,
             selectedProvider: selectedAIProvider,
-            systemPrompt: effectiveSystemPrompt || undefined,
             history: extendedMessageHistory,
             userMessage: input,
             imagesBase64,
@@ -408,7 +406,6 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
       state.attachedFiles,
       selectedAIProvider,
       allAiProviders,
-      systemPrompt,
       messages,
       conversationId,
       setMessages,

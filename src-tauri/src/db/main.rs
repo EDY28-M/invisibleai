@@ -5,7 +5,7 @@ pub fn migrations() -> Vec<Migration> {
         Migration {
             version: 1,
             description: "create_system_prompts_table",
-            sql: include_str!("migrations/system-prompts.sql"),
+            sql: include_str!("migrations/legacy-system-prompts.sql"),
             kind: MigrationKind::Up,
         },
         Migration {

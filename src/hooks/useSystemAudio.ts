@@ -18,7 +18,6 @@ import {
 } from "@/lib/screen-capture-permission";
 import {
   DEFAULT_QUICK_ACTIONS,
-  DEFAULT_SYSTEM_PROMPT,
   STORAGE_KEYS,
 } from "@/config";
 import {
@@ -112,7 +111,6 @@ export function useSystemAudio() {
     allSttProviders,
     selectedAIProvider,
     allAiProviders,
-    systemPrompt,
     selectedAudioDevices,
     invisibleaiApiEnabled,
     hasActiveLicense,
@@ -422,7 +420,6 @@ export function useSystemAudio() {
   const isContinuousModeRef = useRef(isContinuousMode);
   const vadConfigRef = useRef(vadConfig);
   const useSystemPromptRef = useRef(useSystemPrompt);
-  const systemPromptRef = useRef(systemPrompt);
   const contextContentRef = useRef(contextContent);
   const useConversationalMemoryRef = useRef(useConversationalMemory);
 
@@ -435,7 +432,6 @@ export function useSystemAudio() {
   useEffect(() => { isContinuousModeRef.current = isContinuousMode; }, [isContinuousMode]);
   useEffect(() => { vadConfigRef.current = vadConfig; }, [vadConfig]);
   useEffect(() => { useSystemPromptRef.current = useSystemPrompt; }, [useSystemPrompt]);
-  useEffect(() => { systemPromptRef.current = systemPrompt; }, [systemPrompt]);
   useEffect(() => { contextContentRef.current = contextContent; }, [contextContent]);
   useEffect(() => { useConversationalMemoryRef.current = useConversationalMemory; }, [useConversationalMemory]);
   useEffect(() => { selectedSttProviderRef.current = selectedSttProvider; }, [selectedSttProvider]);
@@ -765,9 +761,7 @@ export function useSystemAudio() {
   const handleQuickActionClick = async (action: string) => {
     setError("");
 
-    const effectiveSystemPrompt = useSystemPrompt
-      ? systemPrompt || DEFAULT_SYSTEM_PROMPT
-      : contextContent || DEFAULT_SYSTEM_PROMPT;
+    const effectiveSystemPrompt = contextContent || "";
 
     let updatedMessages = [...conversationRef.current.messages];
 
@@ -1228,9 +1222,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           setScreenshotImage(compressed);
 
           const displayMsgText = "Analiza la captura de pantalla seleccionada.";
-          const effectiveSystemPrompt = useSystemPromptRef.current
-            ? systemPromptRef.current || DEFAULT_SYSTEM_PROMPT
-            : contextContentRef.current || DEFAULT_SYSTEM_PROMPT;
+          const effectiveSystemPrompt = contextContentRef.current || "";
 
           // Re-calculate previous messages history
           let updatedMessages = [...conversationRef.current.messages];
