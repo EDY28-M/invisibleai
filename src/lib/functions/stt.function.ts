@@ -88,8 +88,7 @@ export async function fetchSTT(params: STTParams): Promise<string> {
       curlJson = getCachedCurlJson(provider.curl);
     } catch (error) {
       throw new Error(
-        `Failed to parse curl: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to parse curl: ${error instanceof Error ? error.message : "Unknown error"
         }`
       );
     }
@@ -210,7 +209,7 @@ export async function fetchSTT(params: STTParams): Promise<string> {
       let errText = "";
       try {
         errText = await response.text();
-      } catch {}
+      } catch { }
       let errMsg: string;
       try {
         const errObj = JSON.parse(errText);

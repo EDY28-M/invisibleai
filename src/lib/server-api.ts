@@ -47,7 +47,7 @@ async function ensureCredentialsLoaded(): Promise<boolean> {
       _licenseKey = storage.license_key ?? "";
       return true;
     }
-  } catch {}
+  } catch { }
   return false;
 }
 
@@ -186,12 +186,12 @@ export function isLicenseInvalidError(error: unknown): boolean {
 async function clearServerCredentials(reason: string): Promise<void> {
   await invoke("secure_storage_remove", {
     keys: [...PREMIUM_LICENSE_KEYS],
-  }).catch(() => {});
+  }).catch(() => { });
 
   _licenseKey = "";
   _lastLicenseValidationOk = false;
   _lastLicenseValidationAt = 0;
-  emit(LICENSE_STATE_UPDATED_EVENT, { active: false, reason }).catch(() => {});
+  emit(LICENSE_STATE_UPDATED_EVENT, { active: false, reason }).catch(() => { });
 }
 
 async function validateStoredLicenseOrClear(): Promise<boolean> {
@@ -247,7 +247,7 @@ function backgroundRefreshUsage(): void {
       .getUsageBalance()
       .then((balance) => {
         if (_onUsageUpdate) _onUsageUpdate(balance);
-        emit("usage-balance-updated", balance).catch(() => {});
+        emit("usage-balance-updated", balance).catch(() => { });
       })
       .catch((err) => {
         console.warn("[serverApi] backgroundRefreshUsage failed:", err);
@@ -382,13 +382,13 @@ export const serverApi = {
       })
         .then((balance) => {
           if (_onUsageUpdate) _onUsageUpdate(balance);
-          emit("usage-balance-updated", balance).catch(() => {});
+          emit("usage-balance-updated", balance).catch(() => { });
         })
         .catch((err) => {
           if (isLicenseInvalidError(err)) {
             clearServerCredentials(
               err instanceof Error ? err.message : "license_invalid",
-            ).catch(() => {});
+            ).catch(() => { });
             return;
           }
           console.warn("[serverApi] reportStreamingSeconds failed:", err);
@@ -465,7 +465,7 @@ export const serverApi = {
         .getUsageBalance()
         .then((balance) => {
           if (_onUsageUpdate) _onUsageUpdate(balance);
-          emit("usage-balance-updated", balance).catch(() => {});
+          emit("usage-balance-updated", balance).catch(() => { });
         })
         .catch((err) => {
           console.warn("[serverApi] refreshBalance failed:", err);
@@ -490,13 +490,13 @@ export const serverApi = {
           .then((balance) => {
             if (_onUsageUpdate) _onUsageUpdate(balance);
 
-            emit("usage-balance-updated", balance).catch(() => {});
+            emit("usage-balance-updated", balance).catch(() => { });
           })
           .catch((err) => {
             if (isLicenseInvalidError(err)) {
               clearServerCredentials(
                 err instanceof Error ? err.message : "license_invalid",
-              ).catch(() => {});
+              ).catch(() => { });
               return;
             }
 
