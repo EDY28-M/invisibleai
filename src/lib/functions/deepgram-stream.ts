@@ -10,6 +10,8 @@
  * - Uses a gain-0 node to prevent feedback loops in speakers/headphones
  */
 
+import { getResponseSettings } from "../storage/response-settings.storage";
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type StreamState =
@@ -93,10 +95,47 @@ export class DeepgramStreamManager {
     config: DeepgramStreamConfig,
     callbacks: DeepgramStreamCallbacks
   ) {
+    const responseSettings = getResponseSettings();
+    const mapLanguageToDeepgram = (lang: string): string => {
+      switch (lang) {
+        case "english": return "en";
+        case "spanish": return "es-419";
+        case "french": return "fr";
+        case "german": return "de";
+        case "italian": return "it";
+        case "portuguese": return "pt";
+        case "dutch": return "nl";
+        case "russian": return "ru";
+        case "chinese": return "zh";
+        case "japanese": return "ja";
+        case "korean": return "ko";
+        case "arabic": return "ar";
+        case "turkish": return "tr";
+        case "polish": return "pl";
+        case "swedish": return "sv";
+        case "norwegian": return "no";
+        case "danish": return "da";
+        case "finnish": return "fi";
+        case "greek": return "el";
+        case "czech": return "cs";
+        case "hungarian": return "hu";
+        case "romanian": return "ro";
+        case "ukrainian": return "uk";
+        case "vietnamese": return "vi";
+        case "thai": return "th";
+        case "indonesian": return "id";
+        case "malay": return "ms";
+        case "hebrew": return "he";
+        case "filipino": return "fil";
+        default: return "es-419";
+      }
+    };
+    const targetLanguage = mapLanguageToDeepgram(responseSettings.language);
+
     this.config = {
       apiKey: config.apiKey,
       model: config.model || "nova-3",
-      language: config.language || "es-419",
+      language: targetLanguage,
       smartFormat: config.smartFormat ?? true,
       interimResults: config.interimResults ?? true,
       endpointing: config.endpointing ?? 200,

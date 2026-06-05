@@ -338,10 +338,11 @@ export const serverApi = {
     return apiFetch(`/api/credentials?${params}`);
   },
 
-  async transcribe(audio: Blob, filename = "audio.wav"): Promise<string> {
+  async transcribe(audio: Blob, filename = "audio.wav", language?: string): Promise<string> {
     const params = new URLSearchParams();
     if (_instanceId) params.set("instanceId", _instanceId);
     if (_licenseKey) params.set("licenseKey", _licenseKey);
+    if (language) params.set("language", language);
     const qs = params.toString() ? `?${params}` : "";
     const form = new FormData();
     form.append("file", audio, filename);

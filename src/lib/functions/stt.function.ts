@@ -9,6 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { TYPE_PROVIDER } from "@/types";
 import curl2Json from "@bany/curl-to-json";
 import { serverApi } from "@/lib/server-api";
+import { getResponseSettings } from "../storage/response-settings.storage";
 
 const curlJsonCache = new Map<string, any>();
 function getCachedCurlJson(curl: string) {
@@ -31,7 +32,7 @@ const FREE_STT_MODEL = "whisper-large-v3";
  *
  * No blocking license validation: free users must be able to transcribe without a license.
  */
-async function fetchInvisibleAISTT(audio: File | Blob): Promise<string> {
+async function fetchInvisibleAISTT(audio: File | Blob, language?: string): Promise<string> {
   const storage = await invoke<{
     groq_api_key?: string;
   }>("secure_storage_get").catch(() => ({}) as { groq_api_key?: string });
@@ -45,6 +46,9 @@ async function fetchInvisibleAISTT(audio: File | Blob): Promise<string> {
     form.append("file", blob, (audio as File).name || "audio.wav");
     form.append("model", FREE_STT_MODEL);
     form.append("response_format", "json");
+    if (language) {
+      form.append("language", language);
+    }
 
     const resp = await fetch(
       "https://api.groq.com/openai/v1/audio/transcriptions",
@@ -64,7 +68,7 @@ async function fetchInvisibleAISTT(audio: File | Blob): Promise<string> {
   }
 
   // ── FREE: direct call to InvisibleAI server (proxy → Groq Whisper) ───────
-  return await serverApi.transcribe(audio);
+  return await serverApi.transcribe(audio, "audio.wav", language);
 }
 
 export interface STTParams {
@@ -84,15 +88,52 @@ export async function fetchSTT(params: STTParams): Promise<string> {
   try {
     const { provider, selectedProvider, audio, useInvisibleAIAPI } = params;
 
+    const responseSettings = getResponseSettings();
+    const mapLanguageToISO = (lang: string): string => {
+      switch (lang) {
+        case "english": return "en";
+        case "spanish": return "es";
+        case "french": return "fr";
+        case "german": return "de";
+        case "italian": return "it";
+        case "portuguese": return "pt";
+        case "dutch": return "nl";
+        case "russian": return "ru";
+        case "chinese": return "zh";
+        case "japanese": return "ja";
+        case "korean": return "ko";
+        case "arabic": return "ar";
+        case "turkish": return "tr";
+        case "polish": return "pl";
+        case "swedish": return "sv";
+        case "norwegian": return "no";
+        case "danish": return "da";
+        case "finnish": return "fi";
+        case "greek": return "el";
+        case "czech": return "cs";
+        case "hungarian": return "hu";
+        case "romanian": return "ro";
+        case "ukrainian": return "uk";
+        case "vietnamese": return "vi";
+        case "thai": return "th";
+        case "indonesian": return "id";
+        case "malay": return "ms";
+        case "hebrew": return "he";
+        case "filipino": return "tl";
+        default: return "es";
+      }
+    };
+    const targetISO = mapLanguageToISO(responseSettings.language);
+
     if (useInvisibleAIAPI) {
-      return await fetchInvisibleAISTT(audio);
+      return await fetchInvisibleAISTT(audio, targetISO);
     }
 
     if (!audio) throw new Error("Audio file is required");
 
     // No custom provider configured → route through InvisibleAI server (Groq Whisper)
     if (!provider) {
-      return await serverApi.transcribe(audio);
+      return await serverApi.transcribe(audio, "audio.wav", targetISO);
     }
 
     if (!selectedProvider) throw new Error("Selected provider not provided");
