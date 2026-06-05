@@ -38,5 +38,17 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/profile-templates.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "seed_interview_meeting_expert_profile",
+            sql: include_str!("migrations/profile-interview-expert.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 8,
+            description: "prioritize_interview_expert_in_templates_grid",
+            sql: include_str!("migrations/profile-interview-priority.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

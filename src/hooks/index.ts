@@ -15,4 +15,5 @@ export * from "./useApp";
 export * from "./useMenuItems";
 export * from "./useTranslation";
 export * from "./useProfiles";
+export * from "./useInterviewCv";
 

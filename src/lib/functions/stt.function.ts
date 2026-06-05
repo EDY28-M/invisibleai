@@ -20,37 +20,51 @@ function getCachedCurlJson(curl: string) {
   return cached;
 }
 
+const FREE_STT_MODEL = "whisper-large-v3";
+
+/**
+ * Routes speech-to-text:
+ *   - Licensed users (Groq key cached locally) → direct call to Groq Whisper.
+ *   - Free users (no local key)               → direct call to the InvisibleAI server,
+ *                                                which proxies to Groq Whisper (non-turbo)
+ *                                                and tracks credit-based usage.
+ *
+ * No blocking license validation: free users must be able to transcribe without a license.
+ */
 async function fetchInvisibleAISTT(audio: File | Blob): Promise<string> {
-  try {
-    const storage = await invoke<{ groq_api_key?: string }>("secure_storage_get")
-      .catch(() => ({} as { groq_api_key?: string }));
+  const storage = await invoke<{
+    groq_api_key?: string;
+  }>("secure_storage_get").catch(() => ({}) as { groq_api_key?: string });
 
-    if (storage.groq_api_key) {
-      const licenseStillValid = await serverApi.ensureLicensedCredentialsValid();
-      if (!licenseStillValid) {
-        throw new Error("Tu licencia ya no está activa. Actívala nuevamente para usar InvisibleAI STT.");
-      }
-    }
-
-    const audioBase64 = await blobToBase64(audio);
-
-    const response = await invoke<{
-      success: boolean;
-      transcription?: string;
-      error?: string;
-    }>("transcribe_audio", {
-      audioBase64,
+  // ── LICENSED: direct call to Groq Whisper ────────────────────────────────
+  if (storage.groq_api_key) {
+    const form = new FormData();
+    const blob = new Blob([await audio.arrayBuffer()], {
+      type: audio.type || "audio/wav",
     });
+    form.append("file", blob, (audio as File).name || "audio.wav");
+    form.append("model", FREE_STT_MODEL);
+    form.append("response_format", "json");
 
-    if (response.success && response.transcription) {
-      return response.transcription;
-    } else {
-      return response.error || "Transcription failed";
+    const resp = await fetch(
+      "https://api.groq.com/openai/v1/audio/transcriptions",
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${storage.groq_api_key}` },
+        body: form,
+      },
+    );
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => resp.statusText);
+      throw new Error(`Groq Whisper error ${resp.status}: ${errText}`);
     }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`InvisibleAI STT Error: ${errorMessage}`);
+    const result = (await resp.json()) as { text?: string };
+    return (result.text ?? "").trim();
   }
+
+  // ── FREE: direct call to InvisibleAI server (proxy → Groq Whisper) ───────
+  return await serverApi.transcribe(audio);
 }
 
 export interface STTParams {

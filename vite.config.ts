@@ -16,6 +16,15 @@ export default defineConfig(async ({ command }) => ({
 
   clearScreen: false,
 
+  optimizeDeps: {
+    // Exclude pdfjs-dist from Vite's prebundling. The library ships native
+    // ESM with workers and a `?url` import pattern that Vite can serve
+    // directly; pre-bundling has historically left stale versions cached in
+    // .vite/deps after upgrades/downgrades, causing API/Worker version
+    // mismatches at runtime. Mammoth is the same story — heavy and lazy.
+    exclude: ["pdfjs-dist", "mammoth"],
+  },
+
   build: {
     // Only emit sourcemaps for the dev server. Production bundles ship to users,
     // and this is a privacy-first app — don't expose the original source there.

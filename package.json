@@ -62,13 +62,15 @@
     "@tauri-apps/plugin-process": "^2.3.0",
     "@tauri-apps/plugin-sql": "^2.3.0",
     "@tauri-apps/plugin-updater": "^2.9.0",
-    "katex": "^0.16.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "iconoir-react": "^7.11.0",
+    "katex": "^0.16.0",
     "lucide-react": "^0.539.0",
+    "mammoth": "^1.12.0",
     "moment": "^2.30.1",
+    "pdfjs-dist": "4.10.38",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-error-boundary": "^6.0.0",
@@ -85,7 +87,11 @@
     "tauri-plugin-posthog-api": "^0.2.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["core-js", "esbuild", "protobufjs"]
+    "onlyBuiltDependencies": [
+      "core-js",
+      "esbuild",
+      "protobufjs"
+    ]
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",

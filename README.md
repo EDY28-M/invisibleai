@@ -27,6 +27,55 @@ La aplicación permite trabajar en dos caminos separados:
 
 ## Novedades en v1.5.0
 
+### Conexión directa al servidor para usuarios free (chat y STT)
+
+Se rediseñó el camino de chat y transcripción del tier gratuito para eliminar la indirección por Rust que estaba fallando en silencio:
+
+- **Chat free**: el frontend hace `POST` directo a `${VITE_INVISIBLEAI_SERVER}/api/chat` con `model: "llama-3.3-70b-versatile"` y `stream: true`. Se eliminó la dependencia del comando Tauri `chat_stream_response` que dependía de los eventos `chat_stream_chunk` / `chat_stream_complete` y dejaba el popover del chat vacío cuando algo fallaba en el backend.
+- **STT free**: `fetchInvisibleAISTT` ahora delega en `serverApi.transcribe()`, que envía multipart al endpoint `/api/stt` del servidor. El servidor decide el modelo: `whisper-large-v3` (no-turbo) para free, `whisper-large-v3-turbo` para licencia activa. La validación bloqueante `ensureLicensedCredentialsValid()` se removió tanto del chat como del STT — los créditos y límites se aplican del lado del servidor en `/api/chat` y `/api/stt`.
+- **Chat licensed**: los usuarios con `groq_api_key` cacheado localmente siguen llamando a Groq directo (mínima latencia). Se eliminó también el gate `ensureLicensedCredentialsValid()` upfront.
+- **Parser SSE unificado**: se extrajo `readSSEStream` que consume tanto el formato de Groq (`choices[0].delta.content`) como el del servidor InvisibleAI. Los errores se `throw` correctamente en lugar de tragarse como texto — la UI ahora setea `state.error` y el popover se mantiene abierto mostrando el mensaje real, en vez de cerrarse sin feedback.
+
+### Bloqueo de perfiles para usuarios free
+
+Pantalla `/profiles` rediseñada para el tier gratuito:
+
+- Banner ámbar arriba con icono de candado y mensaje "Los perfiles requieren una licencia activa".
+- Las cards de plantillas siguen **visibles** (información completa) pero con `cursor-not-allowed`, `opacity-60`, `aria-disabled`, sin animación hover, y `onClick` que retorna en seco.
+- Badge "Requiere licencia" en el header de la sección de plantillas.
+- El botón "Desactivar Perfil" del `rightSlot` se oculta para usuarios free (salvo excepción del perfil de entrevistas — ver siguiente apartado).
+- La sección de Modificadores + Notas queda oculta para free (para no dejar UI inconsistente con perfiles arrastrados de un estado licensed previo).
+
+### Plantilla "Experto en Entrevistas y Reuniones" (nueva)
+
+Nueva plantilla seed en la migración v7 (`profile-interview-expert.sql`) priorizada al primer lugar de la grilla por la migración v8 (`profile-interview-priority.sql`):
+
+- **`interview_meeting_expert`** — coach senior de carrera y comunicación profesional. Detecta automáticamente contexto de entrevista a partir de frases gatillo en español e inglés (*"cuéntame de ti"*, *"¿cuál es tu experiencia?"*, *"¿has trabajado en X antes?"*, *"cuéntame a detalle"*, *"¿pretensiones salariales?"*, *"tell me about yourself"*, *"walk me through your resume"*, *"why are you leaving"*…). Responde en primera persona usando el CV del usuario, con estructura STAR/SAR para preguntas conductuales, clarificar → estimar → diseñar → trade-offs para system design, y Bottom Line Up Front para reuniones ejecutivas. Incluye reglas de negociación salarial, manejo de preguntas difíciles y lo que nunca debe hacer (no inventar empresas/fechas/cifras, no descalificar empleadores anteriores, no usar jerga vacía).
+- **8 modificadores propios** (con `template_id` no-NULL, solo aparecen en este perfil): Técnica, Conductual/STAR, System Design, Reunión de Ventas, Reunión Ejecutiva, Negociación Salarial, Entrevista en Inglés, Panel Interview.
+
+### Carga local de CV con extracción de texto (PDF / DOCX / TXT / MD)
+
+Nueva tarjeta `CvUploadCard` que aparece cuando el perfil de entrevistas está activo:
+
+- **Parser local en el browser** (`lib/functions/cv-parser.function.ts`):
+  - `.txt / .md / .markdown / .rtf` → `FileReader.text()` directo.
+  - `.pdf` → `pdfjs-dist@4.10.38` build **legacy** con `disableStream: true`, `disableAutoFetch: true`, `isEvalSupported: false`. Se eligió la línea v4 porque la v6 usa `for await (const … of readableStream)` que no está soportado por JavaScriptCore en macOS Tauri ni por WebKitGTK en Linux (error `undefined is not a function (near '…value of readableStream…')`).
+  - `.docx` → `mammoth/mammoth.browser` (`extractRawText`).
+- **Dynamic imports** + `optimizeDeps.exclude: ["pdfjs-dist", "mammoth"]` en `vite.config.ts` para que ambos paquetes salgan como chunks lazy y Vite no los pre-bundee (evita mismatches API/Worker tras upgrades/downgrades).
+- **Almacenamiento local-only**: el texto se trim-ea y se persiste en `localStorage` con cap a `CV_MAX_CHARS = 32 000` para no reventar el context window. El CV **nunca sale del dispositivo**.
+- **Inyección en el system prompt**: `augmentWithInterviewContext()` lee el perfil activo vía `invoke("get_active_profile")` y, solo si es `interview_meeting_expert`, añade al system prompt un bloque `<CV>…</CV>` más un recordatorio operativo. Wired tanto en `useCompletion.buildEnrichedSystemPrompt` como en el flujo de audio (`useSystemAudio`). Cero impacto para los demás perfiles.
+- **Funciona con `llama-3.3-70b-versatile`** porque el archivo se procesa localmente y al modelo solo le llega texto plano — no requiere modelo multimodal.
+
+### Una prueba gratuita del perfil de entrevistas para usuarios free
+
+Excepción controlada al bloqueo de perfiles, persistida en `localStorage` (`iai_interview_trial_used`):
+
+- Usuario free con trial **no usado** → la card del Experto en Entrevistas aparece con badge verde `1×` y borde resaltado; el resto siguen bloqueadas.
+- Al activarla por primera vez se llama `consumeTrial()` y el flag queda en `true` para siempre.
+- Durante la prueba activa, el usuario tiene acceso completo: modificadores, notas, CV upload, chat con CV inyectado.
+- Si desactiva el perfil tras agotar la prueba → ya no puede re-activarlo. La regla `canSelectTemplate()` solo permite re-clicks sobre la card del perfil actualmente activo.
+- Activar una licencia desbloquea todo automáticamente (`hasActiveLicense` cortocircuita la lógica del trial).
+
 ### Refinamiento de Perfiles Modulares e Interacciones de Deselección (Toggle)
 
 Se mejoró la experiencia de usuario y la consistencia de la configuración del sistema de prompts y perfiles:

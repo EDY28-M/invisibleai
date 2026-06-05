@@ -13,6 +13,7 @@ import {
   generateMessageId,
   generateRequestId,
   getResponseSettings,
+  augmentWithInterviewContext,
 } from "@/lib";
 import {
   getScreenCaptureErrorMessage,
@@ -66,19 +67,19 @@ async function buildEnrichedSystemPrompt(
 ): Promise<string | undefined> {
   const userId =
     localStorage.getItem("invisibleai_instance_id") || "default_user";
+  let base: string | undefined;
   try {
     const enriched = await invoke<string>("build_chat_system_prompt", {
       userMessage,
       conversationId,
       userId,
     });
-    if (enriched?.trim()) return enriched;
+    if (enriched?.trim()) base = enriched;
   } catch (err) {
     console.error("Failed to build enriched chat system prompt:", err);
-    // Fallback: al menos inyectar el perfil/identidad compilado.
     try {
       const compiled = await invoke<string>("get_compiled_system_prompt");
-      if (compiled?.trim()) return compiled;
+      if (compiled?.trim()) base = compiled;
     } catch (fallbackErr) {
       console.error(
         "Failed to load compiled profile prompt (fallback):",
@@ -86,7 +87,7 @@ async function buildEnrichedSystemPrompt(
       );
     }
   }
-  return undefined;
+  return await augmentWithInterviewContext(base);
 }
 
 export const useCompletion = () => {

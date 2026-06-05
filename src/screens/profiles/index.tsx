@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useProfiles, useTranslation } from "@/hooks";
+import { useProfiles, useTranslation, useInterviewCv } from "@/hooks";
+import { useApp } from "@/contexts";
 import { PageLayout } from "@/layouts";
 import {
   Card,
@@ -14,6 +15,8 @@ import {
 } from "@/components";
 import * as Lucide from "lucide-react";
 import { cn } from "@/lib/utils";
+import { INTERVIEW_PROFILE_ID } from "@/config/constants";
+import { CvUploadCard } from "./components/CvUploadCard";
 
 // Helper to resolve Lucide icons from SQLite string tags
 const getIconComponent = (iconName: string) => {
@@ -49,6 +52,7 @@ const getIconComponent = (iconName: string) => {
 
 export default function ProfilesPage() {
   const { t } = useTranslation();
+  const { hasActiveLicense } = useApp();
   const {
     templates,
     modifiers,
@@ -59,6 +63,7 @@ export default function ProfilesPage() {
     toggleModifier,
     setCustomNotes,
   } = useProfiles();
+  const { trialUsed, consumeTrial } = useInterviewCv();
 
   const [notesText, setNotesText] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
@@ -87,6 +92,34 @@ export default function ProfilesPage() {
   const handleDeactivate = async () => {
     await selectTemplate(""); // Empty string deactivates
   };
+
+  /** True when the user can interact with a given template card. */
+  const canSelectTemplate = (templateId: string): boolean => {
+    if (hasActiveLicense) return true;
+    // Free tier: only the Interview Expert is unlockable, and only while the
+    // one-shot trial has not been spent. Re-selecting the same template that
+    // is already active is also allowed so the user can deactivate it.
+    if (templateId === INTERVIEW_PROFILE_ID) {
+      if (activeConfig?.template_id === INTERVIEW_PROFILE_ID) return true;
+      return !trialUsed;
+    }
+    return false;
+  };
+
+  const handleTemplateClick = async (templateId: string, isActive: boolean) => {
+    if (!canSelectTemplate(templateId)) return;
+    if (isActive) {
+      await selectTemplate("");
+      return;
+    }
+    if (!hasActiveLicense && templateId === INTERVIEW_PROFILE_ID && !trialUsed) {
+      consumeTrial();
+    }
+    await selectTemplate(templateId);
+  };
+
+  const showCvCard =
+    hasActiveLicense || activeConfig?.template_id === INTERVIEW_PROFILE_ID;
 
   // Group modifiers by category
   const groupedModifiers = modifiers.reduce((acc, curr) => {
@@ -124,7 +157,8 @@ export default function ProfilesPage() {
       title={t("profiles_title")}
       description={t("profiles_desc")}
       rightSlot={
-        activeConfig?.template_id && (
+        activeConfig?.template_id &&
+        (hasActiveLicense || activeConfig.template_id === INTERVIEW_PROFILE_ID) && (
           <Button
             variant="outline"
             size="sm"
@@ -141,6 +175,20 @@ export default function ProfilesPage() {
         <div className="flex items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
           <Lucide.AlertCircleIcon className="size-5 shrink-0" />
           <span>{error}</span>
+        </div>
+      )}
+
+      {!hasActiveLicense && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4">
+          <Lucide.LockIcon className="size-5 shrink-0 text-amber-500 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-bold text-foreground">
+              {t("profiles_license_required_title")}
+            </p>
+            <p className="text-xs text-muted-foreground/80 mt-1 leading-relaxed">
+              {t("profiles_license_required_desc")}
+            </p>
+          </div>
         </div>
       )}
 
@@ -230,6 +278,15 @@ export default function ProfilesPage() {
         <h2 className="text-xl font-bold flex items-center gap-2 text-foreground">
           <Lucide.SparklesIcon className="size-5 text-primary" />
           {t("profiles_templates_title")}
+          {!hasActiveLicense && (
+            <Badge
+              variant="outline"
+              className="ml-2 border-amber-500/30 bg-amber-500/5 text-amber-500 text-[10px] font-bold uppercase tracking-wider gap-1"
+            >
+              <Lucide.LockIcon className="size-3" />
+              {t("profiles_license_required_badge")}
+            </Badge>
+          )}
         </h2>
 
         {isLoading && templates.length === 0 ? (
@@ -242,24 +299,41 @@ export default function ProfilesPage() {
             {templates.map((tpl) => {
               const isActive = activeConfig?.template_id === tpl.id;
               const TplIcon = getIconComponent(tpl.icon);
+              const interactive = canSelectTemplate(tpl.id);
+              const isInterviewTemplate = tpl.id === INTERVIEW_PROFILE_ID;
+              const showTrialBadge =
+                !hasActiveLicense && isInterviewTemplate && !isActive && !trialUsed;
+              const cardTitle = !interactive
+                ? t("profiles_license_required_title")
+                : showTrialBadge
+                  ? t("profiles_cv_trial_title")
+                  : undefined;
 
               return (
                 <Card
                   key={tpl.id}
-                  onClick={() => {
-                    if (isActive) {
-                      selectTemplate("");
-                    } else {
-                      selectTemplate(tpl.id);
-                    }
-                  }}
+                  onClick={() => handleTemplateClick(tpl.id, isActive)}
+                  aria-disabled={!interactive}
+                  title={cardTitle}
                   className={cn(
-                    "cursor-pointer border bg-card/30 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg flex flex-col justify-between overflow-hidden",
+                    "relative border bg-card/30 backdrop-blur-sm transition-all duration-300 flex flex-col justify-between overflow-hidden",
+                    interactive
+                      ? "cursor-pointer hover:-translate-y-1 hover:shadow-lg"
+                      : "cursor-not-allowed opacity-60",
                     isActive
                       ? "border-primary bg-primary/5 ring-1 ring-primary/20 shadow-md shadow-primary/5"
-                      : "border-border/40 hover:border-border-hover"
+                      : interactive
+                        ? "border-border/40 hover:border-border-hover"
+                        : "border-border/40",
+                    showTrialBadge && "border-emerald-500/30 ring-1 ring-emerald-500/15"
                   )}
                 >
+                  {showTrialBadge && (
+                    <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-500">
+                      <Lucide.SparklesIcon className="size-3" />
+                      1×
+                    </span>
+                  )}
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className={cn(
@@ -294,8 +368,10 @@ export default function ProfilesPage() {
         )}
       </div>
 
-      {/* 3. SECCIÓN: MODIFICADORES & NOTAS (Visible solo si hay perfil activo) */}
-      {activeConfig?.template_id && activeTemplate && (
+      {/* 3. SECCIÓN: MODIFICADORES & NOTAS (Visible si hay perfil activo y licencia,
+            o si el usuario free está en su prueba activa del perfil de entrevistas) */}
+      {activeConfig?.template_id && activeTemplate &&
+        (hasActiveLicense || activeConfig.template_id === INTERVIEW_PROFILE_ID) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-fade-in">
           {/* Modificadores */}
           <Card className="border border-border/40 bg-card/40 backdrop-blur-md shadow-sm lg:col-span-7 flex flex-col justify-between h-full">
@@ -403,6 +479,16 @@ export default function ProfilesPage() {
               </Button>
             </CardFooter>
           </Card>
+        </div>
+      )}
+
+      {/* 4. CV UPLOAD (Interview Expert profile) */}
+      {showCvCard && activeConfig?.template_id === INTERVIEW_PROFILE_ID && (
+        <div className="animate-fade-in">
+          <CvUploadCard
+            hasActiveLicense={hasActiveLicense}
+            trialUsed={trialUsed}
+          />
         </div>
       )}
     </PageLayout>

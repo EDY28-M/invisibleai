@@ -8,12 +8,12 @@ import {
 import { Message, TYPE_PROVIDER } from "@/types";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import curl2Json from "@bany/curl-to-json";
-import { CHUNK_POLL_INTERVAL_MS } from "../chat-constants";
 import { getResponseSettings, RESPONSE_LENGTHS, LANGUAGES } from "@/lib";
 import { MARKDOWN_FORMATTING_INSTRUCTIONS } from "@/config/constants";
 import { serverApi } from "@/lib/server-api";
+
+const FREE_CHAT_MODEL = "llama-3.3-70b-versatile";
 
 const curlJsonCache = new Map<string, any>();
 function getCachedCurlJson(curl: string) {
@@ -87,6 +87,76 @@ function buildEnhancedSystemPrompt(baseSystemPrompt?: string): string {
   return prompts.join(" ");
 }
 
+/**
+ * Reads an SSE stream and yields text chunks. Handles both:
+ *   - Groq/OpenAI format:  data: {"choices":[{"delta":{"content":"..."}}]}
+ *   - InvisibleAI server:  same envelope plus `data: {"type":"usage", ...}` and `data: [DONE]`
+ *
+ * onUsage is called with total_tokens when the upstream provides usage data.
+ */
+async function* readSSEStream(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal | undefined,
+  onUsage?: (tokens: number) => void,
+  onError?: (msg: string) => void,
+): AsyncIterable<string> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const consumeLine = function* (line: string): Generator<string> {
+    if (!line.startsWith("data:")) return;
+    const trimmed = line.substring(5).trim();
+    if (!trimmed || trimmed === "[DONE]") return;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.error) {
+        onError?.(String(parsed.error));
+        return;
+      }
+      const delta = parsed.choices?.[0]?.delta?.content;
+      if (delta) yield delta as string;
+      const total = parsed.usage?.total_tokens;
+      if (typeof total === "number" && total > 0) onUsage?.(total);
+    } catch {
+      /* ignore malformed SSE chunks */
+    }
+  };
+
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        reader.cancel().catch(() => {});
+        return;
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) yield* consumeLine(line);
+    }
+
+    // Flush any trailing line that didn't end with \n
+    if (buffer.trim()) {
+      for (const line of buffer.split("\n")) yield* consumeLine(line);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+}
+
+/**
+ * Routes chat completions:
+ *   - Licensed users (Groq key cached locally) → direct call to Groq for minimum latency.
+ *   - Free users (no local key)               → direct call to the InvisibleAI server,
+ *                                                which proxies to Groq with llama-3.3-70b-versatile
+ *                                                and tracks credit-based usage.
+ *
+ * Errors are thrown (not silently yielded) so the UI can render a real error state
+ * instead of closing the chat with an empty response.
+ */
 async function* fetchInvisibleAIAIResponse(params: {
   systemPrompt?: string;
   userMessage: string;
@@ -101,249 +171,126 @@ async function* fetchInvisibleAIAIResponse(params: {
   selectedFeature?: string;
   sessionId?: string | null;
 }): AsyncIterable<string> {
-  try {
-    const {
-      systemPrompt,
-      userMessage,
-      imagesBase64 = [],
-      history = [],
-      signal,
-      sessionId,
-    } = params;
+  const {
+    systemPrompt,
+    userMessage,
+    imagesBase64 = [],
+    history = [],
+    signal,
+  } = params;
 
-    if (signal?.aborted) {
-      return;
-    }
+  if (signal?.aborted) return;
 
-    // ── MODO DIRECTO LOCAL (JS FETCH): Máxima velocidad, cero lag ──
-    const storage = await invoke<{
-      groq_api_key?: string;
-      groq_model?: string;
-    }>("secure_storage_get").catch(
-      () => ({}) as { groq_api_key?: string; groq_model?: string },
+  const storage = await invoke<{
+    groq_api_key?: string;
+    groq_model?: string;
+    instance_id?: string;
+  }>("secure_storage_get").catch(() => ({}) as Record<string, string>);
+
+  const messages = buildServerMessages(
+    systemPrompt,
+    history,
+    userMessage,
+    imagesBase64,
+  );
+
+  // ── LICENSED: direct call to Groq ──────────────────────────────────────────
+  if (storage.groq_api_key) {
+    const modelId = storage.groq_model || FREE_CHAT_MODEL;
+
+    const response = await fetch(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${storage.groq_api_key}`,
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages,
+          stream: true,
+          stream_options: { include_usage: true },
+        }),
+        signal,
+      },
     );
 
-    if (storage.groq_api_key) {
-      const licenseStillValid =
-        await serverApi.ensureLicensedCredentialsValid();
-      if (!licenseStillValid) {
-        throw new Error(
-          "Tu licencia ya no está activa. Actívala nuevamente para usar InvisibleAI API.",
-        );
-      }
-
-      const messages = buildServerMessages(
-        systemPrompt,
-        history,
-        userMessage,
-        imagesBase64,
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      throw new Error(
+        `Groq API Error: ${response.status} ${response.statusText}${
+          errorText ? ` - ${errorText}` : ""
+        }`,
       );
-      const modelId =
-        storage.groq_model || "llama-3.3-70b-versatile";
-
-      const response = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${storage.groq_api_key}`,
-          },
-          body: JSON.stringify({
-            model: modelId,
-            messages,
-            stream: true,
-            stream_options: { include_usage: true },
-          }),
-          signal,
-        },
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        throw new Error(
-          `Groq API Error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""}`,
-        );
-      }
-
-      if (!response.body) {
-        throw new Error("No response body received from Groq");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let totalTokens = 0;
-
-      while (true) {
-        if (signal?.aborted) {
-          reader.cancel();
-          return;
-        }
-
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data:")) {
-            const trimmed = line.substring(5).trim();
-            if (!trimmed || trimmed === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(trimmed);
-              const delta = parsed.choices?.[0]?.delta?.content || "";
-              if (delta) yield delta;
-              // Groq sends usage in the final chunk (choices=[]) when stream_options.include_usage=true
-              if (parsed.usage?.total_tokens) {
-                totalTokens = parsed.usage.total_tokens;
-              }
-            } catch {
-              // Silencioso
-            }
-          }
-        }
-      }
-
-      // Process any content remaining in buffer after stream ends (usage chunk may lack trailing newline)
-      if (buffer.trim()) {
-        for (const line of buffer.split("\n")) {
-          if (line.startsWith("data:")) {
-            const trimmed = line.substring(5).trim();
-            if (!trimmed || trimmed === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(trimmed);
-              if (parsed.usage?.total_tokens) {
-                totalTokens = parsed.usage.total_tokens;
-              }
-            } catch {}
-          }
-        }
-      }
-
-      // Report token usage to server in background — non-blocking
-      if (totalTokens > 0) {
-        serverApi.reportChatTokens(totalTokens);
-      } else {
-        // Groq usage chunk wasn't captured — refresh balance so the UI stays in sync
-        serverApi.refreshBalance();
-      }
-      return;
     }
+    if (!response.body) throw new Error("No response body received from Groq");
 
-    let historyString: string | undefined;
-    if (history.length > 0) {
-      const formattedHistory = [...history].map((msg) => ({
-        role: msg.role,
-        content: [{ type: "text", text: msg.content }],
-      }));
-      historyString = JSON.stringify(formattedHistory);
-    }
+    let totalTokens = 0;
+    yield* readSSEStream(
+      response.body,
+      signal,
+      (tokens) => {
+        totalTokens = tokens;
+      },
+      (msg) => {
+        throw new Error(msg);
+      },
+    );
 
-    let imageBase64: any = undefined;
-    if (imagesBase64.length > 0) {
-      imageBase64 = imagesBase64.length === 1 ? imagesBase64[0] : imagesBase64;
-    }
-
-    let streamComplete = false;
-    const streamChunks: string[] = [];
-
-    const unlisten = await listen("chat_stream_chunk", (event) => {
-      const chunk = event.payload as string;
-      streamChunks.push(chunk);
-    });
-
-    const unlistenComplete = await listen("chat_stream_complete", () => {
-      streamComplete = true;
-    });
-
-    try {
-      if (signal?.aborted) {
-        unlisten();
-        unlistenComplete();
-        return;
-      }
-
-      const conversationId = params.conversationId || "default_conv";
-      const userId =
-        params.userId ||
-        localStorage.getItem("invisibleai_instance_id") ||
-        "default_user";
-      const currentRoute = params.currentRoute || window.location.pathname;
-      const currentScreen =
-        params.currentScreen ||
-        (currentRoute === "/chat"
-          ? "ChatPage"
-          : currentRoute === "/settings"
-            ? "SettingsPage"
-            : currentRoute === "/memory-admin"
-              ? "MemoryAdminPage"
-              : "DashboardPage");
-      const appVersion = params.appVersion || "1.2.3";
-      const selectedFeature =
-        params.selectedFeature ||
-        (currentRoute === "/chat"
-          ? "chat"
-          : currentRoute === "/memory-admin"
-            ? "mem_admin"
-            : undefined);
-
-      await invoke("chat_stream_response", {
-        userMessage,
-        systemPrompt,
-        imageBase64,
-        history: historyString,
-        userId,
-        conversationId,
-        currentScreen,
-        currentRoute,
-        appVersion,
-        selectedFeature,
-        sessionId,
-      });
-
-      let lastIndex = 0;
-      while (!streamComplete) {
-        if (signal?.aborted) {
-          unlisten();
-          unlistenComplete();
-          return;
-        }
-
-        await new Promise((resolve) =>
-          setTimeout(resolve, CHUNK_POLL_INTERVAL_MS),
-        );
-
-        if (signal?.aborted) {
-          unlisten();
-          unlistenComplete();
-          return;
-        }
-
-        for (let i = lastIndex; i < streamChunks.length; i++) {
-          yield streamChunks[i];
-        }
-        lastIndex = streamChunks.length;
-      }
-
-      if (signal?.aborted) {
-        unlisten();
-        unlistenComplete();
-        return;
-      }
-
-      for (let i = lastIndex; i < streamChunks.length; i++) {
-        yield streamChunks[i];
-      }
-    } finally {
-      unlisten();
-      unlistenComplete();
-    }
-  } catch (error) {
-    yield formatFriendlyErrorMessage(error);
+    if (totalTokens > 0) serverApi.reportChatTokens(totalTokens);
+    else serverApi.refreshBalance();
+    return;
   }
+
+  // ── FREE: direct call to InvisibleAI server (proxy → Groq + llama-3) ───────
+  const instanceId =
+    storage.instance_id ||
+    localStorage.getItem("invisibleai_instance_id") ||
+    undefined;
+
+  const serverUrl = serverApi.getServerUrl();
+  const response = await tauriFetch(`${serverUrl}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      instanceId,
+      model: FREE_CHAT_MODEL,
+      messages,
+      stream: true,
+    }),
+    signal,
+  } as any);
+
+  if (!response.ok) {
+    let errMsg = `Server error ${response.status}`;
+    try {
+      const errBody = await response.json();
+      if (errBody?.error) errMsg = errBody.error;
+    } catch {
+      try {
+        const text = await response.text();
+        if (text) errMsg = text;
+      } catch {}
+    }
+    throw new Error(errMsg);
+  }
+  if (!response.body) {
+    throw new Error("No response body received from InvisibleAI server");
+  }
+
+  yield* readSSEStream(
+    response.body as unknown as ReadableStream<Uint8Array>,
+    signal,
+    undefined,
+    (msg) => {
+      throw new Error(msg);
+    },
+  );
+
+  // Server reports usage in its own SSE `type: "usage"` chunk + by side effect.
+  // Refresh balance so the UI stays in sync with the credit counter.
+  serverApi.refreshBalance();
 }
 
 export async function* fetchAIResponse(params: {

@@ -8,6 +8,7 @@ import {
   fetchSTT,
   fetchAIResponse,
   DeepgramStreamManager,
+  augmentWithInterviewContext,
   type StreamingCopilotBuffers,
   type StreamingSmartSystemResponseRecord,
 } from "@/lib/functions";
@@ -1135,6 +1136,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         } catch (profileErr) {
           console.error("Failed to load compiled profile prompt:", profileErr);
         }
+
+        const promptWithCv = await augmentWithInterviewContext(effectivePrompt);
+        if (promptWithCv) effectivePrompt = promptWithCv;
 
         try {
           for await (const chunk of fetchAIResponse({

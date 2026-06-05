@@ -25,7 +25,16 @@ export const STORAGE_KEYS = {
   CACHED_MODELS_AT: "iai_cached_models_at",
   CACHED_PROMPTS: "iai_cached_prompts",
   CACHED_PROMPTS_AT: "iai_cached_prompts_at",
+
+  // Interview Expert profile — CV text and trial flag (free users)
+  INTERVIEW_CV_TEXT: "iai_interview_cv_text",
+  INTERVIEW_CV_FILENAME: "iai_interview_cv_filename",
+  INTERVIEW_CV_UPDATED_AT: "iai_interview_cv_updated_at",
+  INTERVIEW_TRIAL_USED: "iai_interview_trial_used",
 } as const;
+
+export const INTERVIEW_PROFILE_ID = "interview_meeting_expert";
+export const CV_MAX_CHARS = 32_000;
 
 export const MAX_FILES = 6;
 
