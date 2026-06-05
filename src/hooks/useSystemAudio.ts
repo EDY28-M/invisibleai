@@ -30,6 +30,7 @@ import {
   generateMessageId,
   getGlobalMemoryContext,
   getMicrophoneStream,
+  getResponseSettings,
 } from "@/lib";
 import { Message } from "@/types/completion";
 import { extractAndStoreMemories } from "@/lib/functions";
@@ -1381,12 +1382,14 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     setLastTranscription(formattedText);
     setLastAIResponse("");
 
+    const responseSettings = getResponseSettings();
     invoke("on_transcript_received", {
       sessionId: activeSessionId,
       channel,
       text,
       isFinal: true,
-      isSmartMode: streamingSmartModeRef.current
+      isSmartMode: streamingSmartModeRef.current,
+      responseLanguage: responseSettings.language
     })
     .then(() => refreshTimelineFromDb(activeSessionId))
     .catch(err => console.error("Failed to send transcript to backend cognitive router:", err));
@@ -1611,12 +1614,49 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     const sttVars = selectedSttProviderRef.current.variables || {};
     const localApiKey = sttVars.api_key || sttVars.API_KEY || "";
 
+    const responseSettings = getResponseSettings();
+    const mapLanguageToDeepgram = (lang: string): string => {
+      switch (lang) {
+        case "english": return "en";
+        case "spanish": return "es-419";
+        case "french": return "fr";
+        case "german": return "de";
+        case "italian": return "it";
+        case "portuguese": return "pt";
+        case "dutch": return "nl";
+        case "russian": return "ru";
+        case "chinese": return "zh";
+        case "japanese": return "ja";
+        case "korean": return "ko";
+        case "arabic": return "ar";
+        case "turkish": return "tr";
+        case "polish": return "pl";
+        case "swedish": return "sv";
+        case "norwegian": return "no";
+        case "danish": return "da";
+        case "finnish": return "fi";
+        case "greek": return "el";
+        case "czech": return "cs";
+        case "hungarian": return "hu";
+        case "romanian": return "ro";
+        case "ukrainian": return "uk";
+        case "vietnamese": return "vi";
+        case "thai": return "th";
+        case "indonesian": return "id";
+        case "malay": return "ms";
+        case "hebrew": return "he";
+        case "filipino": return "fil";
+        default: return "es-419";
+      }
+    };
+    const targetLanguage = mapLanguageToDeepgram(responseSettings.language);
+
     if (localApiKey) {
       // El usuario configuró su propia API key → usarla sin pasar por el servidor
       tokenData = {
         token: localApiKey,
         model: sttVars.model || sttVars.MODEL || "nova-3",
-        language: sttVars.language || sttVars.LANGUAGE || "es-419",
+        language: targetLanguage,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       };
       deepgramTokenCacheRef.current = { token: tokenData, fetchedAt: Date.now() };
@@ -1642,16 +1682,20 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           tokenData = {
             token: storage.deepgram_api_key,
             model: storage.deepgram_model || "nova-3",
-            language: storage.deepgram_language || "es-419",
+            language: targetLanguage,
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           };
+          deepgramTokenCacheRef.current = { token: tokenData, fetchedAt: Date.now() };
         } else {
           const now = Date.now();
           const cached = deepgramTokenCacheRef.current;
           const TOKEN_MARGIN_MS = 5 * 60 * 1000; // renovar 5 min antes de expirar
 
           if (cached && (now - cached.fetchedAt) < (55 * 60 * 1000 - TOKEN_MARGIN_MS)) {
-            tokenData = cached.token;
+            tokenData = {
+              ...cached.token,
+              language: targetLanguage,
+            };
           } else {
             const licenseKey = storage.license_key ?? "";
             const instanceId = storage.instance_id ?? "";
@@ -1662,7 +1706,11 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
               return;
             }
 
-            tokenData = await serverApi.getDeepgramToken(licenseKey, instanceId);
+            const serverToken = await serverApi.getDeepgramToken(licenseKey, instanceId);
+            tokenData = {
+              ...serverToken,
+              language: targetLanguage,
+            };
             deepgramTokenCacheRef.current = { token: tokenData, fetchedAt: now };
           }
         }

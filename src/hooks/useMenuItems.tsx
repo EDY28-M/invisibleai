@@ -8,7 +8,6 @@ import {
   HomeIcon,
   PowerIcon,
   MailIcon,
-  BugIcon,
   MessageSquareTextIcon,
   Layers,
   Eye,
@@ -116,11 +115,6 @@ export const useMenuItems = () => {
           },
         ]
       : []),
-    {
-      icon: BugIcon,
-      label: t("sidebar_bug"),
-      href: "https://github.com/EDY28-M/invisibleai/issues/new?template=bug-report.yml",
-    },
     {
       icon: PowerIcon,
       label: t("sidebar_quit"),

@@ -1,18 +1,26 @@
 import { Header, Selection } from "@/components";
 import { LANGUAGES } from "@/lib";
 import { useApp } from "@/contexts";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useTranslation } from "@/hooks";
+import { getResponseSettings, updateLanguage } from "@/lib/storage/response-settings.storage";
 
 export const LanguageSelector = () => {
   const { hasActiveLicense } = useApp();
-  const { language, changeLanguage, t } = useTranslation();
+  const { t } = useTranslation();
+  const [selectedLang, setSelectedLang] = useState<string>("spanish");
+
+  useEffect(() => {
+    const settings = getResponseSettings();
+    setSelectedLang(settings.language);
+  }, []);
 
   const handleLanguageChange = (languageId: string) => {
     if (!hasActiveLicense) {
       return;
     }
-    changeLanguage(languageId);
+    setSelectedLang(languageId);
+    updateLanguage(languageId);
   };
 
   const languageOptions = useMemo(() => {
@@ -31,7 +39,7 @@ export const LanguageSelector = () => {
 
       <div className="max-w-md">
         <Selection
-          selected={language}
+          selected={selectedLang}
           onChange={handleLanguageChange}
           options={languageOptions}
           placeholder={t("responses_lang_placeholder")}

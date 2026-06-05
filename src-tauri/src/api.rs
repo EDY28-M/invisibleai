@@ -530,7 +530,7 @@ pub async fn chat_stream_response(
                     intent,
                 ) {
                     let skip_profile = system_prompt.as_ref().map_or(false, |p| p.contains("[IDENTIDAD DEL ASISTENTE]"));
-                let enriched = build_system_prompt(context, &user_message, skip_profile);
+                let enriched = build_system_prompt(context, &user_message, skip_profile, None);
                     if let Some(existing) = system_prompt {
                         final_system_prompt = Some(format!(
                             "{}\n\n[INSTRUCCIONES ADICIONALES]\n{}",
@@ -1284,6 +1284,7 @@ pub async fn on_transcript_received(
     text: String,
     is_final: bool,
     is_smart_mode: bool,
+    response_language: Option<String>,
 ) -> Result<(), String> {
     tokio::spawn(async move {
         let _ = crate::services::cognitive_router::handle_incoming_transcript(
@@ -1293,6 +1294,7 @@ pub async fn on_transcript_received(
             text,
             is_final,
             is_smart_mode,
+            response_language,
         )
         .await;
     });
@@ -1469,6 +1471,7 @@ pub async fn build_chat_system_prompt(
     user_message: String,
     conversation_id: Option<String>,
     user_id: Option<String>,
+    response_language: Option<String>,
 ) -> Result<String, String> {
     let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
 
@@ -1497,13 +1500,13 @@ pub async fn build_chat_system_prompt(
         app_data_dir,
         &uid,
         &cid,
-        None, // el chat de texto no pertenece a una sesión de audio en vivo
+        None,
         screen_ctx,
         &user_message,
         intent,
     )?;
 
-    Ok(build_system_prompt(context, &user_message, false))
+    Ok(build_system_prompt(context, &user_message, false, response_language))
 }
 
 pub fn format_friendly_error(err: &str) -> String {

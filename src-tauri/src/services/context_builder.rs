@@ -291,17 +291,19 @@ pub fn build_ai_context(
 }
 
 /// Compone el System Prompt final estructurado que se inyectará en la llamada a la API del modelo LLM
-pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile: bool) -> String {
+pub fn build_system_prompt(
+    context: AiContext,
+    user_message: &str,
+    skip_profile: bool,
+    response_language: Option<String>,
+) -> String {
     let mut prompt = String::new();
 
-    // 1. Identidad y Perfil (Modular con fallback a legacy)
     if !skip_profile {
         if let Some(ref compiled) = context.compiled_profile {
-            // Perfil modular activo → usar el compilador optimizado
             let profile_block = crate::services::profile_service::compile_profile_prompt(compiled);
             prompt.push_str(&profile_block);
         } else if let Some(prof) = context.profile {
-            // Fallback al perfil legacy de ai_profile
             prompt.push_str(&format!(
                 "[IDENTIDAD DEL ASISTENTE]\n\
                  Nombre: {}\n\
@@ -320,7 +322,6 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
         }
     }
 
-    // 1.5 Licencia y Versión de la Aplicación
     prompt.push_str("[LICENCIA Y VERSIÓN DE INVISIBLEAI]\n");
     if context.has_license {
         prompt.push_str(
@@ -353,7 +354,6 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
            * Atajos de teclado avanzados y personalización completa.\n\n"
     );
 
-    // 1.6 Identidad y manejo de la licencia en las RESPUESTAS (varía según el estado detectado)
     if context.has_license {
         prompt.push_str(
             "[IDENTIDAD Y MANEJO DE TU LICENCIA EN LAS RESPUESTAS]\n\
@@ -372,14 +372,12 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
         );
     }
 
-    // 2. Conocimiento General de InvisibleAI
     prompt.push_str("[CONTEXTO GENERAL DE INVISIBLEAI]\n");
     for k in &context.knowledge {
         prompt.push_str(&format!("* {}: {}\n", k.title, k.content));
     }
     prompt.push_str("\n");
 
-    // 3. Catálogo de Características (Evita inventar funciones)
     prompt.push_str("[FUNCIONES DISPONIBLES DE LA APP]\n");
     for f in &context.features {
         prompt.push_str(&format!(
@@ -389,7 +387,6 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
     }
     prompt.push_str("\n");
 
-    // 4. Memoria del Usuario
     if !context.user_memory.is_empty() {
         prompt.push_str("[MEMORIA DEL USUARIO (Datos Útiles)]\n");
         for m in &context.user_memory {
@@ -398,7 +395,6 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
         prompt.push_str("\n");
     }
 
-    // 5. Historial de Conversación / Resúmenes
     if !context.summaries.is_empty() {
         prompt.push_str("[RESUMEN DE CONVERSACIONES ANTERIORES]\n");
         for s in &context.summaries {
@@ -410,7 +406,6 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
         prompt.push_str("\n");
     }
 
-    // 6. Errores Previos a Evitar (Feedback activo)
     if !context.feedback.is_empty() {
         prompt.push_str("[ERRORES ANTERIORES A EVITAR (No Repetir)]\n");
         for f in &context.feedback {
@@ -422,7 +417,6 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
         prompt.push_str("\n");
     }
 
-    // 6.5. Contexto de Sesión en Vivo
     if let Some(stype) = &context.session_type {
         prompt.push_str(&format!(
             "[CONTEXTO DE SESIÓN EN VIVO]\n\
@@ -471,7 +465,6 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
         }
     }
 
-    // 7. Estado e Interfaz Actual (Contexto de Pantalla)
     prompt.push_str(&format!(
         "[CONTEXTO DE PANTALLA ACTUAL]\n\
          Pantalla: {}\n\
@@ -484,15 +477,28 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
         context.screen.app_version
     ));
 
-    // 8. Mensaje del Usuario
     prompt.push_str(&format!(
         "[MENSAJE ACTUAL DEL USUARIO]\n\
          {}\n\n",
         user_message
     ));
 
-    // 9. Instrucciones de Respuesta
-    prompt.push_str(
+    let mut lang_instruction = String::new();
+    if let Some(ref lang) = response_language {
+        if !lang.trim().is_empty() {
+            let mut chars = lang.chars();
+            let capitalized_lang = match chars.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+            };
+            lang_instruction = format!(
+                "\n10. CRITICAL: You MUST write your response entirely in {}. Do not respond in any other language under any circumstances. Even if the user's input, the audio transcription, or the context is in a different language, your response MUST be 100% in {}. This is a mandatory instruction.",
+                capitalized_lang, capitalized_lang
+            );
+        }
+    }
+
+    prompt.push_str(&format!(
         "[INSTRUCCIONES DE RESPUESTA]\n\
          1. Responde de forma específica apoyándote en el contexto e interfaz actual del usuario.\n\
          2. Nunca inventes funciones que no estén listadas en [FUNCIONES DISPONIBLES].\n\
@@ -502,8 +508,9 @@ pub fn build_system_prompt(context: AiContext, user_message: &str, skip_profile:
          6. Si la sesión parece ser una entrevista de trabajo, ayuda al usuario a responder preguntas técnicas de forma profesional usando su contexto y experiencia.\n\
          7. Si parece una reunión, resume acuerdos, tareas y próximos pasos.\n\
          8. Si parece una clase o video, resume y explica conceptos según las dos fuentes.\n\
-         9. Responde con pasos accionables y directos de InvisibleAI."
-    );
+         9. Responde con pasos accionables y directos de InvisibleAI.{}",
+        lang_instruction
+    ));
 
     prompt
 }

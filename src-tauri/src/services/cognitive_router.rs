@@ -500,6 +500,7 @@ pub async fn handle_incoming_transcript(
     text: String,
     is_final: bool,
     is_smart_mode: bool,
+    response_language: Option<String>,
 ) -> Result<(), String> {
     if !is_final {
         return Ok(());
@@ -544,6 +545,7 @@ pub async fn handle_incoming_transcript(
     let app_clone = app.clone();
     let session_id_clone = session_id.clone();
     let text_clone = text.clone();
+    let response_language_clone = response_language.clone();
 
     let task_handle = tokio::spawn(async move {
         if !is_mic {
@@ -552,7 +554,7 @@ pub async fn handle_incoming_transcript(
 
         let _ = app_clone.emit("ai-stream-start", ());
 
-        match run_llm_orchestration(&app_clone, &session_id_clone, &text_clone, is_mic).await {
+        match run_llm_orchestration(&app_clone, &session_id_clone, &text_clone, is_mic, response_language_clone).await {
             Ok(full_response) => {
                 let _ = session_service::insert_transcript_segment(
                     app_data_dir.clone(),
@@ -586,6 +588,7 @@ async fn run_llm_orchestration(
     session_id: &str,
     triggering_text: &str,
     is_mic: bool,
+    response_language: Option<String>,
 ) -> Result<String, String> {
     let app_endpoint = get_app_endpoint()?;
     let api_access_key = get_api_access_key()?;
@@ -626,7 +629,7 @@ async fn run_llm_orchestration(
         "assistant_request",
     )?;
 
-    let system_prompt = build_system_prompt(context, triggering_text, false);
+    let system_prompt = build_system_prompt(context, triggering_text, false, response_language);
 
     let mut messages: Vec<serde_json::Value> = Vec::new();
     messages.push(serde_json::json!({

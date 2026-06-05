@@ -67,12 +67,14 @@ async function buildEnrichedSystemPrompt(
 ): Promise<string | undefined> {
   const userId =
     localStorage.getItem("invisibleai_instance_id") || "default_user";
+  const responseSettings = getResponseSettings();
   let base: string | undefined;
   try {
     const enriched = await invoke<string>("build_chat_system_prompt", {
       userMessage,
       conversationId,
       userId,
+      responseLanguage: responseSettings.language,
     });
     if (enriched?.trim()) base = enriched;
   } catch (err) {

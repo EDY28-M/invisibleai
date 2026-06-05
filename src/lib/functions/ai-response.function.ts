@@ -79,7 +79,8 @@ function buildEnhancedSystemPrompt(baseSystemPrompt?: string): string {
     (l) => l.id === responseSettings.language,
   );
   if (languageOption?.prompt?.trim()) {
-    prompts.push(languageOption.prompt);
+    const strictLanguagePrompt = `CRITICAL: You MUST write your response entirely in ${languageOption.name}. Do not respond in any other language under any circumstances. Even if the user's input, the audio transcription, or the context is in a different language, your response MUST be 100% in ${languageOption.name}. This is a mandatory instruction.`;
+    prompts.push(strictLanguagePrompt);
   }
 
   prompts.push(MARKDOWN_FORMATTING_INSTRUCTIONS);

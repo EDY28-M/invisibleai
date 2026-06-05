@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { getResponseSettings, updateLanguage } from "../lib/storage/response-settings.storage";
 
 export const translations = {
   en: {
@@ -693,19 +692,13 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [langCode, setLangCode] = useState<LanguageCode>("es");
 
   useEffect(() => {
-
-    const settings = getResponseSettings();
-    const currentLang = settings.language === "english" ? "en" : "es";
-    setLangCode(currentLang);
+    const saved = localStorage.getItem("app_language") || "es";
+    setLangCode(saved === "en" ? "en" : "es");
 
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "response_settings") {
-        try {
-          const parsed = JSON.parse(e.newValue || "{}");
-          if (parsed.language) {
-            setLangCode(parsed.language === "english" ? "en" : "es");
-          }
-        } catch {}
+      if (e.key === "app_language") {
+        const val = e.newValue || "es";
+        setLangCode(val === "en" ? "en" : "es");
       }
     };
     window.addEventListener("storage", handleStorageChange);
@@ -713,9 +706,9 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const changeLanguage = (langId: string) => {
-
-    updateLanguage(langId);
-    setLangCode(langId === "english" ? "en" : "es");
+    const code = langId === "english" ? "en" : "es";
+    localStorage.setItem("app_language", code);
+    setLangCode(code);
   };
 
   const t = (key: TranslationKey): string => {
