@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "@/hooks";
 import {
   Brain,
   BookOpen,
@@ -52,6 +53,7 @@ interface AiFeedbackItem {
 }
 
 const MemoryAdmin = () => {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<"user_memory" | "app_knowledge" | "app_features" | "ai_feedback">("user_memory");
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,7 +98,7 @@ const MemoryAdmin = () => {
       }
     } catch (err: any) {
       console.error(err);
-      setError(typeof err === "string" ? err : err.message || "Error al cargar datos");
+      setError(typeof err === "string" ? err : err.message || t("error"));
     } finally {
       setLoading(false);
     }
@@ -132,7 +134,7 @@ const MemoryAdmin = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("¿Estás seguro de que deseas eliminar este registro?")) return;
+    if (!window.confirm(t("mem_delete_confirm"))) return;
     try {
       if (activeTab === "user_memory") {
         await invoke("delete_user_memory", { id });
@@ -221,13 +223,13 @@ const MemoryAdmin = () => {
   };
 
   return (
-    <PageLayout title="Inteligencia Contextual" description="Memoria persistente, perfil base de asistente e historial de errores.">
+    <PageLayout title={t("mem_title")} description={t("mem_desc")}>
       <div className="flex flex-col lg:flex-row gap-6 max-w-6xl mx-auto w-full p-2">
         
         {/* Left Tabs / Filters */}
         <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2 rounded-2xl border border-border/10 bg-card/20 backdrop-blur-xl p-4">
           <h4 className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider mb-2 px-1">
-            Categorías de Memoria
+            {t("mem_categories")}
           </h4>
           <button
             onClick={() => setActiveTab("user_memory")}
@@ -238,9 +240,9 @@ const MemoryAdmin = () => {
             }`}
           >
             <Brain className="size-4 shrink-0" />
-            <span>Memoria del Usuario</span>
+            <span>{t("mem_tab_user")}</span>
           </button>
-          
+
           <button
             onClick={() => setActiveTab("app_knowledge")}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
@@ -250,9 +252,9 @@ const MemoryAdmin = () => {
             }`}
           >
             <BookOpen className="size-4 shrink-0" />
-            <span>Conocimiento de la App</span>
+            <span>{t("mem_tab_knowledge")}</span>
           </button>
-          
+
           <button
             onClick={() => setActiveTab("app_features")}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
@@ -262,9 +264,9 @@ const MemoryAdmin = () => {
             }`}
           >
             <Cpu className="size-4 shrink-0" />
-            <span>Funciones de la App</span>
+            <span>{t("mem_tab_features")}</span>
           </button>
-          
+
           <button
             onClick={() => setActiveTab("ai_feedback")}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
@@ -274,7 +276,7 @@ const MemoryAdmin = () => {
             }`}
           >
             <AlertTriangle className="size-4 shrink-0" />
-            <span>Errores y Feedback</span>
+            <span>{t("mem_tab_feedback")}</span>
           </button>
         </div>
 
@@ -286,7 +288,7 @@ const MemoryAdmin = () => {
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/40" />
               <Input
-                placeholder="Filtrar registros..."
+                placeholder={t("mem_filter")}
                 className="pl-9 h-9 text-xs rounded-xl"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -298,7 +300,7 @@ const MemoryAdmin = () => {
                 className="w-full sm:w-auto h-9 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5"
               >
                 <PlusIcon className="size-3.5" />
-                Añadir Registro
+                {t("mem_add")}
               </Button>
             )}
           </div>
@@ -313,7 +315,7 @@ const MemoryAdmin = () => {
           {/* List display */}
           <div className="flex-1 overflow-y-auto max-h-[500px] space-y-3">
             {loading ? (
-              <div className="text-center py-12 text-xs text-muted-foreground">Cargando registros...</div>
+              <div className="text-center py-12 text-xs text-muted-foreground">{t("mem_loading")}</div>
             ) : (
               <>
                 {/* 1. USER MEMORY TAB */}
@@ -327,7 +329,7 @@ const MemoryAdmin = () => {
                             {item.memory_type}
                           </span>
                           <span className="text-[9px] font-semibold text-muted-foreground/60">
-                            Prioridad: {item.importance}
+                            {t("mem_priority")} {item.importance}
                           </span>
                         </div>
                         <p className="text-xs text-foreground/80 leading-relaxed font-mono">{item.content}</p>
@@ -379,7 +381,7 @@ const MemoryAdmin = () => {
                         <p className="text-[11px] text-muted-foreground">{item.description}</p>
                         {item.route && (
                           <div className="text-[9px] font-mono text-muted-foreground/50">
-                            Ruta: {item.route} {item.frontend_component && `| Comp: ${item.frontend_component}`}
+                            {t("mem_route_info")} {item.route} {item.frontend_component && `| Comp: ${item.frontend_component}`}
                           </div>
                         )}
                       </div>
@@ -404,14 +406,14 @@ const MemoryAdmin = () => {
                               ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                               : "bg-blue-500/10 text-blue-400 border-blue-500/20"
                           }`}>
-                            Severidad: {item.severity}
+                            {t("mem_severity")} {item.severity}
                           </span>
                           <span className={`text-[8px] uppercase tracking-wider font-bold border px-1.5 py-0.2 rounded ${
                             item.resolved
                               ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                               : "bg-rose-500/10 text-rose-400 border-rose-500/20"
                           }`}>
-                            {item.resolved ? "Resuelto" : "Pendiente"}
+                            {item.resolved ? t("mem_resolved") : t("mem_pending")}
                           </span>
                         </div>
                         {!item.resolved && (
@@ -420,14 +422,14 @@ const MemoryAdmin = () => {
                             className="text-[10px] font-bold text-emerald-400 flex items-center gap-1 hover:underline"
                           >
                             <CheckCircle2 className="size-3.5" />
-                            Marcar Resuelto
+                            {t("mem_mark_resolved")}
                           </button>
                         )}
                       </div>
                       <div className="space-y-1 text-xs">
-                        <p className="font-semibold text-foreground/90"><span className="text-muted-foreground/60 mr-1.5">Problema:</span>{item.issue_detected}</p>
-                        <p className="text-muted-foreground/80 leading-relaxed font-mono"><span className="text-rose-400/80 mr-1.5">Mal comportamiento:</span>{item.bad_behavior}</p>
-                        <p className="text-emerald-400/80 leading-relaxed font-mono"><span className="text-emerald-400/60 mr-1.5">Comportamiento esperado:</span>{item.expected_behavior}</p>
+                        <p className="font-semibold text-foreground/90"><span className="text-muted-foreground/60 mr-1.5">{t("mem_problem")}</span>{item.issue_detected}</p>
+                        <p className="text-muted-foreground/80 leading-relaxed font-mono"><span className="text-rose-400/80 mr-1.5">{t("mem_bad_behavior")}</span>{item.bad_behavior}</p>
+                        <p className="text-emerald-400/80 leading-relaxed font-mono"><span className="text-emerald-400/60 mr-1.5">{t("mem_expected_behavior")}</span>{item.expected_behavior}</p>
                       </div>
                     </div>
                   ))}
@@ -438,7 +440,7 @@ const MemoryAdmin = () => {
                   (activeTab === "app_features" && features.length === 0) ||
                   (activeTab === "ai_feedback" && feedback.length === 0)
                 ) && (
-                  <div className="text-center py-16 text-xs text-muted-foreground">No se encontraron registros en esta sección.</div>
+                  <div className="text-center py-16 text-xs text-muted-foreground">{t("mem_empty")}</div>
                 )}
               </>
             )}
@@ -452,7 +454,7 @@ const MemoryAdmin = () => {
           <div className="w-full max-w-md rounded-2xl border border-border/10 bg-card p-5 space-y-4 shadow-xl">
             <div className="flex justify-between items-center pb-2 border-b border-border/10">
               <h3 className="text-sm font-bold text-foreground/90">
-                {modalType === "create" ? "Añadir Registro" : "Editar Registro"} ({activeTab === "user_memory" ? "Memoria" : activeTab === "app_knowledge" ? "Conocimiento" : "Función"})
+                {modalType === "create" ? t("mem_modal_add") : t("mem_modal_edit")} ({activeTab === "user_memory" ? t("mem_tab_user") : activeTab === "app_knowledge" ? t("mem_tab_knowledge") : t("mem_tab_features")})
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="hover:opacity-75"><X className="size-4" /></button>
             </div>
@@ -463,19 +465,19 @@ const MemoryAdmin = () => {
               {activeTab === "user_memory" && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Tipo de Memoria</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_memory_type")}</label>
                     <select
                       className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs"
                       value={userMemoryForm.memory_type}
                       onChange={(e) => setUserMemoryForm(prev => ({ ...prev, memory_type: e.target.value }))}
                     >
-                      <option value="preference">Preferencia de Usuario</option>
-                      <option value="technical">Decisión Técnica / Proyecto</option>
-                      <option value="general">Contexto General / Notas</option>
+                      <option value="preference">{t("mem_type_preference")}</option>
+                      <option value="technical">{t("mem_type_technical")}</option>
+                      <option value="general">{t("mem_type_general")}</option>
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Contenido de la Memoria</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_memory_content")}</label>
                     <textarea
                       rows={3}
                       className="w-full rounded-xl border border-border/20 bg-card/40 p-3 text-xs"
@@ -486,7 +488,7 @@ const MemoryAdmin = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Importancia (1 - 5)</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_importance")}</label>
                     <input
                       type="number"
                       min={1}
@@ -504,7 +506,7 @@ const MemoryAdmin = () => {
               {activeTab === "app_knowledge" && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Título del Conocimiento</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_knowledge_title")}</label>
                     <Input
                       className="h-9 rounded-xl text-xs"
                       placeholder="Ej: ¿Qué es InvisibleAI?"
@@ -514,19 +516,19 @@ const MemoryAdmin = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Categoría</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_knowledge_category")}</label>
                     <select
                       className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs"
                       value={appKnowledgeForm.category}
                       onChange={(e) => setAppKnowledgeForm(prev => ({ ...prev, category: e.target.value }))}
                     >
-                      <option value="general">General / Producto</option>
-                      <option value="architecture">Arquitectura / Código</option>
-                      <option value="config">Configuración</option>
+                      <option value="general">{t("mem_category_general")}</option>
+                      <option value="architecture">{t("mem_category_architecture")}</option>
+                      <option value="config">{t("mem_category_config")}</option>
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Contenido explicativo</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_knowledge_content")}</label>
                     <textarea
                       rows={3}
                       className="w-full rounded-xl border border-border/20 bg-card/40 p-3 text-xs"
@@ -537,7 +539,7 @@ const MemoryAdmin = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Importancia (1 - 5)</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_importance")}</label>
                     <input
                       type="number"
                       min={1}
@@ -555,7 +557,7 @@ const MemoryAdmin = () => {
               {activeTab === "app_features" && (
                 <>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Nombre de la Característica</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_feature_name")}</label>
                     <Input
                       className="h-9 rounded-xl text-xs"
                       placeholder="Ej: Análisis de conversaciones"
@@ -565,7 +567,7 @@ const MemoryAdmin = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Descripción funcional</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_feature_desc")}</label>
                     <textarea
                       rows={2}
                       className="w-full rounded-xl border border-border/20 bg-card/40 p-3 text-xs"
@@ -576,19 +578,19 @@ const MemoryAdmin = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Estado</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_feature_status")}</label>
                     <select
                       className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs"
                       value={appFeatureForm.status}
                       onChange={(e) => setAppFeatureForm(prev => ({ ...prev, status: e.target.value }))}
                     >
-                      <option value="active">Activo</option>
-                      <option value="inactive">Inactivo</option>
-                      <option value="in_development">En desarrollo</option>
+                      <option value="active">{t("active")}</option>
+                      <option value="inactive">{t("inactive")}</option>
+                      <option value="in_development">{t("mem_status_in_dev")}</option>
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-muted-foreground/75 font-semibold">Ruta / Path (Opcional)</label>
+                    <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_feature_route")}</label>
                     <Input
                       className="h-9 rounded-xl text-xs"
                       placeholder="Ej: /conversation-analysis"
@@ -598,7 +600,7 @@ const MemoryAdmin = () => {
                   </div>
                   <div className="space-y-1 flex gap-2">
                     <div className="flex-1 space-y-1">
-                      <label className="text-muted-foreground/75 font-semibold">Componente React</label>
+                      <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_feature_component")}</label>
                       <Input
                         className="h-9 rounded-xl text-xs"
                         placeholder="Ej: AnalysisPage.tsx"
@@ -607,7 +609,7 @@ const MemoryAdmin = () => {
                       />
                     </div>
                     <div className="flex-1 space-y-1">
-                      <label className="text-muted-foreground/75 font-semibold">Módulo Rust</label>
+                      <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_feature_rust")}</label>
                       <Input
                         className="h-9 rounded-xl text-xs"
                         placeholder="Ej: analysis.rs"
@@ -621,10 +623,10 @@ const MemoryAdmin = () => {
 
               <div className="flex justify-end gap-2 pt-3 border-t border-border/10">
                 <Button variant="outline" type="button" onClick={() => setIsModalOpen(false)} className="h-9 rounded-xl text-xs px-4">
-                  Cancelar
+                  {t("cancel")}
                 </Button>
                 <Button type="submit" className="h-9 rounded-xl text-xs px-4 font-semibold">
-                  Guardar
+                  {t("save")}
                 </Button>
               </div>
             </form>

@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "InvisibleAI - AI Assistant",
+        "title": "Claude",
         "width": 600,
         "height": 54,
         "decorations": false,

@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useProfiles, useTranslation, useInterviewCv } from "@/hooks";
 import { useApp } from "@/contexts";
+import {
+  PROFILE_CONTENT_EN,
+  MODIFIER_CATEGORY_EN,
+  MODIFIER_NAME_EN,
+} from "@/lib/profile-translations";
 import { PageLayout } from "@/layouts";
 import {
   Card,
@@ -51,7 +56,26 @@ const getIconComponent = (iconName: string) => {
 };
 
 export default function ProfilesPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const isEN = language === "english";
+
+  const tplContent = (id: string) =>
+    isEN && PROFILE_CONTENT_EN[id] ? PROFILE_CONTENT_EN[id] : null;
+
+  const tplName = (tpl: { id: string; name: string }) =>
+    tplContent(tpl.id)?.name ?? tpl.name;
+
+  const tplRole = (tpl: { id: string; base_role: string }) =>
+    tplContent(tpl.id)?.base_role ?? tpl.base_role;
+
+  const tplPersonality = (tpl: { id: string; base_personality: string }) =>
+    tplContent(tpl.id)?.base_personality ?? tpl.base_personality;
+
+  const modCategory = (cat: string) =>
+    isEN ? (MODIFIER_CATEGORY_EN[cat] ?? cat) : cat;
+
+  const modName = (mod: { id: string; name: string }) =>
+    isEN ? (MODIFIER_NAME_EN[mod.id] ?? mod.name) : mod.name;
   const { hasActiveLicense } = useApp();
   const {
     templates,
@@ -223,14 +247,14 @@ export default function ProfilesPage() {
               <div className="flex-1 space-y-1">
                 <div className="flex items-center gap-2">
                   <h3 className="font-bold text-lg text-foreground">
-                    {activeTemplate.name}
+                    {tplName(activeTemplate)}
                   </h3>
                   <Badge variant="outline" className="text-xs py-0.5">
                     {getCategoryLabel(activeTemplate.category)}
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground line-clamp-2">
-                  {activeTemplate.base_role}
+                  {tplRole(activeTemplate)}
                 </p>
                 {activeConfig && activeConfig.selected_modifiers.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 pt-2">
@@ -247,7 +271,7 @@ export default function ProfilesPage() {
                           className="bg-primary/5 text-primary hover:bg-primary/10 border border-primary/15 flex items-center gap-1 text-xs py-0.5 px-2"
                         >
                           <ModIcon className="size-3" />
-                          {mod.name}
+                          {modName(mod)}
                         </Badge>
                       );
                     })}
@@ -349,17 +373,17 @@ export default function ProfilesPage() {
                       </Badge>
                     </div>
                     <CardTitle className="text-base font-bold mt-3 text-foreground">
-                      {tpl.name}
+                      {tplName(tpl)}
                     </CardTitle>
                     <CardDescription className="line-clamp-2 text-xs mt-1 text-muted-foreground">
-                      {tpl.base_role}
+                      {tplRole(tpl)}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pb-4 pt-0 text-[11px] text-muted-foreground/80 leading-relaxed border-t border-border/10 mt-3 pt-3">
                     <span className="font-semibold block text-foreground/90 mb-1">
-                      Personalidad:
+                      {t("profiles_personality")}
                     </span>
-                    <p className="line-clamp-2">{tpl.base_personality}</p>
+                    <p className="line-clamp-2">{tplPersonality(tpl)}</p>
                   </CardContent>
                 </Card>
               );
@@ -388,13 +412,13 @@ export default function ProfilesPage() {
               {modifiers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-6 text-center text-muted-foreground">
                   <Lucide.Layers3Icon className="size-8 mb-2 opacity-40" />
-                  <p className="text-xs">No hay modificadores disponibles para este perfil.</p>
+                  <p className="text-xs">{t("profiles_no_modifiers")}</p>
                 </div>
               ) : (
                 Object.keys(groupedModifiers).map((catName) => (
                   <div key={catName} className="space-y-2.5">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground/80">
-                      {catName}
+                      {modCategory(catName)}
                     </h4>
                     <div className="flex flex-wrap gap-2">
                       {groupedModifiers[catName].map((mod) => {
@@ -415,7 +439,7 @@ export default function ProfilesPage() {
                             )}
                           >
                             <ModIcon className="size-3.5 shrink-0" />
-                            <span>{mod.name}</span>
+                            <span>{modName(mod)}</span>
                             {isSelected && (
                               <Lucide.CheckIcon className="size-3 shrink-0 ml-0.5 animate-scale-up" />
                             )}
@@ -456,7 +480,7 @@ export default function ProfilesPage() {
                 </span>
               ) : (
                 <span className="text-xs text-muted-foreground/60">
-                  Cambios locales
+                  {t("profiles_local_changes")}
                 </span>
               )}
               <Button
@@ -468,7 +492,7 @@ export default function ProfilesPage() {
                 {isSavingNotes ? (
                   <>
                     <Lucide.Loader2Icon className="mr-2 size-4 animate-spin" />
-                    Guardando...
+                    {t("profiles_saving")}
                   </>
                 ) : (
                   <>

@@ -84,6 +84,7 @@ const UsageBar = ({
       resetLabel = language === "spanish"
         ? `Resetea en ${h}h ${m}min`
         : `Resets in ${h}h ${m}min`;
+      // Note: string interpolation required — language ternary is intentional here
     }
   }
 
@@ -256,11 +257,7 @@ export const InvisibleAIApiSetup = () => {
       const instanceId = storage.instance_id || "";
       serverApi.setCredentials(instanceId, "");
 
-      setSuccess(
-        language === "spanish"
-          ? "¡Licencia eliminada! Continúas en modo gratuito."
-          : "License removed! You're now on the free tier."
-      );
+      setSuccess(t("dashboard_license_removed"));
 
       // No deshabilitar el API — el usuario continúa con el tier free
       await loadLicenseStatus();
@@ -287,12 +284,10 @@ export const InvisibleAIApiSetup = () => {
         <div className="relative z-10 space-y-5">
           <div>
             <h2 className="text-[15px] font-bold text-foreground/95 tracking-wide">
-              {language === "spanish" ? "Licencia" : "License"}
+              {t("dashboard_license_title")}
             </h2>
             <p className="text-xs text-muted-foreground/60 mt-1">
-              {language === "spanish"
-                ? "Conecta tu licencia para acceso premium. El modelo de IA se configura automáticamente."
-                : "Connect your license for premium access. The AI model is configured automatically."}
+              {t("dashboard_license_desc")}
             </p>
           </div>
 
@@ -324,7 +319,7 @@ export const InvisibleAIApiSetup = () => {
                 className="h-11 rounded-2xl px-6 font-bold text-xs transition-all duration-200 active:scale-95"
               >
                 {isLoading ? <LoaderIcon className="size-3.5 animate-spin mr-1.5" /> : <KeyIcon className="size-3.5 mr-1.5" />}
-                {language === "spanish" ? "Activar" : "Activate"}
+                {t("dashboard_activate")}
               </Button>
             </div>
           ) : (
@@ -356,16 +351,12 @@ export const InvisibleAIApiSetup = () => {
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
           <div className="space-y-1.5">
             <h2 className="text-[15px] font-bold text-foreground/95 tracking-wide">
-              {language === "spanish" ? "Estado del Sistema" : "System Status"}
+              {t("dashboard_system_status_title")}
             </h2>
             <p className="text-xs text-muted-foreground/60 leading-relaxed max-w-sm">
               {hasActiveLicense
-                ? (language === "spanish"
-                    ? "Tienes acceso completo a todas las funciones premium activas."
-                    : "Full access to all active premium core features.")
-                : (language === "spanish"
-                    ? "Accedes a los servidores de InvisibleAI en modo gratuito. Activa tu licencia para funciones premium sin límites."
-                    : "You have access to InvisibleAI servers in free mode. Activate your license for unlimited premium features.")}
+                ? t("dashboard_system_status_licensed_desc")
+                : t("dashboard_system_status_free_desc")}
             </p>
           </div>
 
@@ -378,7 +369,7 @@ export const InvisibleAIApiSetup = () => {
               <span className={`mr-1.5 size-1.5 rounded-full ${hasActiveLicense ? "bg-zinc-500 animate-pulse" : "bg-blue-400 animate-pulse"}`} />
               {hasActiveLicense
                 ? t("active")
-                : (language === "spanish" ? "Gratuito" : "Free")}
+                : t("dashboard_free_badge")}
             </span>
             <label className="flex items-center gap-2.5 text-xs font-bold text-foreground/70 cursor-pointer">
               {invisibleaiApiEnabled ? t("api_setup_disable_api") : t("api_setup_enable_api")}
@@ -403,21 +394,19 @@ export const InvisibleAIApiSetup = () => {
             {/* Título */}
             <div>
               <h2 className="text-[15px] font-bold text-foreground/95 tracking-wide">
-                {language === "spanish" ? "Balance de Créditos" : "Usage Credits"}
+                {t("dashboard_credits_title")}
               </h2>
               <p className="text-xs text-muted-foreground/60 mt-1">
-                {language === "spanish"
-                  ? "Consumo en tiempo real — se actualiza tras cada operación."
-                  : "Real-time usage — updates after each operation."}
+                {t("dashboard_credits_desc")}
               </p>
             </div>
 
             {/* ── Chat tokens ── */}
             <UsageBar
-              label={language === "spanish" ? "Chat IA" : "AI Chat"}
+              label={t("dashboard_chat_label")}
               used={usageBalance.chat.tokensUsedToday}
               max={usageBalance.chat.tokenLimitPerDay}
-              unit={language === "spanish" ? "tokens hoy" : "tokens today"}
+              unit={t("dashboard_chat_unit")}
               colorFrom="from-violet-500"
               colorTo="to-indigo-400"
               resetsAt={usageBalance.chat.resetsAt}
@@ -427,10 +416,10 @@ export const InvisibleAIApiSetup = () => {
             {/* ── STT calls (solo free users) ── */}
             {usageBalance.stt.callLimitPerDay !== null && (
               <UsageBar
-                label={language === "spanish" ? "Transcripciones (Whisper)" : "Transcriptions (Whisper)"}
+                label={t("dashboard_stt_label")}
                 used={usageBalance.stt.callsUsedToday}
                 max={usageBalance.stt.callLimitPerDay}
-                unit={language === "spanish" ? "llamadas hoy (≈15 min gratis)" : "calls today (≈15 min free)"}
+                unit={t("dashboard_stt_unit")}
                 colorFrom="from-sky-500"
                 colorTo="to-blue-400"
                 language={language}
@@ -440,11 +429,11 @@ export const InvisibleAIApiSetup = () => {
             {/* ── Streaming credits (solo licensed) ── */}
             {usageBalance.licenseType === "licensed" ? (
               <UsageBar
-                label={language === "spanish" ? "Créditos Streaming" : "Streaming Credits"}
+                label={t("dashboard_streaming_label")}
                 used={usageBalance.streaming.maxCredits - usageBalance.streaming.credits}
                 max={usageBalance.streaming.maxCredits}
                 displayUsed={usageBalance.streaming.credits}
-                unitPrefix={language === "spanish" ? "disponibles" : "available"}
+                unitPrefix={t("dashboard_streaming_available")}
                 unit={`≈ ${usageBalance.streaming.equivalentMinutes.toFixed(1)} min`}
                 colorFrom="from-amber-400"
                 colorTo="to-orange-400"
@@ -455,12 +444,10 @@ export const InvisibleAIApiSetup = () => {
               <div className="flex items-center rounded-2xl border border-dashed border-border/20 bg-card/10 px-4 py-3">
                 <div className="flex-1">
                   <div className="text-xs font-bold text-foreground/50">
-                    {language === "spanish" ? "Streaming en tiempo real" : "Real-time Streaming"}
+                    {t("dashboard_streaming_locked_title")}
                   </div>
                   <div className="text-[11px] text-muted-foreground/40 mt-0.5">
-                    {language === "spanish"
-                      ? "Disponible en plan de pago — activa tu licencia."
-                      : "Available on paid plan — activate your license."}
+                    {t("dashboard_streaming_locked_desc")}
                   </div>
                 </div>
               </div>
