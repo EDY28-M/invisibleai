@@ -74,10 +74,10 @@ jobs:
           releaseBody: |
             ### InvisibleAI v__VERSION__
 
-            * **Estatus de Licencia Persistente**: Se corrigió el bug que eliminaba la licencia de la app al reiniciar/cerrar cuando el servidor local estaba offline.
-            * **Validaciones y Errores Amigables**: Los mensajes de error técnicos (fallos de red, límites de tokens) ahora se presentan de forma clara y amigable en español.
-            * **Perfiles Modulares**: Sistema modular de perfiles (plantillas + modificadores + notas de sesión) para ajustar el rol y conocimientos del asistente.
-            * **Limpieza de Comentarios**: Eliminación de notas y comentarios de desarrollo internos obsoletos para un código más eficiente y profesional.
+            * **Límites ampliados**: Chat licensed sube a 700 000 tokens/período con reset cada 12 h. Créditos Deepgram: 20 000/día (máx. 40 000 acumulables). Bono bienvenida día 1: 23 600 créditos.
+            * **Fuga de créditos corregida**: Los créditos de streaming ya no se consumen cuando el usuario no está hablando. La facturación ahora se activa únicamente cuando hay actividad de audio real (con 5 s de gracia tras el último audio detectado).
+            * **Idioma de respuesta corregido**: Al seleccionar un idioma en ajustes, la IA ahora responde siempre en ese idioma. Antes ignoraba la selección y seguía contestando en otro idioma.
+            * **Reset de chat cada 12 horas**: Los 700 000 tokens del tier licensed se recargan dos veces al día (00:00 UTC y 12:00 UTC) en lugar de una vez a medianoche.
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true

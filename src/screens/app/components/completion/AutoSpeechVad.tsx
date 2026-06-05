@@ -17,6 +17,7 @@ interface AutoSpeechVADProps {
 }
 
 const STREAMING_MIC_DISPATCH_IDLE_MS = 600;
+const STREAMING_CREDIT_IDLE_GRACE_MS = 5_000;
 
 const mergeStreamingTranscriptText = (currentText: string, nextText: string) => {
   const current = currentText.trim();
@@ -70,11 +71,14 @@ const AutoSpeechVADInternal = ({
     if (lastReportAt === null) return;
 
     const now = Date.now();
-    const secondsUsed = (now - lastReportAt) / 1000;
-    if (secondsUsed < 1) return;
+    const lastAudioAt = lastStreamingAudioAtRef.current;
+    const billUntil = lastAudioAt > 0 ? Math.min(now, lastAudioAt + STREAMING_CREDIT_IDLE_GRACE_MS) : 0;
+    const secondsUsed = (billUntil - lastReportAt) / 1000;
 
-    serverApi.reportStreamingSeconds(secondsUsed);
     streamingUsageLastReportAtRef.current = now;
+
+    if (secondsUsed < 1) return;
+    serverApi.reportStreamingSeconds(secondsUsed);
   }, []);
 
   useEffect(() => {
@@ -407,15 +411,8 @@ const AutoSpeechVADInternal = ({
         clearInterval(streamingUsageReportTimerRef.current);
         streamingUsageReportTimerRef.current = null;
       }
-      if (streamingUsageLastReportAtRef.current !== null) {
-        const lastReportAt = streamingUsageLastReportAtRef.current;
-        const now = Date.now();
-        const secondsUsed = (now - lastReportAt) / 1000;
-        if (secondsUsed >= 1) {
-          serverApi.reportStreamingSeconds(secondsUsed);
-        }
-        streamingUsageLastReportAtRef.current = null;
-      }
+      reportStreamingUsageSinceLastTick();
+      streamingUsageLastReportAtRef.current = null;
       streamingSessionStartRef.current = null;
 
       clearStreamingDispatchTimer();

@@ -141,6 +141,36 @@ Los usuarios free reciben **una activación gratuita** del perfil de entrevistas
 
 ---
 
+## 🚀 Novedades de la Versión 1.5.1
+
+### Límites del servidor ampliados
+
+| Concepto | Antes (v1.5.0) | Ahora (v1.5.1) |
+| :--- | :--- | :--- |
+| Chat tokens licensed / período | 300 000 | **700 000** |
+| Período de reset del chat | 24 h | **12 h** (AM + PM UTC) |
+| Créditos streaming / día | 1 800 | **20 000** |
+| Máximo acumulable | 14 400 (~4 h) | **40 000 (~11 h)** |
+| Bono bienvenida licensed | 3 600 | 3 600 + 20 000 = **23 600** (día 1) |
+
+### Corrección: créditos de streaming no se drenan en reposo
+
+Los créditos de Deepgram se descontaban continuamente aunque el usuario no estuviese hablando. La lógica del reportero periódico ahora verifica si llegó audio real antes de facturar:
+
+- Solo se factura el tiempo hasta `min(ahora, últimoAudio + 5 s)`.
+- Los ticks de 10 segundos sin actividad resultan en **0 créditos descontados**.
+- Aplica tanto al micrófono (`AutoSpeechVad.tsx`) como al audio del sistema (`useSystemAudio.ts`).
+
+### Corrección: idioma de respuesta ignorado
+
+Al seleccionar un idioma de respuesta desde los ajustes, la IA seguía respondiendo en otro idioma. La selección de idioma ahora se aplica correctamente al system prompt en todas las rutas de procesamiento — chat completion y flujo de audio — garantizando que el modelo responda en el idioma configurado.
+
+### Reset de chat cada 12 horas (licensed)
+
+El saldo de tokens del chat licensed se reinicia dos veces al día: a las **00:00 UTC** y a las **12:00 UTC**. El balance de la app muestra `resetsAt` con la hora exacta del próximo reset. Los usuarios free mantienen su ciclo de 24 horas sin cambios.
+
+---
+
 ## 🌟 Novedades de la Versión 1.5.0
 
 *   **Robustez de Licencia en Desarrollo**: Corregido el error que causaba la eliminación de la licencia al reiniciar la aplicación en local cuando el servidor de validación (`localhost:3000`) estaba offline.

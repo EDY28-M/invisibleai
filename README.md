@@ -12,7 +12,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![Rust](https://img.shields.io/badge/Core-Rust-brown)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.0-green)](https://github.com/EDY28-M/invisibleai/releases)
+[![Version](https://img.shields.io/badge/version-1.5.1-green)](https://github.com/EDY28-M/invisibleai/releases)
 
 > Proyecto en construcción. InvisibleAI es una app de escritorio multiplataforma para asistencia con IA en reuniones, entrevistas, clases, auditorías, videos y conversaciones en tiempo real.
 
@@ -24,6 +24,34 @@ La aplicación permite trabajar en dos caminos separados:
 
 - **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
 - **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
+
+## Novedades en v1.5.1
+
+### Límites del servidor ampliados
+
+Se duplicaron (o más) todos los umbrales del tier licensed en el servidor de producción:
+
+- **Chat IA licensed**: 300 000 → **700 000 tokens** por período, con reset cada **12 horas** (antes era cada 24 h). El sistema divide el día en dos bloques UTC: AM (00:00–12:00) y PM (12:00–24:00); cada bloque tiene su cuota propia.
+- **Créditos de streaming Deepgram**: recarga diaria 1 800 → **20 000 créditos/día**. Máximo acumulable 14 400 → **40 000**. Bono de bienvenida en licencia nueva: 3 600 créditos adicionales al primer día (total día 1: **23 600**).
+- **Tier free sin cambios**: sigue en 50 000 tokens/día y 15 llamadas Whisper/día.
+
+### Corrección de fuga de créditos de streaming
+
+Los créditos de Deepgram se descontaban de forma continua aunque el usuario no estuviese hablando ni capturando audio. La raíz era que el reportero periódico facturaba tiempo de pared sin verificar si había llegado audio real.
+
+- `reportStreamingUsageSinceLastTick` en `useSystemAudio.ts` y `AutoSpeechVad.tsx` ahora solo factura hasta `min(ahora, últimoAudio + 5 s)`. Si no llegó audio desde el último tick, la facturación es cero.
+- `streamingUsageLastReportAtRef` avanza siempre a `now` para evitar acumulación diferida de silencio en el siguiente tick.
+- El timer de 10 segundos sigue activo mientras la sesión está abierta, pero los ticks sin actividad de audio resultan en 0 segundos facturados al servidor.
+
+### Corrección de idioma de respuesta
+
+Al configurar un idioma de respuesta en ajustes, la IA seguía contestando en otro idioma ignorando la selección. Corregido: el idioma seleccionado ahora se aplica correctamente al system prompt en todas las rutas de procesamiento (chat completion y flujo de audio), garantizando que el modelo responda en el idioma configurado desde el primer mensaje.
+
+### Reset de 12 horas para chat licensed
+
+El contador de tokens del chat licensed ahora usa períodos de 12 horas en lugar de días completos. Implementado con claves de período `YYYY-MM-DDA` / `YYYY-MM-DDB` que cambian a las 12:00 UTC. `resetsAt` en el balance devuelve la hora exacta del próximo reset (12:00 o 00:00 UTC del día).
+
+---
 
 ## Novedades en v1.5.0
 
@@ -416,7 +444,7 @@ Para usar IA local:
 
 ## Release y despliegue
 
-La versión actual es **1.5.0**.
+La versión actual es **1.5.1**.
 
 Los archivos que deben mantenerse sincronizados para release son:
 
@@ -435,7 +463,7 @@ app-v<VERSION>
 Para esta versión, GitHub Actions generará el release como:
 
 ```text
-app-v1.5.0
+app-v1.5.1
 ```
 
 ## Estructura del proyecto

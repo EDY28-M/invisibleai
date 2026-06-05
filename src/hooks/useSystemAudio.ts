@@ -61,6 +61,7 @@ const DEFAULT_VAD_CONFIG: VadConfig = {
 
 const STREAMING_DISPATCH_IDLE_MS = 600;
 const STREAMING_CREDIT_REPORT_INTERVAL_MS = 10_000;
+const STREAMING_CREDIT_IDLE_GRACE_MS = 5_000;
 // Deepgram emits interim transcripts every ~50-100ms. Re-rendering (and
 // re-parsing the Markdown preview) on each one is the main source of perceived
 // lag while transcribing. We coalesce interim updates to this cadence; final
@@ -1557,11 +1558,17 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
     if (lastReportAt === null) return;
 
     const now = Date.now();
-    const secondsUsed = (now - lastReportAt) / 1000;
-    if (secondsUsed < 1) return;
+    const lastAudioAt = Math.max(
+      lastStreamingAudioAtRef.current.mic,
+      lastStreamingAudioAtRef.current.system
+    );
+    const billUntil = lastAudioAt > 0 ? Math.min(now, lastAudioAt + STREAMING_CREDIT_IDLE_GRACE_MS) : 0;
+    const secondsUsed = (billUntil - lastReportAt) / 1000;
 
-    serverApi.reportStreamingSeconds(secondsUsed);
     streamingUsageLastReportAtRef.current = now;
+
+    if (secondsUsed < 1) return;
+    serverApi.reportStreamingSeconds(secondsUsed);
   }, []);
 
   const startStreamingUsageReporting = useCallback(() => {
