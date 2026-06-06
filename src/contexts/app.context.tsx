@@ -142,23 +142,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     );
 
   const getActiveLicenseStatus = async () => {
-    const response: { is_active: boolean; is_dev_license: boolean } =
-      await invoke("validate_license_api");
-    setHasActiveLicense(response.is_active);
+    try {
+      const response: { is_active: boolean; is_dev_license: boolean } =
+        await invoke("validate_license_api");
+      setHasActiveLicense(response.is_active);
 
-    if (response?.is_dev_license) {
-      setInvisibleAIApiEnabled(false);
-    }
+      if (response?.is_dev_license) {
+        setInvisibleAIApiEnabled(false);
+      }
 
-    const autoConfigsEnabled = localStorage.getItem("auto-configs-enabled");
-    if (response.is_active && !autoConfigsEnabled) {
-      setScreenshotConfiguration({
-        mode: "auto",
-        autoPrompt: "Analyze the screenshot and provide insights",
-        enabled: false,
-      });
-
-      localStorage.setItem("auto-configs-enabled", "true");
+      const autoConfigsEnabled = localStorage.getItem("auto-configs-enabled");
+      if (response.is_active && !autoConfigsEnabled) {
+        setScreenshotConfiguration({
+          mode: "auto",
+          autoPrompt: "Analyze the screenshot and provide insights",
+          enabled: false,
+        });
+        localStorage.setItem("auto-configs-enabled", "true");
+      }
+    } catch {
+      // Tauri backend not ready yet or closing — keep current state, do not flip to false
     }
   };
 
@@ -346,7 +349,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       try {
         const validation = await serverApi.validate(licenseKey, instanceId);
         if (!validation.valid) {
-          throw new Error("License revoked on server");
+          // Use the actual server error message so isLicenseInvalidError can
+          // distinguish "truly revoked/expired" from generic failures.
+          throw new Error(validation.error || "license_invalid");
         }
 
         const balance = await serverApi.getUsageBalance().catch(() => null);
@@ -388,11 +393,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       } catch (valErr: any) {
         if (isLicenseInvalidError(valErr)) {
           const errStr = valErr?.message || String(valErr);
+          console.warn("License invalid, clearing local credentials:", errStr);
 
-          console.warn(
-            "License revoked by server, clearing local premium credentials:",
-            errStr,
-          );
+          // Auto-deactivate on the server so the seat is freed and the user
+          // can re-activate cleanly on another device if needed.
+          await invoke("deactivate_license_api").catch(() => {});
+
           await invoke("secure_storage_remove", {
             keys: [
               "invisibleai_license_key",
@@ -413,8 +419,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             .catch(() => null);
           if (freeBalance) setUsageBalance(freeBalance);
         } else {
+          // Network error / server temporarily down — keep local credentials.
+          // Do NOT touch hasActiveLicense so the user is not shown as "free".
           console.debug(
-            "Server unreachable or temporary connection failure, keeping local credentials:",
+            "Server unreachable or temporary failure — keeping local credentials:",
             valErr,
           );
         }
@@ -429,10 +437,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       "usage-balance-updated",
       (event) => {
         setUsageBalance(event.payload);
+        // Only upgrade to "licensed" from balance updates; never flip to false here.
+        // Downgrading hasActiveLicense is the responsibility of explicit validation
+        // failures in syncServerCredentials — not of usage-balance polls which can
+        // transiently return "free" on server errors or race conditions.
         if (event.payload.licenseType === "licensed") {
           setHasActiveLicense(true);
-        } else if (event.payload.licenseType === "free") {
-          setHasActiveLicense(false);
         }
       },
     );
@@ -600,31 +610,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
           if (storage.groq_api_key && hasActiveLicense) {
             const model = storage.groq_model ?? "";
+            // Only llama-4 variants support vision; empty model falls back to
+            // llama-3.3 (FREE_CHAT_MODEL) which has no vision support.
             const supportsVision =
-              !model ||
               model.includes("llama-4") ||
               model.includes("scout") ||
+              model.includes("maverick") ||
               model.includes("vision");
             setSupportsImages(supportsVision);
-          } else if (!hasActiveLicense) {
-            setSupportsImages(false);
           } else {
-            try {
-              const storageAuth = await invoke<{
-                license_key?: string;
-                instance_id?: string;
-              }>("secure_storage_get");
-              const config = await serverApi.getConfig(
-                storageAuth.license_key,
-                storageAuth.instance_id,
-              );
-              setSupportsImages(config.chat.supportsVision ?? true);
-            } catch {
-              setSupportsImages(true);
-            }
+            // Free users (no license) always use llama-3.3-70b-versatile which
+            // has no vision support. Licensed users without a local groq_api_key
+            // also fall back to the server proxy path (llama-3.3), so vision is
+            // disabled until credentials are fetched.
+            setSupportsImages(false);
           }
         } catch {
-          setSupportsImages(true);
+          // Storage read failed — cannot confirm vision-capable model, stay safe.
+          setSupportsImages(false);
         }
       } else {
         const provider = allAiProviders.find(

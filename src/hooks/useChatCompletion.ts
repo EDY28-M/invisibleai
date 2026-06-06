@@ -135,12 +135,15 @@ export const useChatCompletion = (
   }, []);
 
   const submit = useCallback(
-    async (speechText?: string) => {
-      const input = speechText || state.input;
+    async (speechText?: string, extraImages?: string[]) => {
+      const rawInput = speechText || state.input;
+      const hasFiles = state.attachedFiles.length > 0 || (extraImages && extraImages.length > 0);
 
-      if (!input.trim()) {
+      if (!rawInput.trim() && !hasFiles) {
         return;
       }
+
+      const input = rawInput.trim() ? rawInput : "Analyze the attached content.";
 
       if (speechText) {
         setState((prev) => ({
@@ -166,7 +169,7 @@ export const useChatCompletion = (
           content: msg.content,
         }));
 
-        const imagesBase64: string[] = [];
+        const imagesBase64: string[] = [...(extraImages || [])];
         if (state.attachedFiles.length > 0) {
           state.attachedFiles.forEach((file) => {
             if (file.type.startsWith("image/")) {
@@ -479,22 +482,7 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
 
       try {
         if (prompt) {
-
-          const attachedFile: AttachedFile = {
-            id: Date.now().toString(),
-            name: `screenshot_${Date.now()}.png`,
-            type: "image/png",
-            base64: base64,
-            size: base64.length,
-          };
-
-          setState((prev) => ({
-            ...prev,
-            attachedFiles: [...prev.attachedFiles, attachedFile],
-            input: prompt,
-          }));
-
-          setTimeout(() => submit(prompt), 100);
+          await submit(prompt, [base64]);
         } else {
 
           const attachedFile: AttachedFile = {
@@ -618,6 +606,7 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
       }));
       isProcessingScreenshotRef.current = false;
       screenshotInitiatedByThisContext.current = false;
+      setIsScreenshotLoading(false);
     } finally {
       if (config.enabled) {
         setIsScreenshotLoading(false);

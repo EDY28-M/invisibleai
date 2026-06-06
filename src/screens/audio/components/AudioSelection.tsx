@@ -261,9 +261,17 @@ export const AudioSelection = () => {
       },
     ];
 
-    const drawFrame = () => {
+    let lastFrameTime = 0;
+    const FRAME_INTERVAL = 1000 / 30; // cap at ~30fps to cut CPU/GPU load
+
+    const drawFrame = (now = 0) => {
       if (!canvasRef.current) return;
       animationFrameRef.current = requestAnimationFrame(drawFrame);
+
+      // Don't burn cycles when the window is hidden, and throttle to 30fps.
+      if (document.hidden) return;
+      if (now - lastFrameTime < FRAME_INTERVAL) return;
+      lastFrameTime = now;
 
       if (audioContextRef.current && audioContextRef.current.state === "suspended") {
         audioContextRef.current.resume().catch(() => {});
@@ -342,9 +350,18 @@ export const AudioSelection = () => {
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
       if (audioContextRef.current) {
-        await audioContextRef.current.close();
+        // Closing an already-closed AudioContext rejects (InvalidStateError).
+        // Guard + null the ref so a re-run never throws and silently kills the
+        // waveform on its way to creating a fresh context.
+        try {
+          await audioContextRef.current.close();
+        } catch {
+          /* context already closed — ignore */
+        }
+        audioContextRef.current = null;
       }
 
       if (isSystemCapturing) {
@@ -398,12 +415,15 @@ export const AudioSelection = () => {
       active = false;
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = 0;
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
       if (audioContextRef.current) {
-        audioContextRef.current.close();
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
       }
       if (cleanupResize) {
         cleanupResize();

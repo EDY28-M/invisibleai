@@ -146,7 +146,7 @@ pub fn create_dashboard_window<R: Runtime>(
         .hidden_title(true)
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .content_protected(true)
-        .visible(true)
+        .visible(false)
         .traffic_light_position(LogicalPosition::new(14.0, 18.0));
 
     #[cfg(not(target_os = "macos"))]

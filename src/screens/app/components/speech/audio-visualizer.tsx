@@ -96,6 +96,9 @@ export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
     const frame = () => {
       animFrameRef.current = requestAnimationFrame(frame);
       if (!isRecording) return;
+      // Skip canvas work while the overlay window is hidden — it keeps rendering
+      // (mounted) during capture, so without this the loop burns 60fps unseen.
+      if (document.hidden) return;
 
       timeRef.current += 0.016;
       const t = timeRef.current;
@@ -134,6 +137,16 @@ export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
       const maxH = H - 4;
       const centerY = H / 2;
 
+      // Color is identical for every bar within a frame, so read the theme from
+      // the DOM and build the fill style ONCE here — not 32× inside the loop
+      // (which was ~1920 DOM reads/sec at 60fps).
+      const isDark = document.documentElement.classList.contains("dark");
+      const [cr, cg, cb] = isDark ? [230, 230, 235] : [30, 30, 35];
+      const opacity = idle ? (isDark ? 0.18 : 0.20) : (isDark ? 0.55 + level * 0.40 : 0.60 + level * 0.35);
+      ctx.fillStyle = idle
+        ? isDark ? `rgba(120,120,128,0.22)` : `rgba(160,160,168,0.28)`
+        : `rgba(${cr},${cg},${cb},${opacity})`;
+
       for (let i = 0; i < NUM_BARS; i++) {
         const v = barVariants[i];
         const wave = idle
@@ -147,14 +160,6 @@ export function AudioVisualizer({ stream, isRecording }: AudioVisualizerProps) {
         const barH = Math.max(MIN_HEIGHT, activeH);
         const x = startX + i * (BAR_WIDTH + BAR_GAP);
         const y = centerY - barH / 2;
-
-        // Color: adapt to theme — white/dark neutral, no chroma
-        const isDark = document.documentElement.classList.contains("dark");
-        const opacity = idle ? (isDark ? 0.18 : 0.20) : (isDark ? 0.55 + level * 0.40 : 0.60 + level * 0.35);
-        const [cr, cg, cb] = isDark ? [230, 230, 235] : [30, 30, 35];
-        ctx.fillStyle = idle
-          ? isDark ? `rgba(120,120,128,0.22)` : `rgba(160,160,168,0.28)`
-          : `rgba(${cr},${cg},${cb},${opacity})`;
 
         // Rounded bar
         const r = Math.min(BAR_WIDTH / 2, barH / 2);

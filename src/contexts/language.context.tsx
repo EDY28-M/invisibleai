@@ -823,16 +823,16 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [langCode, setLangCode] = useState<LanguageCode>("es");
+  const [langCode, setLangCode] = useState<LanguageCode>("en");
 
   useEffect(() => {
-    const saved = localStorage.getItem("app_language") || "es";
-    setLangCode(saved === "en" ? "en" : "es");
+    const saved = localStorage.getItem("app_language") || "en";
+    setLangCode(saved === "es" ? "es" : "en");
 
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === "app_language") {
-        const val = e.newValue || "es";
-        setLangCode(val === "en" ? "en" : "es");
+        const val = e.newValue || "en";
+        setLangCode(val === "es" ? "es" : "en");
       }
     };
     window.addEventListener("storage", handleStorageChange);
