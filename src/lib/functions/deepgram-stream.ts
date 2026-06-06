@@ -1,18 +1,6 @@
-/**
- * DeepgramStreamManager — Real-time streaming Speech-to-Text via Deepgram WebSockets.
- *
- * Architecture:
- * - Opens a native browser WebSocket to wss://api.deepgram.com/v1/listen
- * - Captures microphone audio via AudioContext & ScriptProcessor in 64ms chunks (1024 buffer)
- * - Converts Float32 PCM to Linear16 (Int16) PCM and sends raw binary frames
- * - Receives interim and final transcription results
- * - Accumulates final transcripts; exposes interim for live UI preview
- * - Uses a gain-0 node to prevent feedback loops in speakers/headphones
- */
+
 
 import { getResponseSettings } from "../storage/response-settings.storage";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 export type StreamState =
   | "idle"
@@ -37,25 +25,23 @@ export interface DeepgramStreamConfig {
 }
 
 export interface DeepgramStreamCallbacks {
-  /** Called on every transcript update (interim or final) */
+  
   onTranscript: (
     text: string,
     isFinal: boolean,
     fullAccumulated: string
   ) => void;
-  /** Called when Deepgram signals utterance end */
+  
   onUtteranceEnd?: (finalText: string) => void;
-  /** Called on errors */
+  
   onError: (error: Error) => void;
-  /** Called when connection cleanly closes */
+  
   onClose?: (reason: string) => void;
-  /** Called on state transitions */
+  
   onStateChange?: (state: StreamState) => void;
-  /** Called when input audio is active enough to be treated as speech/audio presence */
+  
   onAudioActivity?: (level: number) => void;
 }
-
-// ─── Constants ───────────────────────────────────────────────────────────────
 
 const DEEPGRAM_WS_BASE = "wss://api.deepgram.com/v1/listen";
 const KEEPALIVE_INTERVAL_MS = 8000;
@@ -66,8 +52,6 @@ const AUDIO_ACTIVITY_RMS_THRESHOLD = 0.006;
 const AUDIO_ACTIVITY_PEAK_THRESHOLD = 0.02;
 const AUDIO_ACTIVITY_NOTIFY_INTERVAL_MS = 100;
 
-// ─── Class ───────────────────────────────────────────────────────────────────
-
 export class DeepgramStreamManager {
   private config: Required<DeepgramStreamConfig>;
   private callbacks: DeepgramStreamCallbacks;
@@ -76,19 +60,16 @@ export class DeepgramStreamManager {
   private socket: WebSocket | null = null;
   private mediaStream: MediaStream | null = null;
 
-  // Transcript accumulation
   private finalSegments: string[] = [];
   private currentInterim: string = "";
   private lastFullAccumulated: string = "";
 
-  // Timers & counters
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private drainTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts: number = 0;
   private shouldReconnect: boolean = false;
   private lastAudioActivityNotificationAt: number = 0;
 
-  // Drain promise resolution
   private drainResolve: ((text: string) => void) | null = null;
 
   constructor(
@@ -146,11 +127,7 @@ export class DeepgramStreamManager {
     this.callbacks = callbacks;
   }
 
-  // ─── Public API ──────────────────────────────────────────────────────────
-
-  /**
-   * Start streaming: opens WebSocket, begins AudioContext capture.
-   */
+  
   async start(stream: MediaStream): Promise<void> {
     if (this.state !== "idle" && this.state !== "closed" && this.state !== "error") {
       console.warn(`[DeepgramStream] Cannot start from state: ${this.state}`);
@@ -165,9 +142,7 @@ export class DeepgramStreamManager {
     await this.connect();
   }
 
-  /**
-   * Start manual streaming (no browser MediaStream): opens WebSocket and waits for manual audio injection.
-   */
+  
   async startManual(inputSampleRate: number): Promise<void> {
     if (this.state !== "idle" && this.state !== "closed" && this.state !== "error") {
       console.warn(`[DeepgramStream] Cannot start manual from state: ${this.state}`);
@@ -183,13 +158,10 @@ export class DeepgramStreamManager {
     await this.connect();
   }
 
-  /**
-   * Gracefully stop streaming.
-   */
+  
   async stop(): Promise<string> {
     this.shouldReconnect = false;
 
-    // Stop recording first
     this.stopMediaRecorder();
 
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
@@ -198,7 +170,6 @@ export class DeepgramStreamManager {
       return text;
     }
 
-    // Enter drain mode: send CloseStream and wait for final transcript
     this.setState("draining");
 
     return new Promise<string>((resolve) => {
@@ -224,9 +195,7 @@ export class DeepgramStreamManager {
     });
   }
 
-  /**
-   * Force destroy without waiting for final results.
-   */
+  
   destroy(): void {
     this.shouldReconnect = false;
 
@@ -238,16 +207,12 @@ export class DeepgramStreamManager {
     this.cleanup();
   }
 
-  /**
-   * Get current accumulated final text.
-   */
+  
   getAccumulatedText(): string {
     return this.finalSegments.join(" ").trim();
   }
 
-  /**
-   * Get current full text including current interim.
-   */
+  
   getFullLiveText(): string {
     const finals = this.finalSegments.join(" ").trim();
     if (this.currentInterim) {
@@ -256,21 +221,15 @@ export class DeepgramStreamManager {
     return finals;
   }
 
-  /**
-   * Get current state.
-   */
+  
   getState(): StreamState {
     return this.state;
   }
 
-  /**
-   * Reset accumulated transcripts for the next utterance.
-   */
+  
   reset(): void {
     this.resetTranscripts();
   }
-
-  // ─── Connection ──────────────────────────────────────────────────────────
 
   private async connect(): Promise<void> {
     this.setState("connecting");
@@ -379,12 +338,7 @@ export class DeepgramStreamManager {
     }, delay);
   }
 
-  // ─── Audio Recording ─────────────────────────────────────────────────────
-
-  /**
-   * Inject raw float32 audio buffers (1024 samples from Tauri continuous capture).
-   * Box-resamples from input rate to 16kHz, converts to PCM Int16, and sends over the socket.
-   */
+  
   injectRawAudio(inputData: Float32Array | number[]): void {
     if (
       this.socket?.readyState !== WebSocket.OPEN ||
@@ -446,7 +400,6 @@ export class DeepgramStreamManager {
         (window as any).webkitAudioContext)();
       const source = audioContext.createMediaStreamSource(this.mediaStream);
 
-      // Buffer size 1024 limits capture latency to ~64ms
       const bufferSize = 1024;
       const processor = audioContext.createScriptProcessor(bufferSize, 1, 1);
 
@@ -581,8 +534,6 @@ export class DeepgramStreamManager {
     } catch { }
   }
 
-  // ─── Message Handling ────────────────────────────────────────────────────
-
   private handleMessage(event: MessageEvent): void {
     try {
       const data = JSON.parse(
@@ -597,7 +548,7 @@ export class DeepgramStreamManager {
         const text = this.getAccumulatedText();
         if (text.trim()) {
           this.callbacks.onUtteranceEnd?.(text);
-          this.resetTranscripts(); // Clear segments after dispatch to prevent re-sending
+          this.resetTranscripts();
         }
       } else if (data.type === "Error") {
         console.error("[DeepgramStream] Deepgram error:", data);
@@ -639,8 +590,6 @@ export class DeepgramStreamManager {
     }
   }
 
-  // ─── KeepAlive ───────────────────────────────────────────────────────────
-
   private startKeepAlive(): void {
     this.stopKeepAlive();
     this.keepAliveTimer = setInterval(() => {
@@ -659,15 +608,11 @@ export class DeepgramStreamManager {
     }
   }
 
-  // ─── State Management ────────────────────────────────────────────────────
-
   private setState(newState: StreamState): void {
     if (this.state === newState) return;
     this.state = newState;
     this.callbacks.onStateChange?.(newState);
   }
-
-  // ─── Cleanup ─────────────────────────────────────────────────────────────
 
   private resetTranscripts(): void {
     this.finalSegments = [];

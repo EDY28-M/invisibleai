@@ -263,7 +263,7 @@ export const Updater = () => {
             <p className="text-xs text-muted-foreground">
               Having trouble downloading?{" "}
               <a
-                href={"https://invisibleai.com/downloads?ref=invisibleai-app"}
+                href={"https://invisibleai.online/?ref=invisibleai-app"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:text-blue-700 underline inline-flex items-center gap-1"

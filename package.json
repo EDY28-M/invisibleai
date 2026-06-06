@@ -38,6 +38,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "clean:data": "node scripts/clean-data.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
