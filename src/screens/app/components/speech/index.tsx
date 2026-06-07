@@ -200,8 +200,10 @@ export const SystemAudio = (props: useSystemAudioType) => {
                 )}
 
                 <div className="ml-auto flex items-center gap-2 flex-shrink-0 max-w-full">
-                  {/* Screenshot Capture Button */}
-                  {hasActiveLicense && !setupRequired && supportsImages && (
+                  {/* Screenshot Capture Button — visible si el modelo soporta
+                      visión (supportsImages); free ahora usa scout con visión.
+                      El modo Selección sigue siendo premium (gate en el handler). */}
+                  {!setupRequired && supportsImages && (
                     <Button
                       size="sm"
                       onClick={handleCaptureScreenshot}

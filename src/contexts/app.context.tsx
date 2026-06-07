@@ -608,10 +608,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             groq_model?: string;
           }>("secure_storage_get");
 
-          if (storage.groq_api_key && hasActiveLicense) {
+          if (storage.groq_api_key) {
+            // Tiene key local → va DIRECTO a Groq con su modelo provisto.
+            // La visión depende del modelo (solo variantes llama-4 la soportan).
             const model = storage.groq_model ?? "";
-            // Only llama-4 variants support vision; empty model falls back to
-            // llama-3.3 (FREE_CHAT_MODEL) which has no vision support.
             const supportsVision =
               model.includes("llama-4") ||
               model.includes("scout") ||
@@ -619,11 +619,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               model.includes("vision");
             setSupportsImages(supportsVision);
           } else {
-            // Free users (no license) always use llama-3.3-70b-versatile which
-            // has no vision support. Licensed users without a local groq_api_key
-            // also fall back to the server proxy path (llama-3.3), so vision is
-            // disabled until credentials are fetched.
-            setSupportsImages(false);
+            // Sin key local → la petición sale por el PROXY del servidor, que
+            // ahora sirve meta-llama/llama-4-scout (CON visión) en modo free.
+            // Por eso habilitamos imágenes y capturas también para usuarios free.
+            setSupportsImages(true);
           }
         } catch {
           // Storage read failed — cannot confirm vision-capable model, stay safe.
