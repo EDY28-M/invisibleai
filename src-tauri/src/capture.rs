@@ -1,5 +1,4 @@
 use base64::Engine;
-use image::codecs::png::PngEncoder;
 use image::{ColorType, GenericImageView, ImageEncoder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -9,6 +8,37 @@ use std::{thread, time::Duration};
 use tauri::Emitter;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use xcap::Monitor;
+
+/// Redimensiona (máx 1600px de ancho) y codifica como JPEG (calidad 82) para
+/// minimizar el tamaño del base64 que se sube al servidor.
+///
+/// Una captura PNG sin comprimir pesa 2-3 MB y subirla tarda ~5 s (y nginx la
+/// bufferiza a disco). En JPEG redimensionado baja a ~150-300 KB (<1 s), sin
+/// pérdida perceptible para los modelos de visión (que reescalan internamente).
+fn encode_capture_base64(rgba: &[u8], width: u32, height: u32) -> Result<String, String> {
+    use image::codecs::jpeg::JpegEncoder;
+    use image::{DynamicImage, RgbaImage};
+
+    const MAX_W: u32 = 1600;
+
+    let buf = RgbaImage::from_raw(width, height, rgba.to_vec())
+        .ok_or_else(|| "Invalid image buffer".to_string())?;
+    let mut dynimg = DynamicImage::ImageRgba8(buf);
+
+    if width > MAX_W {
+        let nh = (((height as f32) * (MAX_W as f32 / width as f32)).round() as u32).max(1);
+        dynimg = dynimg.resize(MAX_W, nh, image::imageops::FilterType::Triangle);
+    }
+
+    // JPEG no soporta canal alfa → convertir a RGB8 (las capturas son opacas).
+    let rgb = dynimg.to_rgb8();
+    let mut jpeg = Vec::new();
+    JpegEncoder::new_with_quality(&mut jpeg, 82)
+        .write_image(rgb.as_raw(), rgb.width(), rgb.height(), ColorType::Rgb8.into())
+        .map_err(|e| format!("Failed to encode JPEG: {}", e))?;
+
+    Ok(base64::engine::general_purpose::STANDARD.encode(jpeg))
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SelectionCoords {
@@ -208,17 +238,8 @@ pub async fn capture_selected_area(
 
     let cropped = monitor_info.image.view(x, y, width, height).to_image();
 
-    let mut png_buffer = Vec::new();
-    PngEncoder::new(&mut png_buffer)
-        .write_image(
-            cropped.as_raw(),
-            cropped.width(),
-            cropped.height(),
-            ColorType::Rgba8.into(),
-        )
-        .map_err(|e| format!("Failed to encode to PNG: {}", e))?;
-
-    let base64_str = base64::engine::general_purpose::STANDARD.encode(png_buffer);
+    let base64_str =
+        encode_capture_base64(cropped.as_raw(), cropped.width(), cropped.height())?;
 
     captured_monitors.clear();
     drop(captured_monitors);
@@ -350,16 +371,7 @@ pub async fn capture_to_base64(window: tauri::WebviewWindow) -> Result<String, S
         let image = monitor
             .capture_image()
             .map_err(|e| format!("Failed to capture image: {}", e))?;
-        let mut png_buffer = Vec::new();
-        PngEncoder::new(&mut png_buffer)
-            .write_image(
-                image.as_raw(),
-                image.width(),
-                image.height(),
-                ColorType::Rgba8.into(),
-            )
-            .map_err(|e| format!("Failed to encode to PNG: {}", e))?;
-        let base64_str = base64::engine::general_purpose::STANDARD.encode(png_buffer);
+        let base64_str = encode_capture_base64(image.as_raw(), image.width(), image.height())?;
 
         Ok(base64_str)
     })
