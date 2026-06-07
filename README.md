@@ -12,7 +12,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![Rust](https://img.shields.io/badge/Core-Rust-brown)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.1-green)](https://github.com/EDY28-M/invisibleai/releases)
+[![Version](https://img.shields.io/badge/version-1.5.2-green)](https://github.com/EDY28-M/invisibleai/releases)
 
 > Proyecto en construcción. InvisibleAI es una app de escritorio multiplataforma para asistencia con IA en reuniones, entrevistas, clases, auditorías, videos y conversaciones en tiempo real.
 
@@ -24,6 +24,62 @@ La aplicación permite trabajar en dos caminos separados:
 
 - **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
 - **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
+
+## Novedades en v1.5.2
+
+### Llama 4 Scout para usuarios free
+
+Los usuarios sin licencia ahora usan **`meta-llama/llama-4-scout-17b-16e-instruct`** como modelo principal del servidor, reemplazando a `llama-3.3-70b-versatile`. Llama 4 Scout incluye soporte de visión nativa, lo que habilita el análisis de imágenes y capturas de pantalla para el tier gratuito. La cadena de fallback es `scout → llama-3.3-70b → llama-3.1-8b` para modelos sin visión; cuando el mensaje contiene imágenes, el fallback se limita a modelos de visión (`scout` y `maverick`).
+
+### Imágenes y capturas desbloqueadas para usuarios free
+
+- El botón de adjuntar imagen y el botón de captura de pantalla ahora son **visibles y funcionales** para usuarios sin licencia.
+- `supportsImages` en `app.context.tsx` ya no requiere `hasActiveLicense`: si el usuario no tiene clave de API local, el servidor usa scout (visión) → `supportsImages = true` automáticamente.
+- En `speech/index.tsx`, el botón Screenshot ya no está protegido por `hasActiveLicense` — el gate de modo Selección (arrastrar área) sigue siendo premium en el handler.
+
+### Capturas de pantalla 7× más rápidas
+
+Las capturas se codifican ahora como **JPEG calidad 82** en lugar de PNG sin comprimir:
+
+- Nuevo helper `encode_capture_base64()` en `capture.rs` — redimensiona a máx 1600 px de ancho si supera ese límite y codifica como JPEG RGB8.
+- Tamaño: ~3 MB PNG → **~150–300 KB JPEG**.
+- Tiempo de subida: ~5 s → **~0,7 s**.
+- Aplica tanto a `capture_to_base64` (botón de cámara) como a `capture_selected_area` (modo recorte).
+
+### Límite diario free ampliado a 150 000 tokens
+
+`chatTokensPerDay` del tier free aumentado de 50 000 → **150 000 tokens/día** en `usage.ts` del servidor. El ciclo de reset sigue siendo de 24 h sin cambios.
+
+### STT Deepgram: despacho a los 500 ms de silencio
+
+`endpointing` cambiado de `10` → **`500`** en `deepgram_stream.rs`:
+
+- Con `endpointing=10` Deepgram disparaba `speech_final` en micro-pausas entre palabras, resultando en disparos poco fiables que siempre caían al fallback `UtteranceEnd` de 1 000 ms.
+- Con `endpointing=500` el fin de habla se detecta tras 500 ms reales de silencio → **chat se despacha en ~500 ms** (antes ~1 000 ms).
+- `utterance_end_ms` se mantiene en 1 000 (mínimo de Deepgram) como red de seguridad.
+- Solo afecta a usuarios con **licencia** (STT streaming Deepgram); los free usan Whisper batch, sin cambios.
+
+### Corrección: chat free no respondía con mensajes largos
+
+La cadena de fallback de modelos Groq fallaba silenciosamente cuando el prompt llegaba a `llama-3.1-8b-instant` (límite 6 000 TPM), que devolvía error 413 "request too large":
+
+- `isRateLimitError` renombrado a `isRetryableModelError` — ahora captura también errores 413 y mensajes "request too large".
+- Orden de fallback reordenado a `scout (30k TPM) → 70b (12k TPM) → 8b (6k TPM)` — el modelo más capaz va primero.
+- Se añadió el Set `GROQ_VISION_MODELS` y la función `messagesHaveImages()` para filtrar fallbacks a solo modelos con visión cuando el mensaje incluye imágenes.
+
+### Endpoint de reset de uso (admin)
+
+Nuevo endpoint `POST /api/admin/usage/reset` en el servidor:
+
+- Sin body → resetea **todos** los registros de `usageBalance`.
+- Con `{ "instanceId": "…" }` → resetea solo ese dispositivo.
+- Script reutilizable en `scripts/reset-free-limits.mjs`: `node reset-free-limits.mjs` (todos) o `node reset-free-limits.mjs <instanceId>` (uno).
+
+### Nginx: soporte de imágenes grandes
+
+`client_max_body_size 25M;` añadido al bloque server del VPS. Antes las capturas (~2–3 MB en base64) eran rechazadas con error 413 por el límite por defecto de 1 MB.
+
+---
 
 ## Novedades en v1.5.1
 
@@ -444,7 +500,7 @@ Para usar IA local:
 
 ## Release y despliegue
 
-La versión actual es **1.5.1**.
+La versión actual es **1.5.2**.
 
 Los archivos que deben mantenerse sincronizados para release son:
 
@@ -463,7 +519,7 @@ app-v<VERSION>
 Para esta versión, GitHub Actions generará el release como:
 
 ```text
-app-v1.5.1
+app-v1.5.2
 ```
 
 ## Estructura del proyecto

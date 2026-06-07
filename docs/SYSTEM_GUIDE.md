@@ -141,6 +141,39 @@ Los usuarios free reciben **una activación gratuita** del perfil de entrevistas
 
 ---
 
+## 🚀 Novedades de la Versión 1.5.2
+
+### Llama 4 Scout para el tier free (visión incluida)
+
+Los usuarios sin licencia ahora usan **`meta-llama/llama-4-scout-17b-16e-instruct`** en lugar de Llama 3.3 70B. Scout incluye visión nativa, lo que desbloquea el chat con imágenes para el tier gratuito. La cadena de fallback del servidor es `scout → 70b → 8b`; cuando el mensaje contiene imágenes, el fallback se limita a modelos de visión.
+
+### Imágenes y capturas disponibles para usuarios free
+
+- El botón de cámara y el adjuntar imagen son **visibles y funcionales** sin licencia.
+- `supportsImages` se activa automáticamente para cualquier usuario que use el servidor de InvisibleAI (sin clave API local), ya que el servidor siempre usa Scout con visión.
+
+### Capturas 7× más rápidas (JPEG en Rust)
+
+Las capturas se codifican como **JPEG calidad 82** (máx 1600 px ancho) en lugar de PNG sin comprimir. Reduce el tamaño de ~3 MB a ~150–300 KB y el tiempo de subida de ~5 s a **~0,7 s**. Aplica al botón de cámara (`capture_to_base64`) y al modo recorte (`capture_selected_area`).
+
+### Límite diario free: 50 000 → 150 000 tokens
+
+El tope de tokens por día para usuarios gratuitos se triplicó. El ciclo de reset sigue siendo cada 24 h.
+
+### STT Deepgram: despacho a los ~500 ms de silencio
+
+`endpointing` cambió de `10` → **`500`** ms. Con el valor anterior, `speech_final` se disparaba de forma poco fiable y la app siempre caía al fallback `UtteranceEnd` de 1 000 ms. Con 500 ms el fin de habla se detecta de forma confiable y el chat se despacha en **~500 ms**. Solo afecta al streaming Deepgram de usuarios con licencia.
+
+### Endpoint de administración: reset de uso
+
+`POST /api/admin/usage/reset` — sin body reinicia todos los contadores; con `{ instanceId }` reinicia solo ese dispositivo. Script en `scripts/reset-free-limits.mjs` para ejecutar desde el VPS.
+
+### Nginx: soporte de imágenes hasta 25 MB
+
+`client_max_body_size 25M` en el VPS, necesario para subir capturas en base64 sin recibir error 413.
+
+---
+
 ## 🚀 Novedades de la Versión 1.5.1
 
 ### Límites del servidor ampliados
@@ -178,7 +211,7 @@ El saldo de tokens del chat licensed se reinicia dos veces al día: a las **00:0
 *   **Código Limpio**: Eliminación completa de comentarios internos innecesarios y notas temporales obsoletas en el código para mejorar el rendimiento de la aplicación en producción.
 *   **Validaciones y Errores Amigables**: Los mensajes de error técnicos y crípticos (como fallos de red 502/503/504 o límites de tokens de base de datos) ahora se traducen y presentan al usuario de forma clara y en español (ej. informando sencillamente si no tiene licencia activa, si llegó al límite diario de mensajes o si el servidor está temporalmente fuera de línea).
 *   **Conexión Directa al Servidor para Usuarios Free**: El chat y la transcripción ahora se conectan directamente al servidor de InvisibleAI sin pasar por la indirección de Rust. Antes, cuando algo fallaba silenciosamente en el backend, el popover del chat se cerraba sin feedback al usuario; ahora los errores se muestran claramente. Las validaciones bloqueantes de licencia que rechazaban a usuarios free se removieron — los créditos y límites se aplican únicamente del lado del servidor.
-*   **Chat Free Usa Groq + Llama 3**: Modelo `llama-3.3-70b-versatile`. STT free usa Groq + Whisper `large-v3` (no-turbo). Licensed sigue usando los modelos premium del servidor o las claves locales del usuario.
+*   **Chat Free Usa Groq + Llama 3** *(actualizado a Llama 4 Scout en v1.5.2)*: En esta versión el modelo era `llama-3.3-70b-versatile`. STT free usa Groq + Whisper `large-v3` (no-turbo). Licensed sigue usando los modelos premium del servidor o las claves locales del usuario.
 *   **Bloqueo de Perfiles para Usuarios Free**: La pantalla `/profiles` ahora deja **ver** todas las plantillas con su información completa pero no permite seleccionarlas sin licencia activa. Banner explicativo arriba, badge "Requiere licencia" en el header y `cursor-not-allowed` con `opacity-60` en cada card.
 *   **Perfil "Experto en Entrevistas y Reuniones"**: Nueva plantilla (migración SQL v7) que detecta automáticamente cuándo estás en una entrevista por las frases del interlocutor y responde en primera persona usando tu CV real. Prioridad #1 en la grilla (migración v8). Incluye 8 modificadores específicos: Técnica, Conductual/STAR, System Design, Ventas, Ejecutiva, Negociación Salarial, Inglés y Panel.
 *   **Carga Local de CV (PDF / DOCX / TXT / MD)**: Editor dedicado en la pantalla de perfiles que parsea el archivo **íntegramente en el dispositivo** vía `pdfjs-dist` (build legacy para compatibilidad con Tauri WebKit) y `mammoth`. El texto se guarda en `localStorage` con cap de 32 000 caracteres y se inyecta como bloque `<CV>…</CV>` dentro del system prompt cuando el perfil de entrevistas está activo. Tanto el archivo como el texto extraído nunca abandonan el dispositivo.

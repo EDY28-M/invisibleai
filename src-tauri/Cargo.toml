@@ -1,6 +1,6 @@
 [package]
 name = "invisibleai"
-version = "1.5.1"
+version = "1.5.2"
 description = "InvisibleAI - A lightning-fast, privacy-first AI assistant that works seamlessly during meetings, interviews, and conversations without anyone knowing."
 authors = ["EDY28-M <junior.matias@unas.edu.pe>"]
 license = "Proprietary"
