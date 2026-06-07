@@ -204,9 +204,15 @@ async fn run_deepgram_stream(
 ) {
     let _ = app.emit("system-stream-state", "connecting");
 
+    // endpointing=500: Deepgram marca `speech_final=true` tras 500 ms de silencio
+    // → el chat se despacha al instante (es el parámetro que controla "manda al
+    // dejar de hablar"). Antes estaba en 10 ms (demasiado agresivo: speech_final
+    // no disparaba fiable y caía al fallback UtteranceEnd de 1000 ms = el "segundo"
+    // de demora). utterance_end_ms se queda en 1000 (mínimo de Deepgram) como red
+    // de seguridad si speech_final no llega.
     let params = format!(
         "model={}&language={}&smart_format=true&interim_results=true&vad_events=true&no_delay=true\
-         &endpointing=10&utterance_end_ms=1000\
+         &endpointing=500&utterance_end_ms=1000\
          &encoding=linear16&sample_rate={}&channels=1",
         model, language, TARGET_SAMPLE_RATE
     );
