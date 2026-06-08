@@ -177,9 +177,14 @@ pub fn run() {
                         }
                     }
                     #[cfg(not(target_os = "macos"))]
-                    if let Some(main_window) = handle_main.get_webview_window("main") {
-                        let _ = main_window.show();
-                        let _ = main_window.set_focus();
+                    {
+                        let main_window = handle_main.get_webview_window("main")
+                            .or_else(|| handle_main.get_webview_window("invisibleai"))
+                            .or_else(|| handle_main.webview_windows().values().next().cloned());
+                        if let Some(w) = main_window {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
                     }
                 });
             }
