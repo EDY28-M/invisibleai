@@ -46,7 +46,8 @@
     "resources": ["Info.plist", "invisibleai.desktop"],
     "macOS": {
       "minimumSystemVersion": "10.13",
-      "bundleName": "InvisibleAI"
+      "bundleName": "InvisibleAI",
+      "signingIdentity": "-"
     }
   },
   "plugins": {

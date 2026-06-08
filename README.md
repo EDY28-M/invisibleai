@@ -25,6 +25,44 @@ La aplicación permite trabajar en dos caminos separados:
 - **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
 - **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
 
+## Instalación y primera apertura
+
+Las versiones publicadas en Releases todavía no están firmadas con un certificado de pago (Apple Developer en macOS, code signing en Windows). Por eso, la **primera vez** que abres la app descargada, el sistema operativo puede mostrar una advertencia de seguridad. Es esperado y seguro: solo hay que autorizarla una vez y después abre con normalidad.
+
+### macOS
+
+Al descargar el `.dmg`, macOS marca la app con el atributo de cuarentena (`com.apple.quarantine`) y Gatekeeper bloquea la primera apertura, por lo que parece que no abre nada (ni ventana flotante ni ícono en el Dock). Para permitirla:
+
+1. Abre el `.dmg` y arrastra **InvisibleAI** a la carpeta **Aplicaciones**.
+2. Abre **Terminal** y ejecuta:
+
+   ```bash
+   xattr -cr "/Applications/InvisibleAI.app"
+   ```
+
+3. Abre InvisibleAI normalmente. La barra flotante aparece y el ícono sale en el Dock.
+
+Alternativa sin Terminal: **Ajustes del Sistema > Privacidad y seguridad**, baja hasta el aviso de InvisibleAI y pulsa **"Abrir de todas formas"**. En macOS 15+ el "clic derecho > Abrir" suele estar deshabilitado, así que usa `xattr` o ese botón.
+
+> Atajo opcional: el archivo `scripts/abrir-macos.command` hace el paso 2 y 3 con un doble clic.
+
+### Windows
+
+El instalador `.exe` (NSIS) no está firmado, así que SmartScreen puede mostrar **"Windows protegió tu PC"**. Pulsa **"Más información"** y luego **"Ejecutar de todas formas"**.
+
+### Linux (AppImage)
+
+Da permisos de ejecución y lanza el AppImage:
+
+```bash
+chmod +x InvisibleAI_*.AppImage
+./InvisibleAI_*.AppImage
+```
+
+Si pide FUSE: `sudo apt install libfuse2`.
+
+> La forma definitiva de eliminar estas advertencias es firmar y notarizar la app con una cuenta Apple Developer (macOS) y un certificado de firma de código (Windows). Mientras tanto, estos pasos de un solo uso son suficientes.
+
 ## Novedades en v1.5.3
 
 Versión de **estabilidad y rendimiento** centrada en la fluidez de la interfaz flotante y en eliminar duplicaciones de respuesta. No cambia el comportamiento de ningún modo: solo corrige bloqueos, re-renders, duplicación de texto y un crash.

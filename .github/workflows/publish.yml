@@ -84,6 +84,23 @@ jobs:
             * **Fuga de créditos corregida**: Los créditos de streaming ya no se consumen cuando el usuario no está hablando. La facturación ahora se activa únicamente cuando hay actividad de audio real (con 5 s de gracia tras el último audio detectado).
             * **Idioma de respuesta corregido**: Al seleccionar un idioma en ajustes, la IA ahora responde siempre en ese idioma. Antes ignoraba la selección y seguía contestando en otro idioma.
             * **Reset de chat cada 12 horas**: Los 700 000 tokens del tier licensed se recargan dos veces al día (00:00 UTC y 12:00 UTC) en lugar de una vez a medianoche.
+
+            ---
+
+            ## Instalación y primera apertura
+
+            Las versiones aún no están firmadas con un certificado de pago, así que la **primera vez** tu sistema puede mostrar una advertencia. Es esperado y seguro: solo hay que autorizarla una vez.
+
+            **macOS** (al descargar, macOS pone la app en cuarentena y bloquea la primera apertura, por eso parece que no abre nada):
+            1. Abre el `.dmg` y arrastra **InvisibleAI** a la carpeta **Aplicaciones**.
+            2. Abre **Terminal** y ejecuta: `xattr -cr "/Applications/InvisibleAI.app"`
+            3. Abre InvisibleAI normalmente. La barra flotante aparece y el ícono sale en el Dock.
+
+            Alternativa sin Terminal: **Ajustes del Sistema > Privacidad y seguridad** y pulsa **"Abrir de todas formas"**. (En macOS 15+ el "clic derecho > Abrir" suele estar deshabilitado; usa `xattr` o ese botón.)
+
+            **Windows**: si aparece **"Windows protegió tu PC"**, pulsa **"Más información"** y luego **"Ejecutar de todas formas"**.
+
+            **Linux (AppImage)**: `chmod +x InvisibleAI_*.AppImage` y ejecútalo. Si pide FUSE: `sudo apt install libfuse2`.
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
