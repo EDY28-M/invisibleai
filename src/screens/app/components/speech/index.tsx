@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Button,
   Popover,
@@ -15,7 +15,7 @@ import { PermissionFlow } from "./PermissionFlow";
 import { QuickActions } from "./QuickActions";
 import { Warning } from "./Warning";
 import { useSystemAudioType } from "@/hooks";
-import { useApp } from "@/contexts";
+import { useApp, useUsage } from "@/contexts";
 import { cn } from "@/lib/utils";
 import { AppIcons } from "../icons/AppIcons";
 
@@ -71,10 +71,15 @@ export const SystemAudio = (props: useSystemAudioType) => {
     handleRemoveScreenshot,
   } = props;
 
-  const { hasActiveLicense, supportsImages, usageBalance } = useApp();
+  const { hasActiveLicense, supportsImages } = useApp();
+  const { usageBalance } = useUsage();
 
   const [conversationMode, setConversationMode] = useState(false);
-  const [isSwitchingMode, setIsSwitchingMode] = useState(false);
+  // Guard de re-entrada SÍNCRONO. Antes era un useState que mantenía el botón
+  // `disabled` durante todo el await de updateVadConfiguration (que hace IPC a
+  // Rust para parar la captura) → el botón se "congelaba" varios cientos de ms.
+  // Con un ref evitamos doble disparo sin bloquear visualmente el control.
+  const isSwitchingModeRef = useRef(false);
 
   const isVadMode = vadConfig.enabled;
   const hasResponse = lastAIResponse || isAIProcessing;
@@ -102,13 +107,20 @@ export const SystemAudio = (props: useSystemAudioType) => {
   };
 
   const handleModeChange = async (vadEnabled: boolean, dualChannelEnabled: boolean) => {
-    if (isSwitchingMode) return;
-    setIsSwitchingMode(true);
+    if (isSwitchingModeRef.current) return;
+    isSwitchingModeRef.current = true;
+
+    // Optimista: refleja el canal en la UI de inmediato para que el cambio se
+    // sienta instantáneo. La reconfiguración (IPC a Rust) ocurre en segundo
+    // plano sin congelar el botón.
+    setIsDualChannel(dualChannelEnabled);
+
     try {
       await updateVadConfiguration({ ...vadConfig, enabled: vadEnabled }, dualChannelEnabled);
-      setIsDualChannel(dualChannelEnabled);
+    } catch (error) {
+      console.error("Failed to switch STT mode:", error);
     } finally {
-      setIsSwitchingMode(false);
+      isSwitchingModeRef.current = false;
     }
   };
 
@@ -180,7 +192,6 @@ export const SystemAudio = (props: useSystemAudioType) => {
                     onModeChange={handleModeChange}
                     onStreamingSmartModeChange={setStreamingSmartMode}
                     disabled={
-                      isSwitchingMode ||
                       isRecordingInContinuousMode ||
                       isProcessing ||
                       isAIProcessing

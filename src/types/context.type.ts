@@ -78,8 +78,17 @@ export type IContextType = {
   toggleContentProtected: (isEnabled: boolean) => Promise<void>;
   supportsImages: boolean;
   setSupportsImages: (value: boolean) => void;
+};
+
+/**
+ * Contexto dedicado al saldo de uso. Se separa de IContextType porque sus
+ * actualizaciones son frecuentes (cada ~10s durante el streaming + tras cada
+ * chat/STT) y, al vivir en el contexto principal, re-renderizaban a los ~29
+ * consumidores de useApp() en cada cambio. Ahora solo afecta a useUsage().
+ */
+export interface IUsageContextType {
   /** Saldo de uso del dispositivo (null mientras se carga). */
   usageBalance: UsageBalanceInfo | null;
   /** Fuerza un refresh del saldo de uso desde el servidor. */
   refreshUsageBalance: () => Promise<void>;
-};
+}

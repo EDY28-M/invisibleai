@@ -281,11 +281,17 @@ export function useSystemAudio() {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      // El backend toma posesión de la respuesta en curso.
+      responseOwnerRef.current = "backend";
       setIsAIProcessing(true);
       setLastAIResponse("");
     });
-    
+
     const unlistenChunk = listen("ai-stream-chunk", (event: any) => {
+      // Descarta chunks tardíos del backend si el frontend ya tomó posesión
+      // (p.ej. una quick action que canceló la tarea del backend). Así no se
+      // mezclan dos respuestas en el mismo texto.
+      if (responseOwnerRef.current !== "backend") return;
       setLastAIResponse((prev) => prev + event.payload);
     });
     
@@ -398,6 +404,10 @@ export function useSystemAudio() {
   const [useConversationalMemory, setUseConversationalMemory] = useState<boolean>(false);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Quién es dueño de la respuesta en curso: el motor del backend (Rust, vía
+  // eventos ai-stream-*) o el del frontend (processWithAI). Evita que los
+  // chunks tardíos de un motor ya cancelado se mezclen con el otro.
+  const responseOwnerRef = useRef<"none" | "frontend" | "backend">("none");
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isSavingRef = useRef<boolean>(false);
   const capturingRef = useRef<boolean>(false);
@@ -1074,6 +1084,10 @@ export function useSystemAudio() {
       invoke("cancel_active_llm_task_cmd").catch((err) => {
         console.error("Failed to cancel active backend LLM task:", err);
       });
+
+      // El frontend toma posesión: los chunks tardíos del backend ya cancelado
+      // se descartarán en el listener de ai-stream-chunk.
+      responseOwnerRef.current = "frontend";
 
       try {
         setIsAIProcessing(true);

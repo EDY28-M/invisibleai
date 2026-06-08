@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
-import { useApp } from "@/contexts";
+import { useApp, useUsage } from "@/contexts";
 import { useTranslation } from "@/hooks";
 import { serverApi } from "@/lib/server-api";
 
@@ -134,9 +134,8 @@ export const InvisibleAIApiSetup = () => {
     hasActiveLicense,
     setHasActiveLicense,
     getActiveLicenseStatus,
-    usageBalance,
-    refreshUsageBalance,
   } = useApp();
+  const { usageBalance, refreshUsageBalance } = useUsage();
 
   const { t, language } = useTranslation();
 

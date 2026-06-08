@@ -23,6 +23,7 @@ import {
 } from "@/lib/storage";
 import {
   IContextType,
+  IUsageContextType,
   ScreenshotConfig,
   TYPE_PROVIDER,
   UsageBalanceInfo,
@@ -36,6 +37,7 @@ import { enable, disable } from "@tauri-apps/plugin-autostart";
 import {
   ReactNode,
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -43,6 +45,7 @@ import {
 } from "react";
 
 const AppContext = createContext<IContextType | undefined>(undefined);
+const UsageContext = createContext<IUsageContextType | undefined>(undefined);
 const LICENSE_STATE_UPDATED_EVENT = "license-state-updated";
 
 const getValidCustomProviders = (
@@ -126,10 +129,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     return stored === null ? true : stored === "true";
   });
 
-  const setSupportsImages = (value: boolean) => {
+  const setSupportsImages = useCallback((value: boolean) => {
     setSupportsImagesState(value);
     safeLocalStorage.setItem(STORAGE_KEYS.SUPPORTS_IMAGES, String(value));
-  };
+  }, []);
 
   const [usageBalance, setUsageBalance] = useState<UsageBalanceInfo | null>(
     null,
@@ -141,7 +144,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         "false",
     );
 
-  const getActiveLicenseStatus = async () => {
+  const getActiveLicenseStatus = useCallback(async () => {
     try {
       const response: { is_active: boolean; is_dev_license: boolean } =
         await invoke("validate_license_api");
@@ -163,7 +166,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       // Tauri backend not ready yet or closing — keep current state, do not flip to false
     }
-  };
+  }, []);
 
   useEffect(() => {
     const syncLicenseState = async () => {
@@ -182,7 +185,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     syncLicenseState();
   }, [hasActiveLicense]);
 
-  const loadData = () => {
+  const loadData = useCallback(() => {
     const savedScreenshotConfig = safeLocalStorage.getItem(
       STORAGE_KEYS.SCREENSHOT_CONFIG,
     );
@@ -284,9 +287,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         console.warn("Failed to parse selected audio devices");
       }
     }
-  };
+  }, []);
 
-  const updateCursor = (type: CursorType | undefined) => {
+  const updateCursor = useCallback((type: CursorType | undefined) => {
     try {
       const currentWindow = getCurrentWindow();
       const platform = getPlatform();
@@ -308,9 +311,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       document.documentElement.style.setProperty("--cursor-type", "default");
     }
-  };
+  }, []);
 
-  const syncServerCredentials = async () => {
+  const syncServerCredentials = useCallback(async () => {
     try {
       const storage = await invoke<{
         instance_id?: string;
@@ -430,7 +433,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch {
       setUsageBalance(null);
     }
-  };
+  }, []);
 
   useEffect(() => {
     const unlistenUsage = listen<UsageBalanceInfo>(
@@ -707,7 +710,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     [customSttProviders, hasActiveLicense],
   );
 
-  const onSetSelectedAIProvider = ({
+  const onSetSelectedAIProvider = useCallback(({
     provider,
     variables,
   }: {
@@ -735,9 +738,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       provider,
       variables,
     }));
-  };
+  }, [allAiProviders, invisibleaiApiEnabled]);
 
-  const onSetSelectedSttProvider = ({
+  const onSetSelectedSttProvider = useCallback(({
     provider,
     variables,
   }: {
@@ -750,9 +753,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setSelectedSttProvider((prev) => ({ ...prev, provider, variables }));
-  };
+  }, [allSttProviders]);
 
-  const toggleAppIconVisibility = async (isVisible: boolean) => {
+  const toggleAppIconVisibility = useCallback(async (isVisible: boolean) => {
     const newState = updateAppIconVisibility(isVisible);
     setCustomizable(newState);
     try {
@@ -761,9 +764,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Failed to toggle app icon visibility:", error);
     }
-  };
+  }, [loadData]);
 
-  const toggleAlwaysOnTop = async (isEnabled: boolean) => {
+  const toggleAlwaysOnTop = useCallback(async (isEnabled: boolean) => {
     const newState = updateAlwaysOnTop(isEnabled);
     setCustomizable(newState);
     try {
@@ -772,9 +775,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Failed to toggle always on top:", error);
     }
-  };
+  }, [loadData]);
 
-  const toggleAutostart = async (isEnabled: boolean) => {
+  const toggleAutostart = useCallback(async (isEnabled: boolean) => {
     const newState = updateAutostart(isEnabled);
     setCustomizable(newState);
     try {
@@ -789,16 +792,16 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       const revertedState = updateAutostart(!isEnabled);
       setCustomizable(revertedState);
     }
-  };
+  }, [loadData]);
 
-  const setCursorType = (type: CursorType) => {
+  const setCursorType = useCallback((type: CursorType) => {
     setCustomizable((prev) => ({ ...prev, cursor: { type } }));
     updateCursor(type);
     updateCursorType(type);
     loadData();
-  };
+  }, [updateCursor, loadData]);
 
-  const toggleContentProtected = async (isEnabled: boolean) => {
+  const toggleContentProtected = useCallback(async (isEnabled: boolean) => {
     const newState = updateContentProtected(isEnabled);
     setCustomizable(newState);
     try {
@@ -807,9 +810,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       console.error("Failed to toggle content protection:", error);
     }
-  };
+  }, [loadData]);
 
-  const setInvisibleAIApiEnabled = async (enabled: boolean) => {
+  const setInvisibleAIApiEnabled = useCallback(async (enabled: boolean) => {
     setInvisibleAIApiEnabledState(enabled);
     safeLocalStorage.setItem(
       STORAGE_KEYS.INVISIBLEAI_API_ENABLED,
@@ -852,40 +855,83 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     }
 
     loadData();
-  };
+  }, [allAiProviders, selectedAIProvider.provider, loadData, setSupportsImages]);
 
-  const value: IContextType = {
-    allAiProviders,
-    customAiProviders,
-    selectedAIProvider,
-    onSetSelectedAIProvider,
-    allSttProviders,
-    customSttProviders,
-    selectedSttProvider,
-    onSetSelectedSttProvider,
-    screenshotConfiguration,
-    setScreenshotConfiguration,
-    customizable,
-    toggleAppIconVisibility,
-    toggleAlwaysOnTop,
-    toggleAutostart,
-    loadData,
-    invisibleaiApiEnabled,
-    setInvisibleAIApiEnabled,
-    hasActiveLicense,
-    setHasActiveLicense,
-    getActiveLicenseStatus,
-    selectedAudioDevices,
-    setSelectedAudioDevices,
-    setCursorType,
-    toggleContentProtected,
-    supportsImages,
-    setSupportsImages,
-    usageBalance,
-    refreshUsageBalance: syncServerCredentials,
-  };
+  // Memoizado + callbacks estables (useCallback arriba) → su identidad solo
+  // cambia cuando cambia un estado real. Clave: usageBalance NO está aquí, así
+  // que sus refrescos frecuentes ya no re-renderizan a los ~29 consumidores.
+  const value: IContextType = useMemo(
+    () => ({
+      allAiProviders,
+      customAiProviders,
+      selectedAIProvider,
+      onSetSelectedAIProvider,
+      allSttProviders,
+      customSttProviders,
+      selectedSttProvider,
+      onSetSelectedSttProvider,
+      screenshotConfiguration,
+      setScreenshotConfiguration,
+      customizable,
+      toggleAppIconVisibility,
+      toggleAlwaysOnTop,
+      toggleAutostart,
+      loadData,
+      invisibleaiApiEnabled,
+      setInvisibleAIApiEnabled,
+      hasActiveLicense,
+      setHasActiveLicense,
+      getActiveLicenseStatus,
+      selectedAudioDevices,
+      setSelectedAudioDevices,
+      setCursorType,
+      toggleContentProtected,
+      supportsImages,
+      setSupportsImages,
+    }),
+    [
+      allAiProviders,
+      customAiProviders,
+      selectedAIProvider,
+      onSetSelectedAIProvider,
+      allSttProviders,
+      customSttProviders,
+      selectedSttProvider,
+      onSetSelectedSttProvider,
+      screenshotConfiguration,
+      customizable,
+      toggleAppIconVisibility,
+      toggleAlwaysOnTop,
+      toggleAutostart,
+      loadData,
+      invisibleaiApiEnabled,
+      setInvisibleAIApiEnabled,
+      hasActiveLicense,
+      getActiveLicenseStatus,
+      selectedAudioDevices,
+      setCursorType,
+      toggleContentProtected,
+      supportsImages,
+      setSupportsImages,
+    ],
+  );
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  // Contexto separado para el saldo de uso (alta frecuencia de cambio).
+  const usageValue: IUsageContextType = useMemo(
+    () => ({
+      usageBalance,
+      refreshUsageBalance: syncServerCredentials,
+    }),
+    [usageBalance, syncServerCredentials],
+  );
+
+  return (
+    <AppContext.Provider value={value}>
+      <UsageContext.Provider value={usageValue}>
+        {children}
+      </UsageContext.Provider>
+    </AppContext.Provider>
+  );
 };
 
 export const useApp = () => {
@@ -893,6 +939,16 @@ export const useApp = () => {
 
   if (!context) {
     throw new Error("useApp must be used within a AppProvider");
+  }
+
+  return context;
+};
+
+export const useUsage = () => {
+  const context = useContext(UsageContext);
+
+  if (!context) {
+    throw new Error("useUsage must be used within a AppProvider");
   }
 
   return context;

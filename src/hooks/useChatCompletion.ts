@@ -84,6 +84,8 @@ export const useChatCompletion = (
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentRequestIdRef = useRef<string | null>(null);
+  // Cerrojo síncrono para descartar envíos duplicados (doble Enter, etc.).
+  const isSubmittingRef = useRef(false);
   const isProcessingScreenshotRef = useRef(false);
   const screenshotConfigRef = useRef(screenshotConfiguration);
   const screenshotInitiatedByThisContext = useRef(false);
@@ -143,6 +145,12 @@ export const useChatCompletion = (
         return;
       }
 
+      // Evita el doble disparo: si ya hay un envío en curso, ignora este.
+      // Se libera en el finally del try de abajo.
+      if (isSubmittingRef.current) {
+        return;
+      }
+
       const input = rawInput.trim() ? rawInput : "Analyze the attached content.";
 
       if (speechText) {
@@ -163,6 +171,7 @@ export const useChatCompletion = (
       const signal = abortControllerRef.current.signal;
 
       try {
+        isSubmittingRef.current = true;
 
         const messageHistory = (messages?.messages || []).map((msg) => ({
           role: msg.role,
@@ -420,6 +429,8 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
             isLoading: false,
           }));
         }
+      } finally {
+        isSubmittingRef.current = false;
       }
     },
     [
@@ -519,7 +530,9 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // !isComposing: Enter confirma la composición IME/acentos y no debe enviar.
+    // El cerrojo en submit() cubre además el doble disparo.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       if (!state.isLoading && state.input.trim()) {
         submit();

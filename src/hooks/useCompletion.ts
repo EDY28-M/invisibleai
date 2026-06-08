@@ -132,6 +132,8 @@ export const useCompletion = () => {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentRequestIdRef = useRef<string | null>(null);
+  // Cerrojo síncrono para descartar envíos duplicados (doble Enter, etc.).
+  const isSubmittingRef = useRef(false);
 
   const setInput = useCallback((value: string) => {
     setState((prev) => ({ ...prev, input: value }));
@@ -180,6 +182,12 @@ export const useCompletion = () => {
         return;
       }
 
+      // Evita el doble disparo: si ya hay un envío en curso, ignora este.
+      // Se libera en el finally del try de abajo.
+      if (isSubmittingRef.current) {
+        return;
+      }
+
       if (speechText) {
         setState((prev) => ({
           ...prev,
@@ -198,6 +206,7 @@ export const useCompletion = () => {
       const signal = abortControllerRef.current.signal;
 
       try {
+        isSubmittingRef.current = true;
 
         const messageHistory = state.conversationHistory.map((msg) => ({
           role: msg.role,
@@ -309,6 +318,8 @@ export const useCompletion = () => {
             isLoading: false,
           }));
         }
+      } finally {
+        isSubmittingRef.current = false;
       }
     },
     [
@@ -716,7 +727,9 @@ export const useCompletion = () => {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // !isComposing: con onKeyDown, Enter confirma la composición IME/acentos
+    // y no debe enviar. El cerrojo en submit() cubre además el doble disparo.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       if (!state.isLoading && state.input.trim()) {
         submit();

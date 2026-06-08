@@ -35,10 +35,11 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "node scripts/copy-vad-assets.mjs && vite",
+    "build": "node scripts/copy-vad-assets.mjs && tsc && vite build",
     "preview": "vite preview",
     "clean:data": "node scripts/clean-data.mjs",
+    "copy:vad": "node scripts/copy-vad-assets.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

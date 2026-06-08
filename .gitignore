@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# VAD/ONNX: copiados desde node_modules por scripts/copy-vad-assets.mjs
+public/vad/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -11,8 +11,10 @@ const STORAGE_KEY = "invisibleai-promote-card-dismissed";
 const Promote = () => {
   const { hasActiveLicense } = useApp();
 
-  if (hasActiveLicense) return null;
-
+  // Los hooks SIEMPRE deben llamarse en el mismo orden, antes de cualquier
+  // `return` condicional. Tenerlos tras `if (hasActiveLicense) return null`
+  // hacía que React lanzara "rendered fewer hooks than expected" al activar
+  // la licencia (hasActiveLicense pasa de false→true) y podía tumbar la vista.
   const [isDismissed, setIsDismissed] = useState(
     () => safeLocalStorage.getItem(STORAGE_KEY) === "true"
   );
@@ -22,6 +24,7 @@ const Promote = () => {
     setIsDismissed(true);
   }, []);
 
+  if (hasActiveLicense) return null;
   if (isDismissed) return null;
 
   return (

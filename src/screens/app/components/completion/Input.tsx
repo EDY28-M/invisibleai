@@ -55,7 +55,7 @@ export const Input = ({
               placeholder={t("chat_ask_placeholder")}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyDown={handleKeyPress}
               onPaste={handlePaste}
               disabled={isLoading || isHidden}
               className={`border-none! bg-black/5! dark:bg-white/5! focus-visible:bg-black/[0.08]! dark:focus-visible:bg-white/[0.08]! focus-visible:ring-2! focus-visible:ring-zinc-500/20! dark:focus-visible:ring-zinc-400/20! h-9 rounded-[14px] px-3.5 shadow-inner! transition-all duration-300 ${

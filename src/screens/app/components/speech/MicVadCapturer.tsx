@@ -67,6 +67,18 @@ export function MicVadCapturer({
 
         const vad = await MicVAD.new({
           stream,
+          // Carga el worklet, el modelo ONNX y el runtime WASM DESDE LA APP
+          // (public/vad/, copiados por scripts/copy-vad-assets.mjs) en vez del
+          // CDN de jsDelivr → funciona offline, arranca más rápido y no depende
+          // de una versión "@latest" remota que podría romper la app.
+          baseAssetPath: "/vad/",
+          onnxWASMBasePath: "/vad/",
+          ortConfig: (ort) => {
+            // Un solo hilo: los webviews de Tauri no son cross-origin isolated,
+            // así que no hay SharedArrayBuffer → así evitamos las variantes
+            // "threaded" del WASM (que no copiamos). El modelo VAD es diminuto.
+            ort.env.wasm.numThreads = 1;
+          },
           minSpeechFrames: 5,
           preSpeechPadFrames: 10,
           onSpeechStart: () => {
