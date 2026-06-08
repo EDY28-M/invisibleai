@@ -14,13 +14,13 @@ jobs:
       matrix:
         include:
           - platform: "macos-latest"
-            args: "--target aarch64-apple-darwin"   # Mac Apple Silicon
+            args: "--target aarch64-apple-darwin --bundles dmg"   # Mac Apple Silicon → solo .dmg
           - platform: "macos-latest"
-            args: "--target x86_64-apple-darwin"     # Mac Intel
+            args: "--target x86_64-apple-darwin --bundles dmg"     # Mac Intel → solo .dmg
           - platform: "ubuntu-22.04"
-            args: ""
+            args: "--bundles appimage"                              # Linux → solo .AppImage
           - platform: "windows-latest"
-            args: ""
+            args: "--bundles nsis"                                  # Windows x64 → solo .exe (NSIS)
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -56,6 +56,9 @@ jobs:
 
       - name: Create environment file
         run: |
+          # .env del frontend (raíz) → Vite lo lee al compilar
+          echo "VITE_INVISIBLEAI_SERVER=${{ secrets.VITE_INVISIBLEAI_SERVER }}" > .env
+          # .env del backend Rust (src-tauri)
           echo "API_ACCESS_KEY=${{ secrets.API_ACCESS_KEY }}" > src-tauri/.env
           echo "PAYMENT_ENDPOINT=${{ secrets.PAYMENT_ENDPOINT }}" >> src-tauri/.env
           echo "APP_ENDPOINT=${{ secrets.APP_ENDPOINT }}" >> src-tauri/.env
@@ -70,6 +73,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_INVISIBLEAI_SERVER: ${{ secrets.VITE_INVISIBLEAI_SERVER }}
         with:
           tagName: app-v__VERSION__
           releaseName: "InvisibleAI v__VERSION__"
