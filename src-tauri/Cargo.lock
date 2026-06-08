@@ -2840,7 +2840,7 @@ dependencies = [
 
 [[package]]
 name = "invisibleai"
-version = "1.5.2"
+version = "1.5.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

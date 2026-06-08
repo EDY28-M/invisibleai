@@ -12,7 +12,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-blue)](https://reactjs.org/)
 [![Rust](https://img.shields.io/badge/Core-Rust-brown)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-Proprietary%20Commercial-red.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.2-green)](https://github.com/EDY28-M/invisibleai/releases)
+[![Version](https://img.shields.io/badge/version-1.5.3-green)](https://github.com/EDY28-M/invisibleai/releases)
 
 > Proyecto en construcción. InvisibleAI es una app de escritorio multiplataforma para asistencia con IA en reuniones, entrevistas, clases, auditorías, videos y conversaciones en tiempo real.
 
@@ -24,6 +24,54 @@ La aplicación permite trabajar en dos caminos separados:
 
 - **Streaming**: captura en tiempo real con Deepgram Streaming, audio del sistema, micrófono y copiloto multicanal.
 - **No-streaming**: captura clásica por segmentos, STT tradicional con proveedores como Groq Whisper, OpenAI, Deepgram clásico o proveedores personalizados.
+
+## Novedades en v1.5.3
+
+Versión de **estabilidad y rendimiento** centrada en la fluidez de la interfaz flotante y en eliminar duplicaciones de respuesta. No cambia el comportamiento de ningún modo: solo corrige bloqueos, re-renders, duplicación de texto y un crash.
+
+### Fluidez de la ventana flotante (corrige el lag durante el streaming)
+
+**Problema:** el hook `useWindowResize` se montaba 4 veces (`DragButton`, `updater`, `useCompletion`, `useSystemAudio`) y cada instancia creaba su propio `MutationObserver` sobre **todo** `document.body`. Como el DOM muta en cada token durante el streaming, esos 4 observadores disparaban un IPC `set_window_height` por token, saturando la ventana.
+
+**Corrección:** un único observador compartido (con conteo de referencias), el resize quedó *debounced*, y se omite el IPC si la altura no cambió (`hooks/useWindow.ts`).
+
+### Modo PRO ya no re-renderiza toda la app cada pocos segundos
+
+**Problema:** `usageBalance` (que se actualiza cada ~10 s en streaming) vivía en el contexto principal y, al cambiar, re-renderizaba a los ~29 componentes que consumen `useApp()`.
+
+**Corrección:** `usageBalance`/`refreshUsageBalance` se movieron a un contexto dedicado (`useUsage`); el `value` del contexto principal se memoizó y sus callbacks se estabilizaron con `useCallback` (`contexts/app.context.tsx`).
+
+### VAD de micrófono offline (sin CDN)
+
+**Problema:** el modo Multihilo cargaba el modelo ONNX, el worklet y el runtime WASM desde el CDN de jsDelivr **en tiempo de ejecución** (y con `@latest`): lento, inconsistente y roto sin internet.
+
+**Corrección:** los assets se empaquetan localmente en `public/vad/` mediante `scripts/copy-vad-assets.mjs` (conectado a `dev`/`build`), con `numThreads = 1`. Ahora el VAD arranca en local y funciona sin conexión (`speech/MicVadCapturer.tsx`).
+
+### Respuestas de IA ya no se duplican ni se mezclan (audio/copiloto)
+
+**Problema:** dos motores de IA —el backend Rust (eventos `ai-stream-chunk`) y el frontend (`processWithAI`)— escribían sobre el mismo estado `lastAIResponse`. Los chunks tardíos de un motor ya cancelado se intercalaban con la respuesta del otro.
+
+**Corrección:** un `ref` de "propietario" de la respuesta: el listener del backend solo escribe si el backend es el dueño actual, descartando los chunks tardíos del motor cancelado (`hooks/useSystemAudio.ts`).
+
+### Sin doble envío de mensajes
+
+**Problema:** `onKeyPress` (evento deprecado) más un guard de `isLoading` que se activaba tarde permitían disparar dos veces el envío con un doble Enter.
+
+**Corrección:** cerrojo síncrono (`isSubmittingRef`) liberado en `finally`, cambio a `onKeyDown` y guard `!isComposing` para no enviar a mitad de una composición IME/acentos (`hooks/useCompletion.ts`, `hooks/useChatCompletion.ts`, `completion/Input.tsx`).
+
+### Cambio de modo STT más responsivo
+
+**Problema:** al alternar Auto/Multihilo/Manual, el botón quedaba `disabled` durante toda la reconfiguración (IPC a Rust), sintiéndose congelado.
+
+**Corrección:** el cambio de canal se aplica de forma optimista y un `ref` de re-entrada evita el doble disparo sin bloquear el control (`speech/index.tsx`).
+
+### Corrección: posible crash al activar la licencia
+
+**Problema:** `Promote.tsx` llamaba `useState`/`useCallback` **después** de un `return null` condicional. Al pasar `hasActiveLicense` de `false` a `true`, React lanzaba *"rendered fewer hooks than expected"* y podía tumbar la vista.
+
+**Corrección:** los hooks se movieron por encima del `return` condicional (`components/Promote.tsx`).
+
+---
 
 ## Novedades en v1.5.2
 
@@ -500,7 +548,7 @@ Para usar IA local:
 
 ## Release y despliegue
 
-La versión actual es **1.5.2**.
+La versión actual es **1.5.3**.
 
 Los archivos que deben mantenerse sincronizados para release son:
 

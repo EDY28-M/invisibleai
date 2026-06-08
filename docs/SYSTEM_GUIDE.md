@@ -141,6 +141,37 @@ Los usuarios free reciben **una activación gratuita** del perfil de entrevistas
 
 ---
 
+## 🚀 Novedades de la Versión 1.5.3
+
+Pase de **estabilidad y rendimiento** de la interfaz. No cambia ningún modo; corrige bloqueos, re-renders, duplicación de respuestas y un crash.
+
+### Ventana flotante más fluida durante el streaming
+
+El hook de redimensionado se montaba 4 veces, cada una con un `MutationObserver` sobre todo el `body`, disparando un IPC de resize por cada token. Ahora hay **un solo observador** compartido, *debounced*, y se omite el IPC si la altura no cambió.
+
+### Modo PRO sin re-renders globales
+
+`usageBalance` (que cambia cada ~10 s) se separó a su propio contexto (`useUsage`) y el contexto principal se memoizó, evitando re-renderizar a los ~29 consumidores de `useApp()` en cada actualización de saldo.
+
+### VAD de micrófono offline
+
+El modo Multihilo ya **no** baja el modelo ONNX, el worklet ni el WASM desde el CDN en tiempo de ejecución: se empaquetan localmente en `public/vad/`. Arranca más rápido y funciona sin internet.
+
+### Respuestas de IA sin duplicar (audio/copiloto)
+
+Se evita que los dos motores (Rust y frontend) escriban a la vez sobre la misma respuesta: un "propietario" descarta los chunks tardíos del motor ya cancelado.
+
+### Sin doble envío y sin crash al activar licencia
+
+- Cerrojo síncrono + `onKeyDown` + guard de composición IME → un doble Enter ya no envía dos veces.
+- `Promote.tsx` ya no viola las reglas de hooks (no más crash al activar la licencia).
+
+### Cambio de modo STT más responsivo
+
+El botón de modo ya no se queda deshabilitado durante la reconfiguración: el cambio se refleja de inmediato y un `ref` evita el doble disparo.
+
+---
+
 ## 🚀 Novedades de la Versión 1.5.2
 
 ### Llama 4 Scout para el tier free (visión incluida)
