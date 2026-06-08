@@ -160,6 +160,30 @@ pub fn run() {
             window::setup_main_window(app).expect("Failed to setup main window");
             #[cfg(target_os = "macos")]
             init(app.app_handle());
+
+            // ── Ensure the main floating bar is visible after NSPanel conversion ──
+            // to_panel() on macOS can reset the window's visibility state.
+            // We always show it explicitly with a short delay so the webview
+            // is fully rendered before it appears.
+            {
+                let handle_main = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                    #[cfg(target_os = "macos")]
+                    {
+                        use tauri_nspanel::ManagerExt;
+                        if let Ok(panel) = handle_main.get_webview_panel("main") {
+                            panel.show();
+                        }
+                    }
+                    #[cfg(not(target_os = "macos"))]
+                    if let Some(main_window) = handle_main.get_webview_window("main") {
+                        let _ = main_window.show();
+                        let _ = main_window.set_focus();
+                    }
+                });
+            }
+
             let app_handle = app.handle();
             if app_handle.get_webview_window("dashboard").is_none() {
                 if let Err(e) = window::create_dashboard_window(&app_handle) {
@@ -168,9 +192,8 @@ pub fn run() {
             }
 
             // ── First-launch detection ──────────────────────────────────────
-            // On the very first run there is no UI hint that points the user
-            // to the floating capsule bar.  Opening the dashboard automatically
-            // gives new (free) users a clear entry point into the app.
+            // On the very first run open the dashboard automatically so new
+            // free users have a clear entry point into the app.
             let first_launch = {
                 let flag_path = app.handle()
                     .path()
@@ -181,7 +204,6 @@ pub fn run() {
                 if let Some(ref path) = flag_path {
                     let is_first = !path.exists();
                     if is_first {
-                        // Write the flag so subsequent launches skip this step.
                         let _ = std::fs::create_dir_all(path.parent().unwrap_or(path));
                         let _ = std::fs::write(path, "1");
                     }
@@ -193,10 +215,10 @@ pub fn run() {
 
             if first_launch {
                 let handle = app.handle().clone();
-                // Small delay so the webview has time to fully load before
-                // we try to show and focus the dashboard window.
                 tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                    // Wait for both the main bar and the webview to be ready,
+                    // then open the dashboard a bit after so both are visible.
+                    tokio::time::sleep(std::time::Duration::from_millis(900)).await;
                     if let Err(e) = window::show_dashboard_window(&handle) {
                         eprintln!("Failed to open dashboard on first launch: {}", e);
                     }
