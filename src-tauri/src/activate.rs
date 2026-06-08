@@ -8,25 +8,34 @@ use tauri_plugin_machine_uid::MachineUidExt;
 use uuid::Uuid;
 
 fn get_payment_endpoint() -> Result<String, String> {
+    // Runtime env var (dev only — not available in packaged app)
     if let Ok(endpoint) = env::var("PAYMENT_ENDPOINT") {
-        return Ok(endpoint);
+        if !endpoint.trim().is_empty() {
+            return Ok(endpoint.trim().to_string());
+        }
     }
-
-    match option_env!("PAYMENT_ENDPOINT") {
-        Some(endpoint) => Ok(endpoint.to_string()),
-        None => Ok("https://serverai.keraai.online/api".to_string()),
+    // Compile-time env var baked in by tauri-build from src-tauri/.env
+    if let Some(endpoint) = option_env!("PAYMENT_ENDPOINT") {
+        if !endpoint.trim().is_empty() {
+            return Ok(endpoint.trim().to_string());
+        }
     }
+    // Hardcoded fallback — always valid even if secrets were empty during CI
+    Ok("https://serverai.keraai.online/api".to_string())
 }
 
 fn get_api_access_key() -> Result<String, String> {
     if let Ok(key) = env::var("API_ACCESS_KEY") {
-        return Ok(key);
+        if !key.trim().is_empty() {
+            return Ok(key.trim().to_string());
+        }
     }
-
-    match option_env!("API_ACCESS_KEY") {
-        Some(key) => Ok(key.to_string()),
-        None => Ok("dummy-local-key".to_string()),
+    if let Some(key) = option_env!("API_ACCESS_KEY") {
+        if !key.trim().is_empty() {
+            return Ok(key.trim().to_string());
+        }
     }
+    Ok("dummy-local-key".to_string())
 }
 
 fn get_secure_storage_path(app: &AppHandle) -> Result<PathBuf, String> {

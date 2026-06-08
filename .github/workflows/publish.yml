@@ -57,11 +57,11 @@ jobs:
       - name: Create environment file
         run: |
           # .env del frontend (raíz) → Vite lo lee al compilar
-          echo "VITE_INVISIBLEAI_SERVER=${{ secrets.VITE_INVISIBLEAI_SERVER }}" > .env
-          # .env del backend Rust (src-tauri)
+          echo "VITE_INVISIBLEAI_SERVER=${{ secrets.VITE_INVISIBLEAI_SERVER || 'https://serverai.keraai.online' }}" > .env
+          # .env del backend Rust (src-tauri) — fallbacks hardcodeados si el secret está vacío
           echo "API_ACCESS_KEY=${{ secrets.API_ACCESS_KEY }}" > src-tauri/.env
-          echo "PAYMENT_ENDPOINT=${{ secrets.PAYMENT_ENDPOINT }}" >> src-tauri/.env
-          echo "APP_ENDPOINT=${{ secrets.APP_ENDPOINT }}" >> src-tauri/.env
+          echo "PAYMENT_ENDPOINT=${{ secrets.PAYMENT_ENDPOINT || 'https://serverai.keraai.online/api' }}" >> src-tauri/.env
+          echo "APP_ENDPOINT=${{ secrets.APP_ENDPOINT || 'https://serverai.keraai.online' }}" >> src-tauri/.env
           echo "POSTHOG_API_KEY=${{ secrets.POSTHOG_API_KEY }}" >> src-tauri/.env
 
       - name: Install frontend dependencies

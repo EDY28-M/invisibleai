@@ -12,24 +12,30 @@ use tauri_plugin_machine_uid::MachineUidExt;
 
 pub(crate) fn get_app_endpoint() -> Result<String, String> {
     if let Ok(endpoint) = env::var("APP_ENDPOINT") {
-        return Ok(endpoint);
+        if !endpoint.trim().is_empty() {
+            return Ok(endpoint.trim().to_string());
+        }
     }
-
-    match option_env!("APP_ENDPOINT") {
-        Some(endpoint) => Ok(endpoint.to_string()),
-        None => Ok("https://invisibleai.onrender.com".to_string()),
+    if let Some(endpoint) = option_env!("APP_ENDPOINT") {
+        if !endpoint.trim().is_empty() {
+            return Ok(endpoint.trim().to_string());
+        }
     }
+    Ok("https://serverai.keraai.online".to_string())
 }
 
 pub(crate) fn get_api_access_key() -> Result<String, String> {
     if let Ok(key) = env::var("API_ACCESS_KEY") {
-        return Ok(key);
+        if !key.trim().is_empty() {
+            return Ok(key.trim().to_string());
+        }
     }
-
-    match option_env!("API_ACCESS_KEY") {
-        Some(key) => Ok(key.to_string()),
-        None => Ok("dummy-local-key".to_string()),
+    if let Some(key) = option_env!("API_ACCESS_KEY") {
+        if !key.trim().is_empty() {
+            return Ok(key.trim().to_string());
+        }
     }
+    Ok("dummy-local-key".to_string())
 }
 
 fn get_secure_storage_path(app: &AppHandle) -> Result<PathBuf, String> {
