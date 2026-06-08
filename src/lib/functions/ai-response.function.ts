@@ -199,7 +199,9 @@ async function* fetchInvisibleAIAIResponse(params: {
   if (storage.groq_api_key) {
     const modelId = storage.groq_model || FREE_CHAT_MODEL;
 
-    const response = await fetch(
+    // IMPORTANT: must use tauriFetch (Tauri plugin-http), NOT native fetch.
+    // Native browser fetch is blocked by the Tauri webview security scope.
+    const response = await tauriFetch(
       "https://api.groq.com/openai/v1/chat/completions",
       {
         method: "POST",
@@ -214,7 +216,7 @@ async function* fetchInvisibleAIAIResponse(params: {
           stream_options: { include_usage: true },
         }),
         signal,
-      },
+      } as any,
     );
 
     if (!response.ok) {
@@ -229,7 +231,7 @@ async function* fetchInvisibleAIAIResponse(params: {
 
     let totalTokens = 0;
     yield* readSSEStream(
-      response.body,
+      response.body as unknown as ReadableStream<Uint8Array>,
       signal,
       (tokens) => {
         totalTokens = tokens;
@@ -250,12 +252,18 @@ async function* fetchInvisibleAIAIResponse(params: {
     localStorage.getItem("invisibleai_instance_id") ||
     undefined;
 
+  // Also send licenseKey in case the instance has one stored but groq_api_key
+  // wasn't loaded yet (e.g. first launch after activation before credential refresh).
+  const licenseKey =
+    localStorage.getItem("invisibleai_license_key") || undefined;
+
   const serverUrl = serverApi.getServerUrl();
   const response = await tauriFetch(`${serverUrl}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       instanceId,
+      licenseKey,
       model: FREE_CHAT_MODEL,
       messages,
       stream: true,

@@ -50,13 +50,16 @@ async function fetchInvisibleAISTT(audio: File | Blob, language?: string): Promi
       form.append("language", language);
     }
 
-    const resp = await fetch(
+    // IMPORTANT: tauriFetch (Tauri plugin-http) required; native fetch is blocked
+    // by the webview security scope in Tauri v2 production builds.
+    // tauriFetch supports FormData natively via plugin-http.
+    const resp = await tauriFetch(
       "https://api.groq.com/openai/v1/audio/transcriptions",
       {
         method: "POST",
         headers: { Authorization: `Bearer ${storage.groq_api_key}` },
         body: form,
-      },
+      } as any,
     );
 
     if (!resp.ok) {
