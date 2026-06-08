@@ -167,6 +167,42 @@ pub fn run() {
                 }
             }
 
+            // ── First-launch detection ──────────────────────────────────────
+            // On the very first run there is no UI hint that points the user
+            // to the floating capsule bar.  Opening the dashboard automatically
+            // gives new (free) users a clear entry point into the app.
+            let first_launch = {
+                let flag_path = app.handle()
+                    .path()
+                    .app_data_dir()
+                    .map(|p| p.join(".launched"))
+                    .ok();
+
+                if let Some(ref path) = flag_path {
+                    let is_first = !path.exists();
+                    if is_first {
+                        // Write the flag so subsequent launches skip this step.
+                        let _ = std::fs::create_dir_all(path.parent().unwrap_or(path));
+                        let _ = std::fs::write(path, "1");
+                    }
+                    is_first
+                } else {
+                    false
+                }
+            };
+
+            if first_launch {
+                let handle = app.handle().clone();
+                // Small delay so the webview has time to fully load before
+                // we try to show and focus the dashboard window.
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                    if let Err(e) = window::show_dashboard_window(&handle) {
+                        eprintln!("Failed to open dashboard on first launch: {}", e);
+                    }
+                });
+            }
+
             #[cfg(desktop)]
             {
                 use tauri_plugin_autostart::MacosLauncher;
