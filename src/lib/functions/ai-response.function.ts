@@ -581,11 +581,16 @@ export function formatFriendlyErrorMessage(err: any): string {
   const message = err instanceof Error ? err.message : String(err);
   const lowerMsg = message.toLowerCase();
 
-  if (
+  const isExpired =
+    lowerMsg.includes("expirada") ||
+    lowerMsg.includes("expired") ||
+    lowerMsg.includes("venció") ||
+    lowerMsg.includes("expiró");
+
+  const isLicenseInvalid =
     lowerMsg.includes("licencia no encontrada") ||
     lowerMsg.includes("licencia inválida") ||
     lowerMsg.includes("licencia revocada") ||
-    lowerMsg.includes("licencia expirada") ||
     lowerMsg.includes("licencia activa") ||
     lowerMsg.includes("no está registrado para esta licencia") ||
     lowerMsg.includes("license revoked") ||
@@ -593,19 +598,28 @@ export function formatFriendlyErrorMessage(err: any): string {
     lowerMsg.includes("unauthorized") ||
     lowerMsg.includes("server error 403") ||
     lowerMsg.includes("status code: 403") ||
-    lowerMsg.includes("status: 403")
-  ) {
-    return "Tu licencia de InvisibleAI no está activa o ha expirado. Por favor, verifica o reactiva tu licencia en el panel de control.";
+    lowerMsg.includes("status: 403");
+
+  if (isLicenseInvalid) {
+    if (isExpired) {
+      return "Tu licencia ha vencido. Por favor, renueva tu suscripción.";
+    }
+    return "Su licencia ha sido revocada.";
   }
 
-  if (
+  if (isExpired) {
+    return "Tu licencia ha vencido. Por favor, renueva tu suscripción.";
+  }
+
+  const isRateLimit =
+    (lowerMsg.includes("groq") || lowerMsg.includes("api error")) &&
+    (lowerMsg.includes("rate limit") ||
+      lowerMsg.includes("429") ||
+      lowerMsg.includes("too many requests"));
+
+  const isLimitReached =
     lowerMsg.includes("límite diario gratuito alcanzado") ||
-    (lowerMsg.includes("gratuito") && lowerMsg.includes("límite"))
-  ) {
-    return "Has alcanzado el límite diario de mensajes del plan gratuito. Puedes activar una licencia para aumentarlo. Los límites se reinician a la medianoche.";
-  }
-
-  if (
+    (lowerMsg.includes("gratuito") && lowerMsg.includes("límite")) ||
     lowerMsg.includes("límite diario alcanzado") ||
     lowerMsg.includes("quota") ||
     lowerMsg.includes("rate limit") ||
@@ -614,12 +628,17 @@ export function formatFriendlyErrorMessage(err: any): string {
     lowerMsg.includes("limite alcanzado") ||
     lowerMsg.includes("límite alcanzado") ||
     lowerMsg.includes("429") ||
-    lowerMsg.includes("too many requests")
-  ) {
-    if (lowerMsg.includes("groq") || lowerMsg.includes("api error")) {
+    lowerMsg.includes("too many requests") ||
+    lowerMsg.includes("sin créditos") ||
+    lowerMsg.includes("credits") ||
+    lowerMsg.includes("crédito") ||
+    lowerMsg.includes("credito");
+
+  if (isLimitReached) {
+    if (isRateLimit) {
       return "El proveedor de IA (Groq) está experimentando una alta demanda temporal (Límite de tasa / Rate Limit 429). Por favor, espera unos segundos e intenta nuevamente.";
     }
-    return "Has alcanzado el límite diario de mensajes. Si estás en la versión gratuita, puedes activar una licencia para aumentarlo. Los límites se reinician a la medianoche.";
+    return "Usaste todos los créditos de tu plan.";
   }
 
   if (

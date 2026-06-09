@@ -15,6 +15,7 @@ import {
   getResponseSettings,
   augmentWithInterviewContext,
 } from "@/lib";
+import { formatFriendlyErrorMessage } from "@/lib/functions/ai-response.function";
 import {
   getScreenCaptureErrorMessage,
   requestScreenRecordingPermissionIfNeeded,
@@ -275,12 +276,14 @@ export const useCompletion = () => {
             }));
           }
         } catch (e: any) {
-
           if (currentRequestIdRef.current === requestId && !signal.aborted) {
+            const errorMsg = "El modelo no está disponible actualmente.";
+            await saveCurrentConversation(input, errorMsg, state.attachedFiles);
             setState((prev) => ({
               ...prev,
               isLoading: false,
-              error: e.message || "An error occurred",
+              response: errorMsg,
+              error: formatFriendlyErrorMessage(e),
             }));
           }
           return;
@@ -310,11 +313,13 @@ export const useCompletion = () => {
           }));
         }
       } catch (error) {
-
         if (!signal?.aborted && currentRequestIdRef.current === requestId) {
+          const errorMsg = "El modelo no está disponible actualmente.";
+          await saveCurrentConversation(input, errorMsg, state.attachedFiles);
           setState((prev) => ({
             ...prev,
-            error: error instanceof Error ? error.message : "An error occurred",
+            error: formatFriendlyErrorMessage(error),
+            response: errorMsg,
             isLoading: false,
           }));
         }
@@ -670,11 +675,13 @@ export const useCompletion = () => {
               }));
             }
           } catch (e: any) {
-
             if (currentRequestIdRef.current === requestId && !signal.aborted) {
+              const errorMsg = "El modelo no está disponible actualmente.";
+              await saveCurrentConversation(prompt, errorMsg, [attachedFile]);
               setState((prev) => ({
                 ...prev,
-                error: e.message || "An error occurred",
+                response: errorMsg,
+                error: formatFriendlyErrorMessage(e),
               }));
             }
           } finally {
@@ -702,10 +709,7 @@ export const useCompletion = () => {
         console.error("Failed to process screenshot:", error);
         setState((prev) => ({
           ...prev,
-          error:
-            error instanceof Error
-              ? error.message
-              : "An error occurred processing screenshot",
+          error: formatFriendlyErrorMessage(error),
           isLoading: false,
         }));
       }

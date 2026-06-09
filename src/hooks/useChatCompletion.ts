@@ -13,6 +13,7 @@ import {
   safeLocalStorage,
   getGlobalMemoryContext,
 } from "@/lib";
+import { formatFriendlyErrorMessage } from "@/lib/functions/ai-response.function";
 import { extractAndStoreMemories } from "@/lib/functions";
 import {
   getScreenCaptureErrorMessage,
@@ -170,6 +171,19 @@ export const useChatCompletion = (
       abortControllerRef.current = new AbortController();
       const signal = abortControllerRef.current.signal;
 
+      const timestamp = Date.now();
+      const userMsg: ChatMessage = {
+        id: generateMessageId("user", timestamp),
+        role: "user",
+        content: input,
+        timestamp,
+      };
+
+      const updatedMessages = {
+        ...messages!,
+        messages: [...(messages?.messages || []), userMsg],
+      };
+
       try {
         isSubmittingRef.current = true;
 
@@ -193,18 +207,6 @@ export const useChatCompletion = (
           ? undefined
           : allAiProviders.find((p) => p.id === selectedAIProvider.provider);
 
-        const timestamp = Date.now();
-        const userMsg: ChatMessage = {
-          id: generateMessageId("user", timestamp),
-          role: "user",
-          content: input,
-          timestamp,
-        };
-
-        const updatedMessages = {
-          ...messages!,
-          messages: [...(messages?.messages || []), userMsg],
-        };
         setMessages(updatedMessages);
 
         setState((prev) => ({
@@ -332,12 +334,52 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
             scrollToBottom();
           }
         } catch (e: any) {
-
           if (currentRequestIdRef.current === requestId && !signal.aborted) {
+            const errorMsg = "El modelo no está disponible actualmente.";
+
+            const assistantMsg: ChatMessage = {
+              id: generateMessageId("assistant", timestamp + MESSAGE_ID_OFFSET),
+              role: "assistant",
+              content: errorMsg,
+              timestamp: timestamp + MESSAGE_ID_OFFSET,
+            };
+
+            const updatedWithResponse = {
+              ...updatedMessages,
+              messages: [...updatedMessages.messages, assistantMsg],
+            };
+
+            setMessages(updatedWithResponse);
+
+            try {
+              let existingConversation = null;
+              if (conversationId) {
+                existingConversation = await getConversationById(conversationId);
+              }
+              const title =
+                existingConversation?.title ||
+                messages?.title ||
+                generateConversationTitle(input);
+
+              const conversation: ChatConversation = {
+                id: conversationId,
+                title,
+                messages: updatedWithResponse.messages,
+                createdAt:
+                  existingConversation?.createdAt ||
+                  messages?.createdAt ||
+                  timestamp,
+                updatedAt: timestamp,
+              };
+              await saveConversation(conversation);
+            } catch (saveErr) {
+              console.error("Failed to save error chat message:", saveErr);
+            }
+
             setState((prev) => ({
               ...prev,
               isLoading: false,
-              error: e.message || "An error occurred",
+              error: formatFriendlyErrorMessage(e),
             }));
           }
           return;
@@ -420,12 +462,52 @@ Usa esta memoria solo para responder a la pregunta actual. No cambies el tema ni
             }));
           }
         }
-      } catch (error) {
-
+      } catch (error: any) {
         if (!signal?.aborted && currentRequestIdRef.current === requestId) {
+          const errorMsg = "El modelo no está disponible actualmente.";
+
+          const assistantMsg: ChatMessage = {
+            id: generateMessageId("assistant", timestamp + MESSAGE_ID_OFFSET),
+            role: "assistant",
+            content: errorMsg,
+            timestamp: timestamp + MESSAGE_ID_OFFSET,
+          };
+
+          const updatedWithResponse = {
+            ...updatedMessages,
+            messages: [...updatedMessages.messages, assistantMsg],
+          };
+
+          setMessages(updatedWithResponse);
+
+          try {
+            let existingConversation = null;
+            if (conversationId) {
+              existingConversation = await getConversationById(conversationId);
+            }
+            const title =
+              existingConversation?.title ||
+              messages?.title ||
+              generateConversationTitle(input);
+
+            const conversation: ChatConversation = {
+              id: conversationId,
+              title,
+              messages: updatedWithResponse.messages,
+              createdAt:
+                existingConversation?.createdAt ||
+                messages?.createdAt ||
+                timestamp,
+              updatedAt: timestamp,
+            };
+            await saveConversation(conversation);
+          } catch (saveErr) {
+            console.error("Failed to save error chat message:", saveErr);
+          }
+
           setState((prev) => ({
             ...prev,
-            error: error instanceof Error ? error.message : "An error occurred",
+            error: formatFriendlyErrorMessage(error),
             isLoading: false,
           }));
         }

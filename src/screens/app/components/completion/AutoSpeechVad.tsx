@@ -1,6 +1,7 @@
 import { Button } from "@/components";
 import { useApp } from "@/contexts";
 import { DeepgramStreamManager, fetchSTT, getMicrophoneStream } from "@/lib";
+import { formatFriendlyErrorMessage } from "@/lib/functions/ai-response.function";
 import { floatArrayToWav } from "@/lib/utils";
 import { UseCompletionReturn } from "@/types";
 import { MicVAD } from "@ricky0123/vad-web";
@@ -216,8 +217,7 @@ const AutoSpeechVADInternal = ({
         console.error("Failed to transcribe audio:", error);
         callbacksRef.current.setState((prev: any) => ({
           ...prev,
-          error:
-            error instanceof Error ? error.message : "Transcription failed",
+          error: formatFriendlyErrorMessage(error),
         }));
       } finally {
         setIsTranscribing(false);
@@ -387,8 +387,7 @@ const AutoSpeechVADInternal = ({
           return;
         }
 
-        const errorMessage =
-          error instanceof Error ? error.message : "Microphone VAD failed";
+        const errorMessage = formatFriendlyErrorMessage(error);
         console.error("Failed to initialize microphone VAD:", error);
         setErrored(errorMessage);
         setListening(false);

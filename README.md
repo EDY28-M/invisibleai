@@ -663,3 +663,24 @@ Este proyecto utiliza una licencia comercial de código disponible.
 - Está prohibido modificar el código para saltarse licencias, redistribuir cracks o publicar clones que desbloqueen funciones premium.
 
 Lee los términos completos en [LICENSE](LICENSE).
+
+## Gestión Profesional de Errores y Licencias (v1.5.4)
+
+Se ha implementado un sistema mejorado y profesional para la gestión de errores, validación de licencias y control de límites en toda la aplicación (chat principal, chat de overlay y streaming de audio STT):
+
+1. **Licencia Revocada o Eliminada**:
+   - Cuando una licencia es revocada o desactivada por el administrador, el sistema detecta el cambio e informa al usuario con el mensaje:
+     > `"Su licencia ha sido revocada."`
+
+2. **Licencia Vencida**:
+   - Si la licencia del usuario ha expirado, el sistema muestra de forma clara:
+     > `"Tu licencia ha vencido. Por favor, renueva tu suscripción."`
+
+3. **Límite de Créditos Alcanzado (Chat y STT Streaming)**:
+   - Aplica tanto a usuarios con licencia activa como en el modo gratuito (free). Si se alcanzan las cuotas de tokens de chat o el límite diario de transcripción (Whisper o streaming con Deepgram), la interfaz presentará el mensaje:
+     > `"Usaste todos los créditos de tu plan."`
+
+4. **Indisponibilidad del Proveedor de IA (Groq)**:
+   - Si la API Key de Groq falla, expira, no responde o alcanza sus límites de tasa de forma persistente, en lugar de no responder o devolver `null`, la aplicación:
+     - Guarda de forma persistente en la conversación local el mensaje del asistente: `"El modelo no está disponible actualmente."`
+     - Muestra un banner de error con la descripción detallada del problema formateada amigablemente para el usuario.

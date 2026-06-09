@@ -98,10 +98,10 @@ echo "Los .app.tar.gz + .sig son para el auto-updater (subir junto al release)."
 # Esta carpeta esta en .gitignore: no se sube a GitHub.
 REL="releases"
 mkdir -p "$REL"
-find src-tauri/target -path '*release/bundle/dmg/*.dmg'          -exec cp -f {} "$REL/" \; 2>/dev/null || true
-find src-tauri/target -path '*release/bundle/nsis/*-setup.exe'   -exec cp -f {} "$REL/" \; 2>/dev/null || true
-find src-tauri/target -path '*release/bundle/macos/*.app.tar.gz*' -exec cp -f {} "$REL/" \; 2>/dev/null || true
-find src-tauri/target -path '*release/bundle/nsis/*.sig'         -exec cp -f {} "$REL/" \; 2>/dev/null || true
+find src-tauri/target ! -path "src-tauri/target/release/*" -path '*release/bundle/dmg/*.dmg'          -exec cp -f {} "$REL/" \; 2>/dev/null || true
+find src-tauri/target ! -path "src-tauri/target/release/*" -path '*release/bundle/nsis/*-setup.exe'   -exec cp -f {} "$REL/" \; 2>/dev/null || true
+find src-tauri/target ! -path "src-tauri/target/release/*" -path '*release/bundle/macos/*.app.tar.gz*' -exec cp -f {} "$REL/" \; 2>/dev/null || true
+find src-tauri/target ! -path "src-tauri/target/release/*" -path '*release/bundle/nsis/*.sig'         -exec cp -f {} "$REL/" \; 2>/dev/null || true
 echo ""
 echo ">> Instaladores reunidos en: $(pwd)/$REL/"
 ls -lh "$REL/" 2>/dev/null || true

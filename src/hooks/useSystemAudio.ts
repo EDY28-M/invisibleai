@@ -12,6 +12,7 @@ import {
   type StreamingCopilotBuffers,
   type StreamingSmartSystemResponseRecord,
 } from "@/lib/functions";
+import { formatFriendlyErrorMessage } from "@/lib/functions/ai-response.function";
 import { serverApi, type DeepgramTokenResponse } from "@/lib/server-api";
 import {
   getScreenCaptureErrorMessage,
@@ -1183,7 +1184,9 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           }
         } catch (aiError: any) {
           if (aiError.name !== "AbortError") {
-            setError(aiError.message || "Failed to get AI response");
+            setError(formatFriendlyErrorMessage(aiError));
+            fullResponse = "El modelo no está disponible actualmente.";
+            setLastAIResponse(fullResponse);
           }
         }
 
@@ -1742,8 +1745,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
           }
         }
       } catch (err: any) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        setError(errMsg || "No se pudo obtener acceso a Deepgram. Configura tu API key en Deepgram Streaming Settings o verifica tu conexión al servidor.");
+        setError(formatFriendlyErrorMessage(err));
         setIsPopoverOpen(true);
         return;
       }

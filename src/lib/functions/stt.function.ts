@@ -3,6 +3,7 @@ import {
   getByPath,
   blobToBase64,
 } from "./common.function";
+import { formatFriendlyErrorMessage } from "./ai-response.function";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -297,6 +298,6 @@ export async function fetchSTT(params: STTParams): Promise<string> {
     return [...warnings, transcription].filter(Boolean).join("; ");
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(msg);
+    throw new Error(formatFriendlyErrorMessage(msg));
   }
 }
