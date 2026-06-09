@@ -170,6 +170,21 @@ Se evita que los dos motores (Rust y frontend) escriban a la vez sobre la misma 
 
 El botón de modo ya no se queda deshabilitado durante la reconfiguración: el cambio se refleja de inmediato y un `ref` evita el doble disparo.
 
+### Sincronización en tiempo real de API Keys
+
+- **Sincronización automática periódica:** El cliente de la app realiza un chequeo en segundo plano cada **2 minutos** en [app.context.tsx](file:///Volumes/Mac/juniorbardales/Documents/invisibleai/InvisibleAI/src/contexts/app.context.tsx) mediante `syncServerCredentials()` para obtener cualquier cambio administrativo de API Keys (Groq, Deepgram) en el VPS `greencloud-matias`.
+- **Sincronización en consultas de balance:** Cada consulta o actualización de saldo (`getUsageBalance` y reporte de uso) en [server-api.ts](file:///Volumes/Mac/juniorbardales/Documents/invisibleai/InvisibleAI/src/lib/server-api.ts) sincroniza y guarda de inmediato las credenciales vigentes en `secure_storage` local. Si las credenciales del servidor han sido desactivadas o eliminadas por el administrador, las claves locales se borran en caliente para evitar errores de autorización en cascada.
+
+### Restablecimiento e invalidación de saldo por Downgrade
+
+- **Reset de saldo en VPS:** El backend del servidor (`/src/services/usage.ts`) ahora limpia de forma explícita el saldo de consumo (tokens de chat diarios y llamadas de Whisper) y créditos de streaming acumulados durante el downgrade de `licensed` a `free`, garantizando que la cuenta comience desde cero con las cuotas limpias y correctas correspondientes al plan gratuito.
+- **Caché de Deepgram invalidada:** En el cliente ([useSystemAudio.ts](file:///Volumes/Mac/juniorbardales/Documents/invisibleai/InvisibleAI/src/hooks/useSystemAudio.ts)), cuando el flag `hasActiveLicense` cambia a `false` (debido a vencimiento o desactivación voluntaria), se borra inmediatamente el token de Deepgram en caché (`deepgramTokenCacheRef.current = null`) para desactivar el flujo de streaming premium de inmediato.
+
+### Formateo amigable de límites y Rate Limits de Groq (Error 429)
+
+- **Identificación de Rate Limits:** Se mejoró la lógica de parseo de errores en [ai-response.function.ts](file:///Volumes/Mac/juniorbardales/Documents/invisibleai/InvisibleAI/src/lib/functions/ai-response.function.ts) para discernir entre cuando un usuario ha agotado sus cuotas diarias de la aplicación y cuando el backend de Groq devuelve un error de saturación de red (HTTP 429 / Rate Limit / Too Many Requests).
+- **Mensaje claro:** Si el error se debe a la saturación de Groq, la app muestra ahora un mensaje adaptado: *"El proveedor de IA (Groq) está experimentando una alta demanda temporal (Límite de tasa / Rate Limit 429). Por favor, espera unos segundos e intenta nuevamente."*
+
 ---
 
 ## 🚀 Novedades de la Versión 1.5.2

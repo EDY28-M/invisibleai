@@ -127,7 +127,7 @@ async function* readSSEStream(
   try {
     while (true) {
       if (signal?.aborted) {
-        reader.cancel().catch(() => {});
+        reader.cancel().catch(() => { });
         return;
       }
       const { done, value } = await reader.read();
@@ -222,8 +222,7 @@ async function* fetchInvisibleAIAIResponse(params: {
     if (!response.ok) {
       const errorText = await response.text().catch(() => "");
       throw new Error(
-        `Groq API Error: ${response.status} ${response.statusText}${
-          errorText ? ` - ${errorText}` : ""
+        `Groq API Error: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""
         }`,
       );
     }
@@ -280,7 +279,7 @@ async function* fetchInvisibleAIAIResponse(params: {
       try {
         const text = await response.text();
         if (text) errMsg = text;
-      } catch {}
+      } catch { }
     }
     throw new Error(errMsg);
   }
@@ -394,8 +393,7 @@ export async function* fetchAIResponse(params: {
       curlJson = getCachedCurlJson(provider.curl);
     } catch (error) {
       throw new Error(
-        `Failed to parse curl: ${
-          error instanceof Error ? error.message : "Unknown error"
+        `Failed to parse curl: ${error instanceof Error ? error.message : "Unknown error"
         }`,
       );
     }
@@ -486,9 +484,8 @@ export async function* fetchAIResponse(params: {
       ) {
         return;
       }
-      yield `Network error during API request: ${
-        fetchError instanceof Error ? fetchError.message : "Unknown error"
-      }`;
+      yield `Network error during API request: ${fetchError instanceof Error ? fetchError.message : "Unknown error"
+        }`;
       return;
     }
 
@@ -496,10 +493,9 @@ export async function* fetchAIResponse(params: {
       let errorText = "";
       try {
         errorText = await response.text();
-      } catch {}
-      yield `API request failed: ${response.status} ${response.statusText}${
-        errorText ? ` - ${errorText}` : ""
-      }`;
+      } catch { }
+      yield `API request failed: ${response.status} ${response.statusText}${errorText ? ` - ${errorText}` : ""
+        }`;
       return;
     }
 
@@ -508,9 +504,8 @@ export async function* fetchAIResponse(params: {
       try {
         json = await response.json();
       } catch (parseError) {
-        yield `Failed to parse non-streaming response: ${
-          parseError instanceof Error ? parseError.message : "Unknown error"
-        }`;
+        yield `Failed to parse non-streaming response: ${parseError instanceof Error ? parseError.message : "Unknown error"
+          }`;
         return;
       }
       const content =
@@ -544,9 +539,8 @@ export async function* fetchAIResponse(params: {
         ) {
           return;
         }
-        yield `Error reading stream: ${
-          readError instanceof Error ? readError.message : "Unknown error"
-        }`;
+        yield `Error reading stream: ${readError instanceof Error ? readError.message : "Unknown error"
+          }`;
         return;
       }
       const { done, value } = readResult;
@@ -574,7 +568,7 @@ export async function* fetchAIResponse(params: {
             if (delta) {
               yield delta;
             }
-          } catch (e) {}
+          } catch (e) { }
         }
       }
     }
@@ -606,6 +600,12 @@ export function formatFriendlyErrorMessage(err: any): string {
 
   if (
     lowerMsg.includes("límite diario gratuito alcanzado") ||
+    (lowerMsg.includes("gratuito") && lowerMsg.includes("límite"))
+  ) {
+    return "Has alcanzado el límite diario de mensajes del plan gratuito. Puedes activar una licencia para aumentarlo. Los límites se reinician a la medianoche.";
+  }
+
+  if (
     lowerMsg.includes("límite diario alcanzado") ||
     lowerMsg.includes("quota") ||
     lowerMsg.includes("rate limit") ||
@@ -616,6 +616,9 @@ export function formatFriendlyErrorMessage(err: any): string {
     lowerMsg.includes("429") ||
     lowerMsg.includes("too many requests")
   ) {
+    if (lowerMsg.includes("groq") || lowerMsg.includes("api error")) {
+      return "El proveedor de IA (Groq) está experimentando una alta demanda temporal (Límite de tasa / Rate Limit 429). Por favor, espera unos segundos e intenta nuevamente.";
+    }
     return "Has alcanzado el límite diario de mensajes. Si estás en la versión gratuita, puedes activar una licencia para aumentarlo. Los límites se reinician a la medianoche.";
   }
 

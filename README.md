@@ -109,6 +109,31 @@ Versión de **estabilidad y rendimiento** centrada en la fluidez de la interfaz 
 
 **Corrección:** los hooks se movieron por encima del `return` condicional (`components/Promote.tsx`).
 
+### Sincronización de API Keys en tiempo real (VPS <-> Cliente)
+
+**Problema:** Anteriormente, cuando el administrador actualizaba, eliminaba o cambiaba una API Key (Groq o Deepgram) en el servidor de producción (VPS `greencloud-matias`), los clientes que ya tenían la sesión iniciada continuaban usando las credenciales antiguas cacheadas indefinidamente. Esto generaba que los chats fallaran o usaran claves deshabilitadas.
+
+**Corrección:**
+- Se implementó una sincronización activa de credenciales en caliente en [server-api.ts](file:///Volumes/Mac/juniorbardales/Documents/invisibleai/InvisibleAI/src/lib/server-api.ts). Ahora, cada vez que el cliente obtiene o actualiza su balance de tokens/créditos (evento periódico o reporte de uso), la respuesta incluye el estado de credenciales del servidor y el cliente actualiza o remueve inmediatamente las claves de `secure_storage` local.
+- Se añadió un hilo de sincronización en segundo plano en [app.context.tsx](file:///Volumes/Mac/juniorbardales/Documents/invisibleai/InvisibleAI/src/contexts/app.context.tsx) que ejecuta `syncServerCredentials` automáticamente cada **2 minutos** para asegurar que cualquier cambio administrativo se aplique casi en tiempo real.
+
+### Restablecimiento de saldo en downgrades y expiraciones
+
+**Problema:** Al revocar, expirar o eliminar una licencia manualmente, el usuario volvía al modo gratuito (`free`), pero su saldo de tokens y uso de Deepgram podía quedar en un estado inconsistente. Además, si el token de Deepgram Streaming estaba cacheado en el cliente (`deepgramTokenCacheRef`), seguía permitiendo el streaming premium por un tiempo aunque la licencia ya no fuera válida.
+
+**Corrección:**
+- Se actualizó el endpoint del backend en el servidor VPS (`/src/services/usage.ts`) para realizar un downgrade limpio en `getOrCreate()`, reiniciando a 0 los tokens y llamadas de Whisper del día y borrando los créditos acumulados de streaming para restablecer de manera justa las cuotas de la cuenta free.
+- En el cliente ([useSystemAudio.ts](file:///Volumes/Mac/juniorbardales/Documents/invisibleai/InvisibleAI/src/hooks/useSystemAudio.ts)), al detectar que `hasActiveLicense` cambia a `false`, se invalida y limpia inmediatamente la caché del token de Deepgram (`deepgramTokenCacheRef.current = null`), cortando el acceso al streaming en el acto.
+
+### Mensajes de error amigables para Rate Limits de Groq (Error 429)
+
+**Problema:** Si el backend de Groq experimentaba alta demanda y respondía con un error de Rate Limit 429 ("Too many requests"), la interfaz formateaba este error indicando al usuario de forma genérica que había alcanzado su límite diario personal de la aplicación, lo cual resultaba confuso.
+
+**Corrección:**
+- Se mejoró la función `formatFriendlyErrorMessage` en [ai-response.function.ts](file:///Volumes/Mac/juniorbardales/Documents/invisibleai/InvisibleAI/src/lib/functions/ai-response.function.ts) para detectar de forma específica si el error proviene de Groq o si contiene códigos de error de tasa (429).
+- Ahora muestra un mensaje claro y diferenciado: *"El proveedor de IA (Groq) está experimentando una alta demanda temporal (Límite de tasa / Rate Limit 429). Por favor, espera unos segundos e intenta nuevamente."*
+- Se conservó la traducción amigable para el caso real de límite diario gratuito: *"Has alcanzado el límite diario de mensajes del plan gratuito. Puedes activar una licencia para aumentarlo. Los límites se reinician a la medianoche."*
+
 ---
 
 ## Novedades en v1.5.2

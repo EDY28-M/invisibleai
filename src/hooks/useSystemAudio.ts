@@ -219,6 +219,12 @@ export function useSystemAudio() {
   useEffect(() => { streamingSmartModeRef.current = streamingSmartMode; }, [streamingSmartMode]);
   useEffect(() => { accumulatedSystemTextRef.current = accumulatedSystemText; }, [accumulatedSystemText]);
 
+  useEffect(() => {
+    if (!hasActiveLicense) {
+      deepgramTokenCacheRef.current = null;
+    }
+  }, [hasActiveLicense]);
+
   // Coalesce high-frequency interim updates; apply clears (empty string) and the
   // trailing value immediately. `setRaw` is the underlying React state setter.
   const makeThrottledInterimSetter = useCallback(
@@ -294,7 +300,7 @@ export function useSystemAudio() {
       if (responseOwnerRef.current !== "backend") return;
       setLastAIResponse((prev) => prev + event.payload);
     });
-    
+
     const unlistenEnd = listen("ai-stream-end", () => {
       setIsAIProcessing(false);
       const activeSessionId = sessionIdRef.current;
@@ -302,7 +308,7 @@ export function useSystemAudio() {
         refreshTimelineFromDb(activeSessionId);
       }
     });
-    
+
     const unlistenError = listen("ai-stream-error", (event: any) => {
       setIsAIProcessing(false);
       setError(event.payload || "Error en la consulta de IA del backend");
@@ -371,7 +377,7 @@ export function useSystemAudio() {
       img.onload = () => {
         const scale = Math.min(1, maxWidth / img.width);
         const canvas = document.createElement("canvas");
-        canvas.width  = Math.round(img.width  * scale);
+        canvas.width = Math.round(img.width * scale);
         canvas.height = Math.round(img.height * scale);
         const ctx = canvas.getContext("2d");
         if (!ctx) { resolve(base64); return; }
@@ -1192,8 +1198,8 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
               content: fullResponse,
               isFinal: true
             })
-            .then(() => refreshTimelineFromDb(activeSessionId))
-            .catch(err => console.error("Failed to insert assistant transcript segment:", err));
+              .then(() => refreshTimelineFromDb(activeSessionId))
+              .catch(err => console.error("Failed to insert assistant transcript segment:", err));
           }
         }
 
@@ -1320,8 +1326,8 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
               content: displayMsgText,
               isFinal: true
             })
-            .then(() => refreshTimelineFromDb(activeSessionId))
-            .catch(err => console.error("Failed to insert screenshot segment:", err));
+              .then(() => refreshTimelineFromDb(activeSessionId))
+              .catch(err => console.error("Failed to insert screenshot segment:", err));
           }
 
           // Trigger AI immediately passing the compressed screenshot as override
@@ -1406,8 +1412,8 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       isSmartMode: streamingSmartModeRef.current,
       responseLanguage: responseSettings.language
     })
-    .then(() => refreshTimelineFromDb(activeSessionId))
-    .catch(err => console.error("Failed to send transcript to backend cognitive router:", err));
+      .then(() => refreshTimelineFromDb(activeSessionId))
+      .catch(err => console.error("Failed to send transcript to backend cognitive router:", err));
   }, [sessionId, sessionIdRef, refreshTimelineFromDb]);
 
   const handleNewTranscriptionRef = useRef(handleNewTranscription);
@@ -2126,7 +2132,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
       await stopFrontendMicRecording(false);
       await invoke<string>("stop_system_audio_capture");
       stopStreamingUsageReporting();
-      try { await invoke("stop_system_deepgram_stream"); } catch {}
+      try { await invoke("stop_system_deepgram_stream"); } catch { }
 
       if (streamingEnabled) {
         // Streaming mode: Rust handles system audio capture + Deepgram WebSocket directly
@@ -2186,7 +2192,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
         deepgramManagerRef.current.destroy();
         deepgramManagerRef.current = null;
       }
-      try { await invoke("stop_system_deepgram_stream"); } catch {}
+      try { await invoke("stop_system_deepgram_stream"); } catch { }
       setIsStreamingMode(false);
       isStreamingModeRef.current = false;
       clearStreamingPendingTranscript("mic");
@@ -2463,7 +2469,7 @@ ESTÁ ESTRICTAMENTE PROHIBIDO decir que "cada sesión es independiente", que "el
             deepgramManagerRef.current.destroy();
             deepgramManagerRef.current = null;
           }
-          try { await invoke("stop_system_deepgram_stream"); } catch {}
+          try { await invoke("stop_system_deepgram_stream"); } catch { }
           setIsStreamingMode(false);
           isStreamingModeRef.current = false;
           clearStreamingPendingTranscript("mic");

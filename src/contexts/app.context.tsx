@@ -82,7 +82,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     if (savedDevices) {
       try {
         return JSON.parse(savedDevices);
-      } catch {}
+      } catch { }
     }
 
     return {
@@ -141,7 +141,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [invisibleaiApiEnabled, setInvisibleAIApiEnabledState] =
     useState<boolean>(
       safeLocalStorage.getItem(STORAGE_KEYS.INVISIBLEAI_API_ENABLED) !==
-        "false",
+      "false",
     );
 
   const getActiveLicenseStatus = useCallback(async () => {
@@ -400,7 +400,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
           // Auto-deactivate on the server so the seat is freed and the user
           // can re-activate cleanly on another device if needed.
-          await invoke("deactivate_license_api").catch(() => {});
+          await invoke("deactivate_license_api").catch(() => { });
 
           await invoke("secure_storage_remove", {
             keys: [
@@ -412,7 +412,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               "deepgram_language",
               "license_expires_at",
             ],
-          }).catch(() => {});
+          }).catch(() => { });
 
           serverApi.setCredentials(instanceId, "");
           setHasActiveLicense(false);
@@ -456,14 +456,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unlistenLicense = listen(LICENSE_STATE_UPDATED_EVENT, async () => {
-      await getActiveLicenseStatus().catch(() => {});
-      await syncServerCredentials().catch(() => {});
+      await getActiveLicenseStatus().catch(() => { });
+      await syncServerCredentials().catch(() => { });
     });
 
     return () => {
       unlistenLicense.then((fn) => fn());
     };
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      syncServerCredentials().catch(() => { });
+    }, 2 * 60 * 1000); // Sincronización automática cada 2 minutos (VPS <-> Cliente)
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [syncServerCredentials]);
 
   useEffect(() => {
     serverApi.setOnUsageUpdate((balance) => {
@@ -487,17 +497,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             storage.license_key ?? "",
           );
         }
-      } catch {}
+      } catch { }
 
       try {
         const appVersion = await invoke<string>("get_app_version");
         const storage = await invoke<{ instance_id?: string }>(
           "secure_storage_get",
         );
-        trackAppStart(appVersion, storage.instance_id || "").catch(() => {});
-      } catch {}
+        trackAppStart(appVersion, storage.instance_id || "").catch(() => { });
+      } catch { }
 
-      syncServerCredentials().catch(() => {});
+      syncServerCredentials().catch(() => { });
     };
 
     loadData();
@@ -681,7 +691,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         keep_alive: "10m",
       }),
       signal: controller.signal,
-    }).catch(() => {});
+    }).catch(() => { });
 
     return () => controller.abort();
   }, [selectedAIProvider.provider, selectedAIProvider.variables]);
