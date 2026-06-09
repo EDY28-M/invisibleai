@@ -322,6 +322,15 @@ pub fn build_system_prompt(
         }
     }
 
+    // Identidad/perfil SIEMPRE configurado: evita que la IA responda "no tengo perfil".
+    prompt.push_str(
+        "[SOBRE TU PERFIL / IDENTIDAD]\n\
+         Tu identidad y perfil YA están configurados: eres InvisibleAI. \
+         Si te preguntan si tienes un perfil o identidad configurado, responde que SÍ y descríbelo \
+         brevemente (eres InvisibleAI; y si arriba hay un rol/perfil activo, menciona ese rol). \
+         NUNCA digas que no tienes un perfil configurado, ni que eres un asistente genérico sin perfil.\n\n"
+    );
+
     prompt.push_str("[LICENCIA Y VERSIÓN DE INVISIBLEAI]\n");
     if context.has_license {
         prompt.push_str(

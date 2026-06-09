@@ -171,10 +171,19 @@ pub fn run() {
                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                     #[cfg(target_os = "macos")]
                     {
-                        use tauri_nspanel::ManagerExt;
-                        if let Ok(panel) = handle_main.get_webview_panel("main") {
-                            panel.show();
-                        }
+                        // tauri-nspanel toca AppKit (Objective-C), que SOLO puede
+                        // invocarse desde el hilo principal. Llamar panel.show() desde
+                        // este hilo de tokio lanza una NSException que Rust no puede
+                        // capturar ("Rust cannot catch foreign exceptions") y aborta la
+                        // app. Solo se ve en builds empaquetados (lanzados por LaunchServices),
+                        // no en `tauri dev`. Por eso lo marshalamos al hilo principal.
+                        let h = handle_main.clone();
+                        let _ = handle_main.run_on_main_thread(move || {
+                            use tauri_nspanel::ManagerExt;
+                            if let Ok(panel) = h.get_webview_panel("main") {
+                                panel.show();
+                            }
+                        });
                     }
                     #[cfg(not(target_os = "macos"))]
                     {

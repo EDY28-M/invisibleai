@@ -1,11 +1,9 @@
 import { Switch } from "@/components";
-import { useApp } from "@/contexts";
 import { useState, useEffect } from "react";
 import { safeLocalStorage } from "@/lib";
 import { useTranslation } from "@/hooks";
 
 export const ConversationalMemoryToggle = () => {
-  const { hasActiveLicense } = useApp();
   const [memoryEnabled, setMemoryEnabled] = useState<boolean>(false);
   const { t } = useTranslation();
 
@@ -15,7 +13,6 @@ export const ConversationalMemoryToggle = () => {
   }, []);
 
   const handleSwitchChange = (checked: boolean) => {
-    if (!hasActiveLicense) return;
     setMemoryEnabled(checked);
     safeLocalStorage.setItem("system_audio_use_memory", String(checked));
     window.dispatchEvent(new Event("storage"));
@@ -41,7 +38,6 @@ export const ConversationalMemoryToggle = () => {
       <Switch
         checked={memoryEnabled}
         onCheckedChange={handleSwitchChange}
-        disabled={!hasActiveLicense}
         className="shrink-0"
         aria-label="Toggle conversational memory"
       />

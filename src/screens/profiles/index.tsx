@@ -21,7 +21,17 @@ import {
 import * as Lucide from "lucide-react";
 import { cn } from "@/lib/utils";
 import { INTERVIEW_PROFILE_ID } from "@/config/constants";
+import { safeLocalStorage } from "@/lib";
 import { CvUploadCard } from "./components/CvUploadCard";
+
+// Free tier: numero de usos de perfiles permitidos sin licencia.
+const FREE_PROFILE_USE_LIMIT = 2;
+const FREE_PROFILE_USES_KEY = "iai_profile_free_uses";
+const getFreeProfileUses = (): number => {
+  const raw = safeLocalStorage.getItem(FREE_PROFILE_USES_KEY);
+  const n = raw ? parseInt(raw, 10) : 0;
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
 
 // Helper to resolve Lucide icons from SQLite string tags
 const getIconComponent = (iconName: string) => {
@@ -92,6 +102,17 @@ export default function ProfilesPage() {
   const [notesText, setNotesText] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [showSavedFeedback, setShowSavedFeedback] = useState(false);
+  const [freeProfileUses, setFreeProfileUses] = useState<number>(() => getFreeProfileUses());
+
+  // Free: hasta FREE_PROFILE_USE_LIMIT usos de perfiles. Con licencia: ilimitado.
+  const freeTrialExhausted = !hasActiveLicense && freeProfileUses >= FREE_PROFILE_USE_LIMIT;
+  const freeUsesRemaining = Math.max(0, FREE_PROFILE_USE_LIMIT - freeProfileUses);
+
+  const consumeFreeProfileUse = () => {
+    const next = getFreeProfileUses() + 1;
+    safeLocalStorage.setItem(FREE_PROFILE_USES_KEY, String(next));
+    setFreeProfileUses(next);
+  };
 
   // Sync notes text when activeConfig is loaded
   useEffect(() => {
@@ -114,24 +135,19 @@ export default function ProfilesPage() {
   };
 
   const handleDeactivate = async () => {
+    if (freeTrialExhausted) return;
+    if (!hasActiveLicense) consumeFreeProfileUse();
     await selectTemplate(""); // Empty string deactivates
   };
 
-  /** True when the user can interact with a given template card. */
-  const canSelectTemplate = (templateId: string): boolean => {
-    if (hasActiveLicense) return true;
-    // Free tier: only the Interview Expert is unlockable, and only while the
-    // one-shot trial has not been spent. Re-selecting the same template that
-    // is already active is also allowed so the user can deactivate it.
-    if (templateId === INTERVIEW_PROFILE_ID) {
-      if (activeConfig?.template_id === INTERVIEW_PROFILE_ID) return true;
-      return !trialUsed;
-    }
-    return false;
-  };
+  /** Free: cualquier perfil hasta FREE_PROFILE_USE_LIMIT usos. Con licencia: ilimitado. */
+  const canSelectTemplate = (_templateId: string): boolean =>
+    hasActiveLicense || freeProfileUses < FREE_PROFILE_USE_LIMIT;
 
   const handleTemplateClick = async (templateId: string, isActive: boolean) => {
     if (!canSelectTemplate(templateId)) return;
+    // Free: cada accion (seleccionar, cambiar o deseleccionar) consume un uso.
+    if (!hasActiveLicense) consumeFreeProfileUse();
     if (isActive) {
       await selectTemplate("");
       return;
@@ -181,8 +197,7 @@ export default function ProfilesPage() {
       title={t("profiles_title")}
       description={t("profiles_desc")}
       rightSlot={
-        activeConfig?.template_id &&
-        (hasActiveLicense || activeConfig.template_id === INTERVIEW_PROFILE_ID) && (
+        activeConfig?.template_id && (hasActiveLicense || !freeTrialExhausted) && (
           <Button
             variant="outline"
             size="sm"
@@ -202,7 +217,7 @@ export default function ProfilesPage() {
         </div>
       )}
 
-      {!hasActiveLicense && (
+      {freeTrialExhausted && (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/5 p-4">
           <Lucide.LockIcon className="size-5 shrink-0 text-amber-500 mt-0.5" />
           <div className="flex-1">
@@ -305,10 +320,16 @@ export default function ProfilesPage() {
           {!hasActiveLicense && (
             <Badge
               variant="outline"
-              className="ml-2 border-amber-500/30 bg-amber-500/5 text-amber-500 text-[10px] font-bold uppercase tracking-wider gap-1"
+              className={`ml-2 text-[10px] font-bold uppercase tracking-wider gap-1 ${
+                freeTrialExhausted
+                  ? "border-amber-500/30 bg-amber-500/5 text-amber-500"
+                  : "border-emerald-500/30 bg-emerald-500/5 text-emerald-500"
+              }`}
             >
               <Lucide.LockIcon className="size-3" />
-              {t("profiles_license_required_badge")}
+              {freeTrialExhausted
+                ? t("profiles_license_required_badge")
+                : `Free: ${freeUsesRemaining}/${FREE_PROFILE_USE_LIMIT}`}
             </Badge>
           )}
         </h2>
@@ -394,8 +415,7 @@ export default function ProfilesPage() {
 
       {/* 3. SECCIÓN: MODIFICADORES & NOTAS (Visible si hay perfil activo y licencia,
             o si el usuario free está en su prueba activa del perfil de entrevistas) */}
-      {activeConfig?.template_id && activeTemplate &&
-        (hasActiveLicense || activeConfig.template_id === INTERVIEW_PROFILE_ID) && (
+      {activeConfig?.template_id && activeTemplate && (hasActiveLicense || !freeTrialExhausted) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-fade-in">
           {/* Modificadores */}
           <Card className="border border-border/40 bg-card/40 backdrop-blur-md shadow-sm lg:col-span-7 flex flex-col justify-between h-full">

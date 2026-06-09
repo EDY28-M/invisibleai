@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Instaladores/artefactos de produccion compilados (no subir a GitHub)
+releases/
+
 # VAD/ONNX: copiados desde node_modules por scripts/copy-vad-assets.mjs
 public/vad/
 

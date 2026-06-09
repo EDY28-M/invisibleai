@@ -4,9 +4,9 @@
   "version": "1.5.3",
   "identifier": "com.edy28.invisibleai",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "pnpm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run clean:data && npm run build",
+    "beforeBuildCommand": "pnpm run clean:data && pnpm run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -47,7 +47,8 @@
     "macOS": {
       "minimumSystemVersion": "10.13",
       "bundleName": "InvisibleAI",
-      "signingIdentity": "-"
+      "signingIdentity": "-",
+      "entitlements": "entitlements.plist"
     }
   },
   "plugins": {
@@ -56,7 +57,7 @@
     },
     "updater": {
       "endpoints": ["https://invisibleai.online/api/update/{{target}}-{{arch}}/{{current_version}}"],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2MkQ5RjQyQ0Q3MTczNjUKUldSbGMzSE5RcDh0Um5FaEEvb1F0dVF3SzJWVVJkQ1ZPMzZDcHZIT3VNa08yb2VGRXl4dFVWZTkK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZDNkM0ODcxRjVCREIzMjEKUldRaHM3MzFjVWhzL0JUN0o3WEFTRXd2aGJJN1VHd0UxMy9RTUQ3ODBESWNmU2xqQkxUMEw1L3MK",
       "windows": {
         "installMode": "passive"
       }

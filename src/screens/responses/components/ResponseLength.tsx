@@ -1,5 +1,4 @@
 import { RESPONSE_LENGTHS } from "@/lib";
-import { useApp } from "@/contexts";
 import { updateResponseLength } from "@/lib/storage/response-settings.storage";
 import { useState, useEffect } from "react";
 import { getResponseSettings } from "@/lib";
@@ -7,7 +6,6 @@ import { CheckCircle2 } from "lucide-react";
 import { useTranslation } from "@/hooks";
 
 export const ResponseLength = () => {
-  const { hasActiveLicense } = useApp();
   const [selectedLength, setSelectedLength] = useState<string>("auto");
   const { t } = useTranslation();
 
@@ -17,7 +15,6 @@ export const ResponseLength = () => {
   }, []);
 
   const handleLengthChange = (lengthId: string) => {
-    if (!hasActiveLicense) return;
     setSelectedLength(lengthId);
     updateResponseLength(lengthId);
   };
@@ -56,12 +53,11 @@ export const ResponseLength = () => {
           <button
             key={length.id}
             onClick={() => handleLengthChange(length.id)}
-            disabled={!hasActiveLicense}
-            className={`relative text-left rounded-2xl border p-4 transition-all duration-200 group overflow-hidden ${
+            className={`relative text-left rounded-2xl border p-4 transition-all duration-200 group overflow-hidden cursor-pointer ${
               selectedLength === length.id
                 ? "border-foreground/20 bg-card/60 shadow-sm"
                 : "border-border/20 bg-card/20 hover:bg-card/35 hover:border-border/35"
-            } ${!hasActiveLicense ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+            }`}
           >
             <div className="space-y-1.5">
               <p className="text-[15px] font-semibold text-foreground/90">

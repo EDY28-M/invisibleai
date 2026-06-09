@@ -1,11 +1,9 @@
 import { Switch } from "@/components";
-import { useApp } from "@/contexts";
 import { useState, useEffect } from "react";
 import { getResponseSettings, updateAutoScroll } from "@/lib";
 import { useTranslation } from "@/hooks";
 
 export const AutoScrollToggle = () => {
-  const { hasActiveLicense } = useApp();
   const [autoScroll, setAutoScroll] = useState<boolean>(true);
   const { t } = useTranslation();
 
@@ -15,7 +13,6 @@ export const AutoScrollToggle = () => {
   }, []);
 
   const handleSwitchChange = (checked: boolean) => {
-    if (!hasActiveLicense) return;
     setAutoScroll(checked);
     updateAutoScroll(checked);
   };
@@ -35,7 +32,6 @@ export const AutoScrollToggle = () => {
       <Switch
         checked={autoScroll}
         onCheckedChange={handleSwitchChange}
-        disabled={!hasActiveLicense}
         className="shrink-0"
         aria-label="Toggle auto-scroll"
       />
