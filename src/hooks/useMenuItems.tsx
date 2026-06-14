@@ -13,6 +13,7 @@ import {
   Eye,
   Settings2,
   UserCog,
+  MicIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { useApp } from "@/contexts";
@@ -68,6 +69,11 @@ export const useMenuItems = () => {
           icon: AudioLinesIcon,
           label: t("sidebar_audio"),
           href: "/audio",
+        },
+        {
+          icon: MicIcon,
+          label: t("sidebar_voice_agent"),
+          href: "/voice-agent",
         },
         {
           icon: MonitorIcon,

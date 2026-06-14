@@ -356,7 +356,9 @@ export function useSystemAudio() {
       await invoke("start_screen_capture");
       captureLaunched = true;
     } catch (err) {
-      console.error(await getScreenCaptureErrorMessage(err), err);
+      const errMsg = await getScreenCaptureErrorMessage(err);
+      console.error(errMsg, err);
+      setError(errMsg);
       setIsCapturingScreenshot(false);
       screenshotInitiatedByAudioRef.current = false;
     } finally {

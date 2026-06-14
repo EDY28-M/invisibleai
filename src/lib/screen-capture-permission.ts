@@ -23,9 +23,13 @@ export const requestScreenRecordingPermissionIfNeeded = async () => {
     const hasPermission = await checkScreenRecordingPermission();
     if (!hasPermission) {
       await requestScreenRecordingPermission();
+      throw new Error("Screen Recording permission required.");
     }
   } catch (error) {
     console.debug("Unable to check screen recording permission:", error);
+    if (error instanceof Error && error.message.includes("permission required")) {
+      throw error;
+    }
   }
 };
 

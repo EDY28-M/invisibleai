@@ -31,6 +31,9 @@ export const STORAGE_KEYS = {
   INTERVIEW_CV_FILENAME: "iai_interview_cv_filename",
   INTERVIEW_CV_UPDATED_AT: "iai_interview_cv_updated_at",
   INTERVIEW_TRIAL_USED: "iai_interview_trial_used",
+
+  // Voice Agent
+  VOICE_AGENT_SETTINGS: "voice_agent_settings",
 } as const;
 
 export const INTERVIEW_PROFILE_ID = "interview_meeting_expert";

@@ -12,6 +12,7 @@ import {
   Responses,
   MemoryAdmin,
   Profiles,
+  VoiceAgent,
 } from "@/screens";
 import { DashboardLayout } from "@/layouts";
 
@@ -31,6 +32,7 @@ export default function AppRoutes() {
           <Route path="/audio" element={<Audio />} />
           <Route path="/responses" element={<Responses />} />
           <Route path="/memory-admin" element={<MemoryAdmin />} />
+          <Route path="/voice-agent" element={<VoiceAgent />} />
           <Route path="/dev-space" element={<DevSpace />} />
         </Route>
       </Routes>
