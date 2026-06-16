@@ -371,6 +371,28 @@ pub fn update_shortcuts<R: Runtime>(
 
     stop_all_move_windows(&app);
 
+    // Build desired final map (action_id -> key_str) for de-dup guard
+    let desired: HashMap<String, String> = shortcuts_to_register
+        .iter()
+        .map(|(id, key, _)| (id.clone(), key.clone()))
+        .collect();
+
+    // Guard: if exactly the same set is already registered, skip unreg+reg cycle (prevents log spam
+    // and unnecessary churn when update_shortcuts is called repeatedly from mounts/effects).
+    let already_up_to_date = {
+        let state = app.state::<RegisteredShortcuts>();
+        let tmp = if let Ok(guard) = state.shortcuts.lock() {
+            guard.len() == desired.len() && guard.iter().all(|(k, v)| desired.get(k) == Some(v))
+        } else {
+            false
+        };
+        tmp
+    };
+    if already_up_to_date {
+        eprintln!("Shortcuts already up to date ({} bindings), skipping re-registration", desired.len());
+        return Ok(());
+    }
+
     unregister_all_shortcuts(&app)?;
 
     let mut successfully_registered = HashMap::new();

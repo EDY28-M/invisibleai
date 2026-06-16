@@ -227,7 +227,7 @@ const MemoryAdmin = () => {
       <div className="flex flex-col lg:flex-row gap-6 max-w-6xl mx-auto w-full p-2">
         
         {/* Left Tabs / Filters */}
-        <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2 rounded-2xl border border-border/10 bg-card/20 backdrop-blur-xl p-4">
+        <div className="w-full lg:w-64 shrink-0 flex flex-col gap-2 rounded-2xl border border-border/10 bg-card/20 dark:bg-card/60 backdrop-blur-xl p-4">
           <h4 className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider mb-2 px-1">
             {t("mem_categories")}
           </h4>
@@ -281,7 +281,7 @@ const MemoryAdmin = () => {
         </div>
 
         {/* Center Panel */}
-        <div className="flex-1 flex flex-col gap-4 rounded-2xl border border-border/10 bg-card/20 backdrop-blur-xl p-5 overflow-hidden">
+        <div className="flex-1 flex flex-col gap-4 rounded-2xl border border-border/10 bg-card/20 dark:bg-card/60 backdrop-blur-xl p-5 overflow-hidden">
           
           {/* Header controls */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-border/10">
@@ -322,7 +322,7 @@ const MemoryAdmin = () => {
                 {activeTab === "user_memory" && memories
                   .filter(m => m.content.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map(item => (
-                    <div key={item.id} className="group relative rounded-xl border border-border/15 bg-card/25 p-3.5 flex justify-between items-start hover:bg-card/45 transition-all">
+                    <div key={item.id} className="group relative rounded-xl border border-border/15 bg-card/25 dark:bg-white/5 p-3.5 flex justify-between items-start hover:bg-card/45 dark:hover:bg-white/8 transition-all">
                       <div className="space-y-1 pr-12">
                         <div className="flex items-center gap-2">
                           <span className="text-[9px] uppercase tracking-wider font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 px-1.5 py-0.5 rounded">
@@ -345,7 +345,7 @@ const MemoryAdmin = () => {
                 {activeTab === "app_knowledge" && knowledge
                   .filter(k => k.title.toLowerCase().includes(searchQuery.toLowerCase()) || k.content.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map(item => (
-                    <div key={item.id} className="group relative rounded-xl border border-border/15 bg-card/25 p-3.5 flex justify-between items-start hover:bg-card/45 transition-all">
+                    <div key={item.id} className="group relative rounded-xl border border-border/15 bg-card/25 dark:bg-white/5 p-3.5 flex justify-between items-start hover:bg-card/45 dark:hover:bg-white/8 transition-all">
                       <div className="space-y-1.5 pr-12">
                         <div className="flex items-center gap-2">
                           <h5 className="text-xs font-bold text-foreground/90">{item.title}</h5>
@@ -366,7 +366,7 @@ const MemoryAdmin = () => {
                 {activeTab === "app_features" && features
                   .filter(f => f.feature_name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map(item => (
-                    <div key={item.id} className="group relative rounded-xl border border-border/15 bg-card/25 p-3.5 flex justify-between items-start hover:bg-card/45 transition-all">
+                    <div key={item.id} className="group relative rounded-xl border border-border/15 bg-card/25 dark:bg-white/5 p-3.5 flex justify-between items-start hover:bg-card/45 dark:hover:bg-white/8 transition-all">
                       <div className="space-y-1.5 pr-12">
                         <div className="flex items-center gap-2.5">
                           <h5 className="text-xs font-bold text-foreground/90">{item.feature_name}</h5>
@@ -396,7 +396,7 @@ const MemoryAdmin = () => {
                 {activeTab === "ai_feedback" && feedback
                   .filter(f => f.issue_detected.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map(item => (
-                    <div key={item.id} className="group relative rounded-xl border border-border/15 bg-card/25 p-4 space-y-2 hover:bg-card/45 transition-all">
+                    <div key={item.id} className="group relative rounded-xl border border-border/15 bg-card/25 dark:bg-white/5 p-4 space-y-2 hover:bg-card/45 dark:hover:bg-white/8 transition-all">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className={`text-[8px] uppercase tracking-wider font-bold border px-1.5 py-0.2 rounded ${
@@ -467,7 +467,7 @@ const MemoryAdmin = () => {
                   <div className="space-y-1">
                     <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_memory_type")}</label>
                     <select
-                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs"
+                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs text-foreground"
                       value={userMemoryForm.memory_type}
                       onChange={(e) => setUserMemoryForm(prev => ({ ...prev, memory_type: e.target.value }))}
                     >
@@ -480,7 +480,7 @@ const MemoryAdmin = () => {
                     <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_memory_content")}</label>
                     <textarea
                       rows={3}
-                      className="w-full rounded-xl border border-border/20 bg-card/40 p-3 text-xs"
+                      className="w-full rounded-xl border border-border/20 bg-card/40 p-3 text-xs text-foreground"
                       placeholder="Ej: El usuario prefiere respuestas concisas en markdown sin saludos..."
                       value={userMemoryForm.content}
                       onChange={(e) => setUserMemoryForm(prev => ({ ...prev, content: e.target.value }))}
@@ -493,7 +493,7 @@ const MemoryAdmin = () => {
                       type="number"
                       min={1}
                       max={5}
-                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs"
+                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs text-foreground"
                       value={userMemoryForm.importance}
                       onChange={(e) => setUserMemoryForm(prev => ({ ...prev, importance: Number(e.target.value) }))}
                       required
@@ -518,7 +518,7 @@ const MemoryAdmin = () => {
                   <div className="space-y-1">
                     <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_knowledge_category")}</label>
                     <select
-                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs"
+                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs text-foreground"
                       value={appKnowledgeForm.category}
                       onChange={(e) => setAppKnowledgeForm(prev => ({ ...prev, category: e.target.value }))}
                     >
@@ -531,7 +531,7 @@ const MemoryAdmin = () => {
                     <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_knowledge_content")}</label>
                     <textarea
                       rows={3}
-                      className="w-full rounded-xl border border-border/20 bg-card/40 p-3 text-xs"
+                      className="w-full rounded-xl border border-border/20 bg-card/40 p-3 text-xs text-foreground"
                       placeholder="Describe los detalles de la característica para que el LLM lo entienda..."
                       value={appKnowledgeForm.content}
                       onChange={(e) => setAppKnowledgeForm(prev => ({ ...prev, content: e.target.value }))}
@@ -544,7 +544,7 @@ const MemoryAdmin = () => {
                       type="number"
                       min={1}
                       max={5}
-                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs"
+                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs text-foreground"
                       value={appKnowledgeForm.importance}
                       onChange={(e) => setAppKnowledgeForm(prev => ({ ...prev, importance: Number(e.target.value) }))}
                       required
@@ -570,7 +570,7 @@ const MemoryAdmin = () => {
                     <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_feature_desc")}</label>
                     <textarea
                       rows={2}
-                      className="w-full rounded-xl border border-border/20 bg-card/40 p-3 text-xs"
+                      className="w-full rounded-xl border border-border/20 bg-card/40 p-3 text-xs text-foreground"
                       placeholder="Describe qué hace y para qué sirve..."
                       value={appFeatureForm.description}
                       onChange={(e) => setAppFeatureForm(prev => ({ ...prev, description: e.target.value }))}
@@ -580,7 +580,7 @@ const MemoryAdmin = () => {
                   <div className="space-y-1">
                     <label className="text-muted-foreground/75 font-semibold">{t("mem_modal_feature_status")}</label>
                     <select
-                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs"
+                      className="w-full h-9 rounded-xl border border-border/20 bg-card/40 px-3 text-xs text-foreground"
                       value={appFeatureForm.status}
                       onChange={(e) => setAppFeatureForm(prev => ({ ...prev, status: e.target.value }))}
                     >

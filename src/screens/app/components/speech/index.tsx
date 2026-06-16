@@ -13,7 +13,6 @@ import { ResultsSection } from "./ResultsSection";
 import { SettingsPanel } from "./SettingsPanel";
 import { PermissionFlow } from "./PermissionFlow";
 import { QuickActions } from "./QuickActions";
-import { Warning } from "./Warning";
 import { useSystemAudioType } from "@/hooks";
 import { useApp, useUsage } from "@/contexts";
 import { cn } from "@/lib/utils";
@@ -180,8 +179,8 @@ export const SystemAudio = (props: useSystemAudioType) => {
         >
           <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden">
             { }
-            <div className="flex-shrink-0 p-3.5 border-b border-black/5 dark:border-white/5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex-shrink-0 px-4 py-3 border-b border-black/5 dark:border-white/5">
+              <div className="flex flex-nowrap items-center justify-between gap-1.5">
                 { }
                 {!setupRequired && (
                   <ModeSwitcher
@@ -202,15 +201,13 @@ export const SystemAudio = (props: useSystemAudioType) => {
                   <h2 className="font-semibold text-sm">Setup Required</h2>
                 )}
                 {!setupRequired && hasActiveLicense && usageBalance && (
-                  <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1 text-[11px] font-bold text-amber-600 dark:text-amber-400 select-none shadow-[0_2px_8px_rgba(245,158,11,0.05)] cursor-default transition-all duration-300 hover:scale-102" title="Streaming Credits Balance">
-                    <span className="text-xs">🪙</span>
+                  <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 select-none cursor-default transition-all duration-300 shrink" title={`Streaming Credits: ${usageBalance.streaming.credits.toLocaleString()} / ${usageBalance.streaming.maxCredits.toLocaleString()}`}>
+                    <span>🪙</span>
                     <span className="tabular-nums">{usageBalance.streaming.credits.toLocaleString()}</span>
-                    <span className="text-amber-500/40 font-normal">/</span>
-                    <span className="text-amber-500/55 tabular-nums text-[10px] font-normal">{usageBalance.streaming.maxCredits.toLocaleString()}</span>
                   </div>
                 )}
 
-                <div className="ml-auto flex items-center gap-2 flex-shrink-0 max-w-full">
+                <div className="ml-auto flex items-center gap-1.5 flex-shrink-0 max-w-full">
                   {/* Screenshot Capture Button — visible si el modelo soporta
                       visión (supportsImages); free ahora usa scout con visión.
                       El modo Selección sigue siendo premium (gate en el handler). */}
@@ -232,7 +229,6 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       ) : (
                         <AppIcons.Camera className={cn("w-3.5 h-3.5", screenshotImage ? "text-white" : "text-sky-500/80")} strokeWidth={1.7} />
                       )}
-                      <span className="max-[640px]:hidden">Screenshot</span>
                     </Button>
                   )}
 
@@ -377,10 +373,9 @@ export const SystemAudio = (props: useSystemAudioType) => {
                       setContextContent={setContextContent}
                       useConversationalMemory={useConversationalMemory}
                       setUseConversationalMemory={setUseConversationalMemory}
+                      isStreamingMode={isStreamingMode}
+                      hasActiveLicense={hasActiveLicense}
                     />
-
-                    { }
-                    <Warning isVadMode={isVadMode} />
                   </>
                 )}
               </div>

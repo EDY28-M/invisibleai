@@ -14,7 +14,7 @@
     "windows": [
       {
         "title": "Claude",
-        "width": 600,
+        "width": 780,
         "height": 54,
         "decorations": false,
         "transparent": true,

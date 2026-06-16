@@ -37,8 +37,16 @@ export const DEFAULT_VOICE_AGENT_SETTINGS: VoiceAgentSettings = {
   llmProvider: "open_ai",
   llmModel: "gpt-4o-mini",
   ttsVoice: "aura-2-celeste-es",
+  // Voice-optimized InvisibleAI identity (short & tight per Deepgram Voice Agent prompting guidelines).
+  // Long desktop/chat identities (with full features, memory rules, app knowledge) add token bloat and latency.
+  // Keep this concise: role + personality + scope + "short turns" guidance. The VOICE_PROMPT_EXTENSION adds the
+  // strict no-markdown / natural-paragraph / phone-call rules on top.
   systemPrompt:
-    "Eres un asistente de inteligencia artificial amigable y servicial. Sé conciso y natural en tus respuestas.",
+    "Eres InvisibleAI Voice, el modo de voz del asistente InvisibleAI para escritorio. " +
+    "Eres cálido, directo, conciso y natural en conversaciones de voz en tiempo real. " +
+    "Respuestas cortas de 1-2 oraciones máximo. Sé útil con tareas de la app y generales. " +
+    "Identifícate como InvisibleAI Voice solo si te preguntan quién eres. " +
+    "Nunca uses listas, bullets, markdown ni estructuras de lectura visual.",
   greeting: "¡Hola! ¿En qué puedo ayudarte?",
   language: "es",
 };
@@ -57,9 +65,9 @@ export interface VoiceAgentState {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEEPGRAM_AGENT_URL = "wss://agent.deepgram.com/v1/agent/converse";
-const INPUT_SAMPLE_RATE = 48000;
+const INPUT_SAMPLE_RATE = 16000; // 16 kHz matches mic constraints for STT, lower bandwidth/latency than 48 kHz
 const KEEPALIVE_INTERVAL_MS = 5000;
-const SCRIPT_PROCESSOR_BUFFER = 4096;
+const SCRIPT_PROCESSOR_BUFFER = 2048; // ~128ms chunks at 16 kHz — tighter than 4096 for lower input latency
 
 const VOICE_PROMPT_EXTENSION =
   "\n\n[REGLAS CRÍTICAS PARA EL MODO DE VOZ / VOICE AGENT]\n" +
@@ -130,7 +138,6 @@ export function useVoiceAgent(micDeviceId?: string): VoiceAgentState {
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const nextPlaybackTimeRef = useRef<number>(0);
   const serverAudioFinishedRef = useRef<boolean>(false);
-  const activeSystemPromptRef = useRef<string>("");
 
   // ─── Playback ─────────────────────────────────────────────────────────────
 
@@ -173,7 +180,7 @@ export function useVoiceAgent(micDeviceId?: string): VoiceAgentState {
 
     // If this is the first chunk or we fell behind, schedule with a small offset
     if (startTime < now) {
-      startTime = now + 0.05; // 50ms buffer for seamless transitions
+      startTime = now + 0.03; // 30ms buffer — tighter for lower perceived latency while avoiding underruns
     }
 
     source.start(startTime);
@@ -222,7 +229,57 @@ export function useVoiceAgent(micDeviceId?: string): VoiceAgentState {
           if (!ws) break;
           const s = agentSettingsRef.current;
 
-          // Build Settings payload conforming to the provided spec
+          // Build Settings payload per Deepgram Voice Agent spec.
+          // Prompt is the dedicated voice settings one (short, conversational) + strict voice output rules.
+          // Never use the full desktop/chat "compiled" identity here: it is bloated with app features,
+          // memory, knowledge and desktop-specific instructions → higher LLM latency on every turn.
+          const baseVoicePrompt = (s.systemPrompt && s.systemPrompt.trim().length > 0)
+            ? s.systemPrompt
+            : DEFAULT_VOICE_AGENT_SETTINGS.systemPrompt;
+
+          // === CRITICAL FIX FOR VOICE AGENT ===
+          // The llmProvider + llmModel from the panel (including gpt-5.5 and several others)
+          // are currently causing "Failed to think. Please check your agent.think settings."
+          // for many users / tiers, even after changing the selection.
+          // Voice Agent is extremely sensitive to the think config.
+          // Solution: for the voice path we FORCE a known-good, fast, widely available model.
+          // We still honor the user's custom systemPrompt (the "identidad"), greeting, stt, tts and language.
+          // If you have a groq key and select groq, we will try to use it (fastest possible).
+          let thinkProvider: Record<string, unknown>;
+          const byoProviders = ["groq", "google", "nvidia", "other"];
+
+          if (s.llmProvider === "groq") {
+            try {
+              const storage = await invoke<{ groq_api_key?: string }>("secure_storage_get");
+              const gk = storage.groq_api_key ?? "";
+              if (gk) {
+                thinkProvider = {
+                  type: "groq",
+                  model: "openai/gpt-oss-20b", // or whatever valid for your account
+                  endpoint: {
+                    url: "https://api.groq.com/openai/v1/chat/completions",
+                    headers: { authorization: `Bearer ${gk}` },
+                  },
+                  temperature: 0.6,
+                };
+              } else {
+                thinkProvider = { type: "open_ai", model: "gpt-4o-mini", temperature: 0.6 };
+              }
+            } catch {
+              thinkProvider = { type: "open_ai", model: "gpt-4o-mini", temperature: 0.6 };
+            }
+          } else if (byoProviders.includes(s.llmProvider)) {
+            // other byo without full support yet
+            thinkProvider = { type: "open_ai", model: "gpt-4o-mini", temperature: 0.6 };
+          } else {
+            // open_ai (and anthropic etc) - always use this fast reliable one for voice
+            thinkProvider = {
+              type: "open_ai",
+              model: "gpt-4o-mini",
+              temperature: 0.6,
+            };
+          }
+
           const agentConfig: Record<string, unknown> = {
             listen: {
               provider: {
@@ -233,11 +290,8 @@ export function useVoiceAgent(micDeviceId?: string): VoiceAgentState {
               },
             },
             think: {
-              provider: {
-                type: s.llmProvider,
-                model: s.llmModel,
-              },
-              prompt: (activeSystemPromptRef.current || s.systemPrompt) + VOICE_PROMPT_EXTENSION,
+              provider: thinkProvider,
+              prompt: baseVoicePrompt + VOICE_PROMPT_EXTENSION,
             },
             speak: {
               provider: {
@@ -335,7 +389,7 @@ export function useVoiceAgent(micDeviceId?: string): VoiceAgentState {
     nextPlaybackTimeRef.current = 0;
     serverAudioFinishedRef.current = false;
 
-    // Deepgram API key from secure storage
+    // Deepgram API key from secure storage (always required for the Agent WS)
     let apiKey = "";
     try {
       const storage = await invoke<{ deepgram_api_key?: string }>("secure_storage_get");
@@ -344,15 +398,6 @@ export function useVoiceAgent(micDeviceId?: string): VoiceAgentState {
       setError("Failed to read Deepgram API key. Verify your license is active.");
       setStatus("error");
       return;
-    }
-
-    // Fetch active modular system prompt from backend
-    try {
-      activeSystemPromptRef.current = await invoke<string>("get_compiled_system_prompt");
-      console.log("[VoiceAgent] Active system prompt loaded from backend profiles");
-    } catch (err) {
-      console.warn("[VoiceAgent] Failed to fetch compiled system prompt, falling back to static prompt:", err);
-      activeSystemPromptRef.current = "";
     }
 
     if (!apiKey) {
@@ -370,7 +415,7 @@ export function useVoiceAgent(micDeviceId?: string): VoiceAgentState {
       return;
     }
 
-    // ── Input AudioContext (16kHz) — for mic capture only ──
+    // ── Input AudioContext (16 kHz) — for mic capture only (matches getMicrophoneStream ideal + Deepgram STT sweet spot)
     const inputCtx = new AudioContext({ sampleRate: INPUT_SAMPLE_RATE });
     inputCtxRef.current = inputCtx;
     await inputCtx.resume().catch(() => {});

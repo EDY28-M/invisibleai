@@ -13,6 +13,7 @@ import { ErrorLayout } from "@/layouts";
 import { getPlatform } from "@/lib";
 import { MicVadCapturer } from "./components/speech/MicVadCapturer";
 import { AppIcons } from "./components/icons/AppIcons";
+import "./aurora-shell.css";
 
 const App = () => {
   const { isHidden, systemAudio } = useApp();
@@ -35,10 +36,10 @@ const App = () => {
       resetKeys={["app-error"]}
     >
       <div
-        className={`w-screen h-screen flex overflow-hidden justify-center items-start ${isHidden ? "hidden pointer-events-none" : ""
+        className={`aurora-shell w-screen h-screen flex overflow-hidden justify-center items-start ${isHidden ? "hidden pointer-events-none" : ""
           }`}
       >
-        <Card className="w-full flex flex-row items-center gap-2 px-3 py-2 border border-black/5 dark:border-white/5 bg-card/40 dark:bg-card/30 backdrop-blur-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] rounded-[22px] transition-all duration-500">
+        <Card className="aurora-window w-full flex flex-row items-center gap-2 px-3 py-2 backdrop-blur-2xl rounded-[22px] transition-all duration-500">
           <SystemAudio {...systemAudio} />
           {systemAudio?.capturing && systemAudio?.isDualChannel && !systemAudio?.isStreamingMode && (
             <MicVadCapturer
@@ -83,7 +84,7 @@ const App = () => {
 
           <Button
             size="icon"
-            className="cursor-pointer h-9 w-9 rounded-[14px] border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-foreground/60 hover:text-foreground shadow-xs transition-all duration-300 hover:scale-105 active:scale-95 shrink-0"
+            className="au-iconbtn cursor-pointer h-9 w-9 rounded-[14px] border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-foreground/60 hover:text-foreground shadow-xs transition-all duration-300 hover:scale-105 active:scale-95 shrink-0"
             title="Toggle dashboard"
             onClick={toggleDashboard}
           >

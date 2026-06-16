@@ -30,7 +30,7 @@ export const ModeSwitcher = ({
   return (
     <div
       className={cn(
-        "min-h-11 h-auto max-w-full flex flex-wrap bg-neutral-200/40 dark:bg-neutral-900/30 backdrop-blur-xl rounded-2xl p-1 gap-1 border border-black/5 dark:border-white/5 shadow-inner items-center transition-all duration-300 shrink-0",
+        "h-11 max-w-full flex flex-nowrap bg-neutral-200/40 dark:bg-neutral-900/30 backdrop-blur-xl rounded-2xl p-1 gap-1 border border-black/5 dark:border-white/5 shadow-inner items-center transition-all duration-300 shrink-0",
         disabled && "opacity-50 pointer-events-none"
       )}
     >
@@ -40,9 +40,9 @@ export const ModeSwitcher = ({
         onClick={() => onModeChange(true, false)}
         disabled={disabled}
         className={cn(
-          "h-9 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer active:scale-95 text-xs font-semibold",
+          "h-9 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer active:scale-95 text-xs font-semibold",
           currentMode === "auto"
-            ? "bg-black/[0.06] dark:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.10] text-zinc-900 dark:text-zinc-100 shadow-xs"
+            ? "seg-active"
             : "text-muted-foreground/80 hover:text-foreground hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30"
         )}
       >
@@ -62,9 +62,9 @@ export const ModeSwitcher = ({
         onClick={() => onModeChange(true, true)}
         disabled={disabled}
         className={cn(
-          "h-9 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer active:scale-95 text-xs font-semibold",
+          "h-9 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer active:scale-95 text-xs font-semibold",
           currentMode === "both"
-            ? "bg-black/[0.06] dark:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.10] text-zinc-900 dark:text-zinc-100 shadow-xs"
+            ? "seg-active"
             : "text-muted-foreground/80 hover:text-foreground hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30"
         )}
       >
@@ -84,9 +84,9 @@ export const ModeSwitcher = ({
           onClick={() => onModeChange(false, false)}
           disabled={disabled}
           className={cn(
-            "h-9 px-4 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer active:scale-95 text-xs font-semibold",
+            "h-9 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-300 cursor-pointer active:scale-95 text-xs font-semibold",
             currentMode === "manual"
-              ? "bg-black/[0.06] dark:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.10] text-zinc-900 dark:text-zinc-100 shadow-xs"
+              ? "seg-active"
               : "text-muted-foreground/80 hover:text-foreground hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30"
           )}
         >
@@ -106,7 +106,7 @@ export const ModeSwitcher = ({
           className={cn(
             "h-9 px-3 max-[640px]:px-2 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 text-xs font-semibold whitespace-nowrap",
             streamingSmartMode
-              ? "bg-black/[0.06] dark:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.10] text-zinc-900 dark:text-zinc-100"
+              ? "seg-active"
               : "text-muted-foreground/80 hover:text-foreground hover:bg-neutral-200/30 dark:hover:bg-neutral-800/30"
           )}
           title="Activa detección avanzada para preguntas, debates, opiniones y objeciones del audio del sistema"
@@ -118,9 +118,7 @@ export const ModeSwitcher = ({
             )}
             strokeWidth={1.7}
           />
-          <span className="font-semibold tracking-wide">
-            <span className="max-[640px]:hidden">Modo </span>inteligente
-          </span>
+          <span className="font-semibold tracking-wide">inteligente</span>
           <Switch
             checked={streamingSmartMode}
             onCheckedChange={onStreamingSmartModeChange}

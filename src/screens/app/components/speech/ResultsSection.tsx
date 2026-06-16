@@ -1,7 +1,57 @@
 import { ChatConversation } from "@/types";
 import { Markdown, Switch, CopyButton } from "@/components";
-import { BotIcon, HeadphonesIcon, Loader2, SparklesIcon, MicIcon } from "lucide-react";
+import { BotIcon, HeadphonesIcon, Loader2, MicIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import "./aurora-panel.css";
+
+/** Animated 5-bar equalizer shown while a channel is streaming audio. */
+const Equalizer = () => (
+  <span className="au-eq" aria-hidden="true">
+    <span />
+    <span />
+    <span />
+    <span />
+    <span />
+  </span>
+);
+
+/**
+ * Live "listening" card for an incoming transcription channel.
+ * mic = violet (you), system = cyan (the other side).
+ */
+const LiveBlock = ({
+  source,
+  label,
+  Icon,
+  children,
+}: {
+  source: "mic" | "sys";
+  label: string;
+  Icon: LucideIcon;
+  children: React.ReactNode;
+}) => (
+  <div
+    className={cn(
+      "au-live animate-in fade-in slide-in-from-bottom-1 duration-300",
+      source === "mic" ? "au-live--mic" : "au-live--sys"
+    )}
+  >
+    <div className="au-live-head">
+      <span className="au-live-glyph">
+        <Icon className="w-3 h-3" strokeWidth={2} />
+      </span>
+      <span className="au-live-label">{label}</span>
+      <span className="au-live-meter">
+        <Equalizer />
+      </span>
+    </div>
+    <p className="au-live-text">
+      {children}
+      <span className="au-caret" />
+    </p>
+  </div>
+);
 
 type Props = {
   lastTranscription: string;
@@ -61,10 +111,9 @@ export const ResultsSection = ({
   const modKey = isMac ? "⌘" : "Ctrl";
 
   return (
-    <div className="rounded-[18px] border border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5 p-4 space-y-4 shadow-inner">
+    <div className="rounded-[18px] border border-black/8 dark:border-white/8 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm p-4 space-y-4 shadow-inner">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <SparklesIcon className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
           <h4 className="text-xs font-semibold text-foreground/90">
             {conversationMode ? "Conversation" : "AI Response"}
           </h4>
@@ -102,24 +151,16 @@ export const ResultsSection = ({
           })()}
 
           {interimTranscription && (
-            <p className="text-[11px] text-muted-foreground bg-zinc-500/5 px-3 py-2 rounded-lg border border-zinc-500/10 animate-pulse">
-              <span className="font-bold uppercase tracking-wider text-[9px] mr-1.5 text-zinc-600 dark:text-zinc-400">
-                Tú (hablando...):
-              </span>{" "}
+            <LiveBlock source="mic" label="Tú · hablando" Icon={MicIcon}>
               {interimTranscription}
-              <span className="inline-block w-1.5 h-3 bg-zinc-500 animate-ping ml-1 align-middle" />
-            </p>
+            </LiveBlock>
           )}
 
           {(accumulatedSystemText || systemInterimTranscription) && (
-            <p className="text-[11px] text-muted-foreground bg-zinc-500/5 px-3 py-2 rounded-lg border border-zinc-500/10 animate-pulse">
-              <span className="font-bold uppercase tracking-wider text-[9px] mr-1.5 text-zinc-500 dark:text-zinc-400">
-                Sistema (escuchando...):
-              </span>{" "}
+            <LiveBlock source="sys" label="Sistema · escuchando" Icon={HeadphonesIcon}>
               {accumulatedSystemText}
               {systemInterimTranscription ? ` ${systemInterimTranscription}` : ""}
-              <span className="inline-block w-1.5 h-3 bg-zinc-400 animate-ping ml-1 align-middle" />
-            </p>
+            </LiveBlock>
           )}
 
           {hasResponse && (
@@ -202,33 +243,19 @@ export const ResultsSection = ({
           })()}
 
           {interimTranscription && (
-            <div className="rounded-[18px] rounded-br-[4px] border border-zinc-500/15 bg-zinc-500/5 text-foreground p-3.5 ml-6 animate-pulse transition-all">
-              <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
-                <MicIcon className="h-3 w-3 text-zinc-500" />
-                <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
-                  Tú (hablando...)
-                </span>
-              </div>
-              <p className="text-sm leading-relaxed text-muted-foreground">
+            <div className="ml-6">
+              <LiveBlock source="mic" label="Tú · hablando" Icon={MicIcon}>
                 {interimTranscription}
-                <span className="inline-block w-1.5 h-3.5 bg-zinc-500 animate-ping ml-1 align-middle" />
-              </p>
+              </LiveBlock>
             </div>
           )}
 
           {(accumulatedSystemText || systemInterimTranscription) && (
-            <div className="rounded-[18px] rounded-br-[4px] border border-zinc-500/15 bg-zinc-500/5 text-foreground p-3.5 ml-6 animate-pulse transition-all">
-              <div className="flex items-center gap-1.5 mb-1.5 opacity-60">
-                <HeadphonesIcon className="h-3 w-3 text-zinc-400" />
-                <span className="text-[9px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Sistema (escuchando...)
-                </span>
-              </div>
-              <p className="text-sm leading-relaxed text-muted-foreground">
+            <div className="ml-6">
+              <LiveBlock source="sys" label="Sistema · escuchando" Icon={HeadphonesIcon}>
                 {accumulatedSystemText}
                 {systemInterimTranscription ? ` ${systemInterimTranscription}` : ""}
-                <span className="inline-block w-1.5 h-3.5 bg-zinc-400 animate-ping ml-1 align-middle" />
-              </p>
+              </LiveBlock>
             </div>
           )}
 
