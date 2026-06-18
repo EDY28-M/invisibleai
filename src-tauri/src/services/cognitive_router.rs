@@ -663,7 +663,12 @@ async fn run_llm_orchestration(
     }));
 
     let client = reqwest::Client::new();
-    let request_body = if local_groq_key.is_some() {
+
+    // El cliente con licencia le pega a Groq DIRECTO solo con modelos Groq. Para
+    // xAI (grok-*) hay que rutear por el server, que tiene la key de xAI y despacha.
+    let use_groq_direct = local_groq_key.is_some() && !model_id.starts_with("grok-");
+
+    let request_body = if use_groq_direct {
         serde_json::json!({
             "model": model_id,
             "messages": messages,
@@ -679,7 +684,7 @@ async fn run_llm_orchestration(
         })
     };
 
-    let url = if local_groq_key.is_some() {
+    let url = if use_groq_direct {
         "https://api.groq.com/openai/v1/chat/completions".to_string()
     } else {
         format!("{}/api/chat", app_endpoint)
@@ -687,8 +692,10 @@ async fn run_llm_orchestration(
 
     let mut request_builder = client.post(&url).header("Content-Type", "application/json");
 
-    if let Some(ref groq_key) = local_groq_key {
-        request_builder = request_builder.header("Authorization", format!("Bearer {}", groq_key));
+    if use_groq_direct {
+        if let Some(ref groq_key) = local_groq_key {
+            request_builder = request_builder.header("Authorization", format!("Bearer {}", groq_key));
+        }
     } else {
         request_builder =
             request_builder.header("Authorization", format!("Bearer {}", api_access_key));

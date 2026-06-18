@@ -603,8 +603,10 @@ pub async fn chat_stream_response(
 
     let client = reqwest::Client::new();
 
-    // ── MODO DIRECTO: Groq API key guardada localmente → llamada directa (rápido) ──
-    if let Some(groq_key) = local_groq_key {
+    // ── MODO DIRECTO: Groq API key local + modelo Groq → llamada directa (rápido) ──
+    // Para modelos xAI (grok-*) se rutea por el server, que tiene la key de xAI.
+    let groq_direct_key = local_groq_key.filter(|_| !model_id.starts_with("grok-"));
+    if let Some(groq_key) = groq_direct_key {
         let request_body = serde_json::json!({
             "model": model_id,
             "messages": messages,

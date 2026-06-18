@@ -629,6 +629,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
               model.includes("llama-4") ||
               model.includes("scout") ||
               model.includes("maverick") ||
+              model.startsWith("grok-") ||
               model.includes("vision");
             setSupportsImages(supportsVision);
           } else {

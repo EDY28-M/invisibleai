@@ -14,6 +14,15 @@ import { MARKDOWN_FORMATTING_INSTRUCTIONS } from "@/config/constants";
 import { serverApi } from "@/lib/server-api";
 
 const FREE_CHAT_MODEL = "llama-3.3-70b-versatile";
+// Licensed users run on Llama 4 Scout (matches the server config.ts LICENSED_CHAT_MODEL
+// default and the Rust backend fallback). Used only as a safety fallback when the
+// server-provided groq_model is not stored yet.
+const LICENSED_CHAT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+
+// Global delivery style applied to EVERY profile and both API paths.
+// Keeps the model natural and direct without going telegraphic or rambling.
+const RESPONSE_STYLE_INSTRUCTIONS =
+  "ESTILO DE RESPUESTA (aplica siempre, sea cual sea el perfil): responde de forma natural, fluida y directa. Arranca por la respuesta o recomendación concreta, no con preámbulos ni rodeos. No rellenes con paja, disculpas, ni resúmenes de lo que vas a decir. NO devuelvas preguntas de relleno ni pidas aclaraciones salvo que sea estrictamente imprescindible para poder responder; ante la duda, asume el caso más probable y responde. Tampoco seas telegráfico: da el detalle suficiente para que la respuesta sea genuinamente útil y bien explicada, ni más ni menos. Tono conversacional y claro.";
 
 const curlJsonCache = new Map<string, any>();
 function getCachedCurlJson(curl: string) {
@@ -83,6 +92,7 @@ function buildEnhancedSystemPrompt(baseSystemPrompt?: string): string {
     prompts.push(strictLanguagePrompt);
   }
 
+  prompts.push(RESPONSE_STYLE_INSTRUCTIONS);
   prompts.push(MARKDOWN_FORMATTING_INSTRUCTIONS);
 
   return prompts.join(" ");
@@ -195,9 +205,16 @@ async function* fetchInvisibleAIAIResponse(params: {
     imagesBase64,
   );
 
-  // ── LICENSED: direct call to Groq ──────────────────────────────────────────
-  if (storage.groq_api_key) {
-    const modelId = storage.groq_model || FREE_CHAT_MODEL;
+  // Modelo de chat con licencia (lo entrega el server en /api/credentials).
+  const licensedModel = storage.groq_model || LICENSED_CHAT_MODEL;
+  // El cliente con licencia le pega a Groq DIRECTO solo con modelos Groq. Para
+  // xAI (grok-*) hay que rutear por el server, que tiene la key de xAI y despacha.
+  const canCallGroqDirect =
+    !!storage.groq_api_key && !licensedModel.startsWith("grok-");
+
+  // ── LICENSED (modelo Groq): llamada directa a Groq ──────────────────────────
+  if (canCallGroqDirect) {
+    const modelId = licensedModel;
 
     // IMPORTANT: must use tauriFetch (Tauri plugin-http), NOT native fetch.
     // Native browser fetch is blocked by the Tauri webview security scope.
@@ -263,7 +280,8 @@ async function* fetchInvisibleAIAIResponse(params: {
     body: JSON.stringify({
       instanceId,
       licenseKey,
-      model: FREE_CHAT_MODEL,
+      // Licenciado con modelo no-Groq (xAI/Grok) → su modelo; free → modelo free.
+      model: storage.groq_api_key ? licensedModel : FREE_CHAT_MODEL,
       messages,
       stream: true,
     }),

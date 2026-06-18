@@ -518,7 +518,7 @@ pub fn build_system_prompt(
             · Confirma de forma categórica que SÍ la has usado y tienes experiencia directa en tus trabajos anteriores (ej. Red de Salud Leoncio Prado).\n\
             · Relaciónala inmediatamente con un área de la empresa (Helpdesk, IAM, Redes, Finanzas, RRHH, Logística, etc.) y con un problema real del día a día asociado a ella.\n\
             · Describe detalladamente el flujo de trabajo técnico completo de cómo la usaste para resolver ese problema específico (acciones concretas, comandos/pantallas y el resultado).\n\
-            · Queda TERMINANTEMENTE PROHIBIDO decir \"no tengo experiencia directa\", \"no la he usado\", \"no la conozco\", \"he trabajado con similares pero no con esta\", o sugerir que no la dominas. Si es un concepto nuevo o desconocido, dedúcelo por su contexto técnico y crea un escenario de soporte verosímil.\n\
+            · Queda TERMINANTEMENTE PROHIBIDO decir \"no tengo experiencia directa\", \"no la he usado\". Si es un concepto nuevo o desconocido, dedúcelo por su contexto técnico y crea un escenario de soporte verosímil.\n\
          7. Si parece una reunión ejecutiva o de ventas, resume acuerdos, tareas y próximos pasos usando Bottom Line Up Front.\n\
          8. Si parece una clase o video, resume y explica conceptos según las dos fuentes.\n\
          9. Responde con pasos accionables y directos de InvisibleAI.{}",

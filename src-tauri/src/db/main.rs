@@ -56,5 +56,11 @@ pub fn migrations() -> Vec<Migration> {
             sql: include_str!("migrations/profile-interview-scenarios.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 10,
+            description: "replace_scenarios_with_deployment_production_library",
+            sql: include_str!("migrations/profile-deployment-scenarios.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
