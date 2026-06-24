@@ -110,7 +110,7 @@ pub async fn get_stored_credentials(
         license_key,
         instance_id,
         selected_model,
-        storage.groq_api_key,
+        storage.groq_api_key.filter(|k| !k.trim().is_empty()),
         storage.groq_model,
     ))
 }

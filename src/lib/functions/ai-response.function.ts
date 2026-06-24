@@ -196,6 +196,7 @@ async function* fetchInvisibleAIAIResponse(params: {
     groq_api_key?: string;
     groq_model?: string;
     instance_id?: string;
+    license_key?: string;
   }>("secure_storage_get").catch(() => ({}) as Record<string, string>);
 
   const messages = buildServerMessages(
@@ -271,7 +272,9 @@ async function* fetchInvisibleAIAIResponse(params: {
   // Also send licenseKey in case the instance has one stored but groq_api_key
   // wasn't loaded yet (e.g. first launch after activation before credential refresh).
   const licenseKey =
-    localStorage.getItem("invisibleai_license_key") || undefined;
+    storage.license_key ||
+    localStorage.getItem("invisibleai_license_key") ||
+    undefined;
 
   const serverUrl = serverApi.getServerUrl();
   const response = await tauriFetch(`${serverUrl}/api/chat`, {
@@ -281,7 +284,7 @@ async function* fetchInvisibleAIAIResponse(params: {
       instanceId,
       licenseKey,
       // Licenciado con modelo no-Groq (xAI/Grok) → su modelo; free → modelo free.
-      model: storage.groq_api_key ? licensedModel : FREE_CHAT_MODEL,
+      model: licenseKey ? licensedModel : FREE_CHAT_MODEL,
       messages,
       stream: true,
     }),
